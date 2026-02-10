@@ -3,76 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作流编辑器</title>
+    <title>工作流</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/workflow.css">
 </head>
 <body>
     <div class="container">
-        <!-- 顶部导航 -->
-        <header class="header">
-            <div class="header-left">
-                <h1>🔧 工作流编辑器</h1>
+        <nav class="sidebar">
+            <div class="logo">
+                <h2>服务器管理系统</h2>
             </div>
-            <div class="header-right">
-                <button id="clear-btn" class="btn btn-secondary">清空画布</button>
-                <button id="run-btn" class="btn btn-primary">运行工作流</button>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="nav-label" title="首页">首页</span></a></li>
+                <li><a href="/integrated"><span class="nav-label" title="集成监控">集成监控</span></a></li>
+                <li><a href="/servers"><span class="nav-label" title="服务器管理">服务器管理</span></a></li>
+                <li><a href="/workflow" class="active"><span class="nav-label" title="工作流">工作流</span></a></li>
+                <li><a href="#" class="coming-soon"><span class="nav-label" title="服务部署">服务部署</span></a></li>
+            </ul>
+        </nav>
+        <main class="main-content">
+            <header class="top-bar">
+                <div>
+                    <h1>工作流编辑器</h1>
+                </div>
+                <div class="top-actions">
+                    <button id="toggle-components" class="btn btn-secondary">折叠组件面板</button>
+                    <button id="clear-btn" class="btn btn-secondary">清空画布</button>
+                    <button id="run-btn" class="btn btn-primary">运行工作流</button>
+                </div>
+            </header>
+            <div class="content">
+                <div class="workflow-container">
+                    <aside class="component-panel">
+                        <h3>组件库</h3>
+                        <div class="component-section">
+                            <h4>服务器</h4>
+                            <div id="server-list" class="draggable-items"></div>
+                        </div>
+                        <div class="component-section">
+                            <h4>事件</h4>
+                            <div class="draggable-item" draggable="true" data-type="upload">
+                                <span class="icon">⬆️</span>
+                                <span>上传文件</span>
+                            </div>
+                            <div class="draggable-item" draggable="true" data-type="command">
+                                <span class="icon">⚡</span>
+                                <span>执行命令</span>
+                            </div>
+                            <div class="draggable-item" draggable="true" data-type="output">
+                                <span class="icon">📋</span>
+                                <span>结果显示</span>
+                            </div>
+                        </div>
+                    </aside>
+                    <div class="workspace">
+                        <main class="canvas-area">
+                            <div id="canvas" class="canvas">
+                                <svg id="connections" class="connections-layer"></svg>
+                            </div>
+                        </main>
+                        <aside class="result-panel">
+                            <h3>执行结果</h3>
+                            <div id="output-container">
+                                <div class="output-item" id="output-console">
+                                    <div class="output-header">
+                                        <span class="output-title">控制台</span>
+                                    </div>
+                                    <div class="output-content" id="console-output">
+                                        <p class="info">拖拽组件到画布开始构建工作流</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
             </div>
-        </header>
-
-        <div class="workflow-container">
-            <!-- 左侧组件面板 -->
-            <aside class="component-panel">
-                <h3>组件库</h3>
-                <div class="component-section">
-                    <h4>服务器</h4>
-                    <div id="server-list" class="draggable-items">
-                        <!-- 动态加载的服务器列表 -->
-                    </div>
-                </div>
-                <div class="component-section">
-                    <h4>命令</h4>
-                    <div class="draggable-item" draggable="true" data-type="command">
-                        <span class="icon">⚡</span>
-                        <span>执行命令</span>
-                    </div>
-                </div>
-                <div class="component-section">
-                    <h4>输出</h4>
-                    <div class="draggable-item" draggable="true" data-type="output">
-                        <span class="icon">📋</span>
-                        <span>结果显示</span>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- 中间画布区域 -->
-            <main class="canvas-area">
-                <div id="canvas" class="canvas">
-                    <!-- SVG 连接线层 -->
-                    <svg id="connections" class="connections-layer"></svg>
-                    <!-- 节点将在这里动态添加 -->
-                </div>
-            </main>
-
-            <!-- 右侧结果面板 -->
-            <aside class="result-panel">
-                <h3>执行结果</h3>
-                <div id="output-container">
-                    <div class="output-item" id="output-console">
-                        <div class="output-header">
-                            <span class="output-title">控制台</span>
-                        </div>
-                        <div class="output-content" id="console-output">
-                            <p class="info">拖拽组件到画布开始构建工作流...</p>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-        </div>
+        </main>
     </div>
-
-    <!-- 命令编辑模态框 -->
     <div id="command-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -80,10 +87,10 @@
                 <span class="close">&times;</span>
             </div>
             <div class="modal-body">
-                <label for="command-input">命令:</label>
-                <input type="text" id="command-input" class="form-input" placeholder="例如: ls -la, df -h, top">
-                <label for="command-description">描述 (可选):</label>
-                <input type="text" id="command-description" class="form-input" placeholder="例如: 查看文件列表">
+                <label for="command-input">命令</label>
+                <input type="text" id="command-input" class="form-input" placeholder="例如: ls -la">
+                <label for="command-description">描述</label>
+                <input type="text" id="command-description" class="form-input" placeholder="描述">
             </div>
             <div class="modal-footer">
                 <button id="cancel-command" class="btn btn-secondary">取消</button>
@@ -91,7 +98,24 @@
             </div>
         </div>
     </div>
-
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传文件</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <label for="upload-file">选择文件</label>
+                <input type="file" id="upload-file" class="form-input">
+                <label for="remote-path">远程路径</label>
+                <input type="text" id="remote-path" class="form-input" placeholder="/tmp/upload.bin">
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-upload" class="btn btn-secondary">取消</button>
+                <button id="save-upload" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/workflow.js"></script>
 </body>

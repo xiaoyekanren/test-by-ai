@@ -1,525 +1,485 @@
-// 工作流编辑器 JavaScript
-
 class WorkflowEditor {
     constructor() {
-        this.nodes = [];
-        this.connections = [];
-        this.nextNodeId = 1;
-        this.isDragging = false;
-        this.draggedNode = null;
-        this.dragOffset = { x: 0, y: 0 };
-        this.isConnecting = false;
-        this.connectionStart = null;
-        this.currentCommandNode = null;
-        
-        this.init();
+        this.nodes = []
+        this.connections = []
+        this.nextNodeId = 1
+        this.isConnecting = false
+        this.connectionStart = null
+        this.currentCommandNode = null
+        this.currentUploadNode = null
+        this.commandInput = null
+        this.commandDescInput = null
+        this.uploadFileInput = null
+        this.remotePathInput = null
+        this.init()
     }
-
+    truncateToIpLength(name) {
+        if (typeof name !== 'string') return ''
+        const max = 15
+        const arr = Array.from(name)
+        if (arr.length <= max) return name
+        return arr.slice(0, max - 3).join('') + '...'
+    }
     init() {
-        this.canvas = document.getElementById('canvas');
-        this.connectionsLayer = document.getElementById('connections');
-        this.serverList = document.getElementById('server-list');
-        this.consoleOutput = document.getElementById('console-output');
-        
-        this.loadServers();
-        this.setupDragAndDrop();
-        this.setupCanvasEvents();
-        this.setupModal();
-        this.setupButtons();
-        
-        this.addDropHint();
+        this.canvas = document.getElementById('canvas')
+        this.connectionsLayer = document.getElementById('connections')
+        this.serverList = document.getElementById('server-list')
+        this.consoleOutput = document.getElementById('console-output')
+        this.loadServers()
+        this.setupDragAndDrop()
+        this.setupCanvasEvents()
+        this.setupModals()
+        this.setupButtons()
+        const hint = document.createElement('div')
+        hint.className = 'drop-hint'
+        hint.textContent = '将服务器或事件拖到画布'
+        this.canvas.appendChild(hint)
     }
-
     async loadServers() {
-        const response = await ServerAPI.listServers();
-        if (response.status === 'success' && response.data) {
-            response.data.forEach(server => {
-                const item = document.createElement('div');
-                item.className = 'draggable-item';
-                item.setAttribute('draggable', 'true');
-                item.dataset.type = 'server';
-                item.dataset.serverId = server.id;
-                item.dataset.serverName = server.name;
-                item.dataset.serverHost = server.host;
-                item.innerHTML = `
-                    <span class="icon">🖥️</span>
-                    <span>${server.name}</span>
-                    <span style="font-size: 12px; color: #999; margin-left: auto;">${server.host}</span>
-                `;
-                this.serverList.appendChild(item);
-            });
+        const res = await ServerAPI.listServers()
+        if (res.status === 'success' && Array.isArray(res.data)) {
+            res.data.forEach(s => {
+                const item = document.createElement('div')
+                item.className = 'draggable-item'
+                item.setAttribute('draggable', 'true')
+                item.dataset.type = 'server'
+                item.dataset.serverId = s.id
+                item.dataset.serverName = s.name
+                item.dataset.serverHost = s.host
+                const display = this.truncateToIpLength(s.name)
+                item.innerHTML = `<span class="icon">🖥️</span><span class="server-name" title="${s.name}">${display}</span>`
+                this.serverList.appendChild(item)
+            })
         }
     }
-
-    addDropHint() {
-        const hint = document.createElement('div');
-        hint.className = 'drop-hint';
-        hint.textContent = '拖拽组件到此处';
-        this.canvas.appendChild(hint);
-    }
-
     setupDragAndDrop() {
-        const draggableItems = document.querySelectorAll('.draggable-item');
-        
-        draggableItems.forEach(item => {
-            item.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('type', item.dataset.type);
-                e.dataTransfer.setData('serverId', item.dataset.serverId || '');
-                e.dataTransfer.setData('serverName', item.dataset.serverName || '');
-                e.dataTransfer.setData('serverHost', item.dataset.serverHost || '');
-                item.classList.add('dragging');
-            });
-
-            item.addEventListener('dragend', (e) => {
-                item.classList.remove('dragging');
-            });
-        });
-
-        this.canvas.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            this.canvas.classList.add('drag-over');
-        });
-
-        this.canvas.addEventListener('dragleave', (e) => {
-            if (!this.canvas.contains(e.relatedTarget)) {
-                this.canvas.classList.remove('drag-over');
-            }
-        });
-
-        this.canvas.addEventListener('drop', (e) => {
-            e.preventDefault();
-            this.canvas.classList.remove('drag-over');
-            
-            const type = e.dataTransfer.getData('type');
-            const serverId = e.dataTransfer.getData('serverId');
-            const serverName = e.dataTransfer.getData('serverName');
-            const serverHost = e.dataTransfer.getData('serverHost');
-            
-            const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left - 100;
-            const y = e.clientY - rect.top - 40;
-            
-            this.createNode(type, x, y, { serverId, serverName, serverHost });
-        });
+        document.addEventListener('dragstart', e => {
+            const item = e.target.closest('.draggable-item')
+            if (!item) return
+            e.dataTransfer.setData('type', item.dataset.type)
+            e.dataTransfer.setData('serverId', item.dataset.serverId || '')
+            e.dataTransfer.setData('serverName', item.dataset.serverName || '')
+            e.dataTransfer.setData('serverHost', item.dataset.serverHost || '')
+        })
+        this.canvas.addEventListener('dragover', e => {
+            e.preventDefault()
+            this.canvas.classList.add('drag-over')
+        })
+        this.canvas.addEventListener('dragleave', () => {
+            this.canvas.classList.remove('drag-over')
+        })
+        this.canvas.addEventListener('drop', e => {
+            e.preventDefault()
+            this.canvas.classList.remove('drag-over')
+            const type = e.dataTransfer.getData('type')
+            const serverId = e.dataTransfer.getData('serverId')
+            const serverName = e.dataTransfer.getData('serverName')
+            const serverHost = e.dataTransfer.getData('serverHost')
+            const rect = this.canvas.getBoundingClientRect()
+            const x = e.clientX - rect.left - 100
+            const y = e.clientY - rect.top - 40
+            this.createNode(type, x, y, { serverId, serverName, serverHost })
+        })
     }
-
     setupCanvasEvents() {
-        this.canvas.addEventListener('mousedown', (e) => {
-            const node = e.target.closest('.canvas-node');
-            const connector = e.target.closest('.connector');
+        this.canvas.addEventListener('mousedown', e => {
+            const out = e.target.closest('.connector.output')
+            const inConn = e.target.closest('.connector.input')
             
-            if (connector) {
-                this.isConnecting = true;
-                this.connectionStart = {
-                    node: node,
-                    type: connector.classList.contains('input') ? 'input' : 'output',
-                    connector: connector
-                };
-                e.stopPropagation();
-                return;
+            if (out || inConn) {
+                e.preventDefault()
+                e.stopPropagation()
+                this.isConnecting = true
+                if (out) {
+                    this.connectionSource = { node: out.parentElement, type: 'output' }
+                } else {
+                    this.connectionSource = { node: inConn.parentElement, type: 'input' }
+                }
+                
+                // 添加临时连线预览
+                const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+                tempLine.id = 'temp-connection'
+                tempLine.setAttribute('stroke', '#667eea')
+                tempLine.setAttribute('stroke-dasharray', '5,5')
+                tempLine.setAttribute('fill', 'transparent')
+                tempLine.setAttribute('stroke-width', '2')
+                tempLine.setAttribute('style', 'pointer-events: none;')
+                this.connectionsLayer.appendChild(tempLine)
+                return
             }
             
+            const node = e.target.closest('.canvas-node')
             if (node) {
-                this.isDragging = true;
-                this.draggedNode = node;
-                const rect = node.getBoundingClientRect();
-                this.dragOffset = {
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top
-                };
-                this.selectNode(node);
+                // 选中节点
+                this.canvas.querySelectorAll('.canvas-node').forEach(n => n.classList.remove('selected'))
+                node.classList.add('selected')
+                
+                // 启动拖拽
+                if (!e.target.closest('.node-delete')) {
+                    this.isDragging = true
+                    this.draggedNode = node
+                    const rect = node.getBoundingClientRect()
+                    const canvasRect = this.canvas.getBoundingClientRect()
+                    this.dragOffset = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    }
+                }
+            } else {
+                // 点击空白处取消选中
+                this.canvas.querySelectorAll('.canvas-node').forEach(n => n.classList.remove('selected'))
             }
-        });
+        })
 
-        document.addEventListener('mousemove', (e) => {
+        document.addEventListener('mousemove', e => {
+            // 处理连线
+            if (this.isConnecting) {
+                e.preventDefault()
+                const svg = this.connectionsLayer
+                const tempLine = svg.querySelector('#temp-connection')
+                if (!tempLine) return
+
+                const cr = this.canvas.getBoundingClientRect()
+                let x1, y1, x2, y2
+
+                if (this.connectionSource.type === 'output') {
+                    const fr = this.connectionSource.node.getBoundingClientRect()
+                    x1 = fr.right - cr.left
+                    y1 = fr.top + fr.height / 2 - cr.top
+                    x2 = e.clientX - cr.left
+                    y2 = e.clientY - cr.top
+                } else {
+                    const fr = this.connectionSource.node.getBoundingClientRect()
+                    x1 = e.clientX - cr.left
+                    y1 = e.clientY - cr.top
+                    x2 = fr.left - cr.left
+                    y2 = fr.top + fr.height / 2 - cr.top
+                }
+                
+                tempLine.setAttribute('d', `M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`)
+                return
+            }
+            
+            // 处理节点拖拽
             if (this.isDragging && this.draggedNode) {
-                const canvasRect = this.canvas.getBoundingClientRect();
-                let x = e.clientX - canvasRect.left - this.dragOffset.x;
-                let y = e.clientY - canvasRect.top - this.dragOffset.y;
+                e.preventDefault()
+                const canvasRect = this.canvas.getBoundingClientRect()
+                let x = e.clientX - canvasRect.left - this.dragOffset.x
+                let y = e.clientY - canvasRect.top - this.dragOffset.y
                 
-                x = Math.max(0, Math.min(x, canvasRect.width - 200));
-                y = Math.max(0, Math.min(y, canvasRect.height - 80));
+                // 简单的边界限制
+                x = Math.max(0, x)
+                y = Math.max(0, y)
                 
-                this.draggedNode.style.left = x + 'px';
-                this.draggedNode.style.top = y + 'px';
+                this.draggedNode.style.left = x + 'px'
+                this.draggedNode.style.top = y + 'px'
                 
-                const nodeId = parseInt(this.draggedNode.dataset.id);
-                const nodeData = this.nodes.find(n => n.id === nodeId);
+                // 更新节点数据位置
+                const id = parseInt(this.draggedNode.dataset.id)
+                const nodeData = this.nodes.find(n => n.id === id)
                 if (nodeData) {
-                    nodeData.x = x;
-                    nodeData.y = y;
+                    nodeData.x = x
+                    nodeData.y = y
                 }
                 
-                this.updateConnections();
+                // 实时更新连线
+                this.updateConnections()
             }
-        });
+        })
 
-        document.addEventListener('mouseup', (e) => {
-            if (this.isConnecting && this.connectionStart) {
-                const connector = e.target.closest('.connector');
-                if (connector && connector !== this.connectionStart.connector) {
-                    const endNode = connector.closest('.canvas-node');
-                    if (endNode && endNode !== this.connectionStart.node) {
-                        const startType = this.connectionStart.type;
-                        const endType = connector.classList.contains('input') ? 'input' : 'output';
-                        
-                        if (startType === 'output' && endType === 'input') {
-                            this.createConnection(
-                                this.connectionStart.node.dataset.id,
-                                endNode.dataset.id
-                            );
-                        }
-                    }
-                }
+        document.addEventListener('mouseup', e => {
+            // 结束拖拽
+            if (this.isDragging) {
+                this.isDragging = false
+                this.draggedNode = null
+            }
+
+            if (!this.isConnecting) return
+            
+            // 移除临时连线
+            const tempLine = this.connectionsLayer.querySelector('#temp-connection')
+            if (tempLine) tempLine.remove()
+
+            const out = e.target.closest('.connector.output')
+            const inConn = e.target.closest('.connector.input')
+
+            let fromId, toId
+
+            if (this.connectionSource.type === 'output' && inConn) {
+                fromId = this.connectionSource.node.dataset.id
+                toId = inConn.parentElement.dataset.id
+            } else if (this.connectionSource.type === 'input' && out) {
+                fromId = out.parentElement.dataset.id
+                toId = this.connectionSource.node.dataset.id
+            }
+
+            if (fromId && toId && fromId !== toId) {
+                this.createConnection(fromId, toId)
             }
             
-            this.isDragging = false;
-            this.draggedNode = null;
-            this.isConnecting = false;
-            this.connectionStart = null;
-        });
+            this.isConnecting = false
+            this.connectionSource = null
+        })
     }
-
-    setupModal() {
-        this.modal = document.getElementById('command-modal');
-        this.commandInput = document.getElementById('command-input');
-        this.commandDescInput = document.getElementById('command-description');
-        
-        document.querySelector('.close').addEventListener('click', () => {
-            this.modal.style.display = 'none';
-        });
-        
-        document.getElementById('cancel-command').addEventListener('click', () => {
-            this.modal.style.display = 'none';
-        });
-        
+    setupModals() {
+        const cmdModal = document.getElementById('command-modal')
+        const uploadModal = document.getElementById('upload-modal')
+        this.commandInput = document.getElementById('command-input')
+        this.commandDescInput = document.getElementById('command-description')
+        this.uploadFileInput = document.getElementById('upload-file')
+        this.remotePathInput = document.getElementById('remote-path')
+        cmdModal.querySelector('.close').addEventListener('click', () => cmdModal.style.display = 'none')
+        uploadModal.querySelector('.close').addEventListener('click', () => uploadModal.style.display = 'none')
+        document.getElementById('cancel-command').addEventListener('click', () => cmdModal.style.display = 'none')
+        document.getElementById('cancel-upload').addEventListener('click', () => uploadModal.style.display = 'none')
         document.getElementById('save-command').addEventListener('click', () => {
-            const command = this.commandInput.value.trim();
-            const description = this.commandDescInput.value.trim();
-            
-            if (command && this.currentCommandNode) {
-                const nodeData = this.nodes.find(n => n.id === parseInt(this.currentCommandNode.dataset.id));
-                if (nodeData) {
-                    nodeData.command = command;
-                    nodeData.description = description;
-                    
-                    this.currentCommandNode.querySelector('.node-content').textContent = command;
-                    if (description) {
-                        this.currentCommandNode.querySelector('.node-title').textContent = description;
-                    }
-                }
-            }
-            
-            this.modal.style.display = 'none';
-            this.commandInput.value = '';
-            this.commandDescInput.value = '';
-        });
-        
-        window.addEventListener('click', (e) => {
-            if (e.target === this.modal) {
-                this.modal.style.display = 'none';
-            }
-        });
+            if (!this.currentCommandNode) return
+            const id = parseInt(this.currentCommandNode.dataset.id)
+            const node = this.nodes.find(n => n.id === id)
+            node.command = this.commandInput.value || ''
+            node.description = this.commandDescInput.value || ''
+            this.currentCommandNode.querySelector('.node-content').textContent = node.command || '未设置'
+            cmdModal.style.display = 'none'
+        })
+        document.getElementById('save-upload').addEventListener('click', () => {
+            if (!this.currentUploadNode) return
+            const id = parseInt(this.currentUploadNode.dataset.id)
+            const node = this.nodes.find(n => n.id === id)
+            const file = this.uploadFileInput.files[0] || null
+            const remote = this.remotePathInput.value || ''
+            node.upload = { file, remote }
+            this.currentUploadNode.querySelector('.node-content').textContent = remote || '未设置'
+            uploadModal.style.display = 'none'
+        })
     }
-
     setupButtons() {
-        document.getElementById('clear-btn').addEventListener('click', () => {
-            this.clearCanvas();
-        });
-        
-        document.getElementById('run-btn').addEventListener('click', () => {
-            this.runWorkflow();
-        });
+        document.getElementById('clear-btn').addEventListener('click', () => this.clearCanvas())
+        document.getElementById('run-btn').addEventListener('click', () => this.runWorkflow())
+        const toggle = document.getElementById('toggle-components')
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                const panel = document.querySelector('.component-panel')
+                panel.classList.toggle('collapsed')
+                const container = document.querySelector('.workflow-container')
+                container.classList.toggle('components-collapsed')
+            })
+        }
     }
-
     createNode(type, x, y, data = {}) {
-        const node = document.createElement('div');
-        node.className = 'canvas-node';
-        node.dataset.id = this.nextNodeId;
-        node.style.left = x + 'px';
-        node.style.top = y + 'px';
-        
-        const nodeData = {
-            id: this.nextNodeId,
-            type: type,
-            x: x,
-            y: y
-        };
-        
-        let title = '';
-        let content = '';
-        let typeClass = type;
-        
+        const node = document.createElement('div')
+        node.className = 'canvas-node'
+        node.dataset.id = this.nextNodeId
+        node.style.left = x + 'px'
+        node.style.top = y + 'px'
+        const nodeData = { id: this.nextNodeId, type, x, y }
+        let title = ''
+        let content = ''
+        let typeLabel = ''
         switch (type) {
             case 'server':
-                title = data.serverName || '服务器';
-                content = data.serverHost || '未连接';
-                nodeData.serverId = data.serverId;
-                nodeData.serverName = data.serverName;
-                nodeData.serverHost = data.serverHost;
-                break;
-            case 'command':
-                title = '执行命令';
-                content = '双击编辑命令';
-                nodeData.command = '';
-                nodeData.description = '';
+                typeLabel = '服务器'
+                title = data.serverName || '服务器'
+                content = ''
+                nodeData.serverId = parseInt(data.serverId || '0')
+                nodeData.serverName = data.serverName
+                nodeData.serverHost = data.serverHost
+                break
+            case 'upload':
+                typeLabel = '上传文件'
+                title = '上传文件'
+                content = '双击设置文件与路径'
                 node.addEventListener('dblclick', () => {
-                    this.currentCommandNode = node;
-                    this.commandInput.value = nodeData.command || '';
-                    this.commandDescInput.value = nodeData.description || '';
-                    this.modal.style.display = 'block';
-                });
-                break;
+                    this.currentUploadNode = node
+                    this.uploadFileInput.value = ''
+                    this.remotePathInput.value = ''
+                    document.getElementById('upload-modal').style.display = 'block'
+                })
+                break
+            case 'command':
+                typeLabel = '执行命令'
+                title = '执行命令'
+                content = '双击编辑命令'
+                node.addEventListener('dblclick', () => {
+                    this.currentCommandNode = node
+                    this.commandInput.value = ''
+                    this.commandDescInput.value = ''
+                    document.getElementById('command-modal').style.display = 'block'
+                })
+                break
             case 'output':
-                title = '结果显示';
-                content = '等待执行...';
-                break;
+                typeLabel = '结果显示'
+                title = '结果显示'
+                content = '等待执行'
+                break
         }
-        
         node.innerHTML = `
-            <span class="node-type ${typeClass}">${this.getTypeLabel(type)}</span>
+            <span class="node-type">${typeLabel}</span>
             <div class="connector output"></div>
             <div class="connector input"></div>
             <div class="node-header">
-                <span class="node-title">${title}</span>
+                <span class="node-title" title="${title}">${title}</span>
                 <button class="node-delete">&times;</button>
             </div>
-            <div class="node-content">${content}</div>
-        `;
-        
-        node.querySelector('.node-delete').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.deleteNode(parseInt(node.dataset.id));
-        });
-        
-        this.canvas.appendChild(node);
-        this.nodes.push(nodeData);
-        this.nextNodeId++;
-        
-        this.log(`创建了节点: ${title}`, 'info');
-        
-        return node;
+            ${content ? `<div class="node-content" title="${content}">${content}</div>` : ''}
+        `
+        node.querySelector('.node-delete').addEventListener('click', e => {
+            e.stopPropagation()
+            this.deleteNode(parseInt(node.dataset.id))
+        })
+        this.canvas.appendChild(node)
+        this.nodes.push(nodeData)
+        this.nextNodeId++
+        return node
     }
-
-    getTypeLabel(type) {
-        const labels = {
-            'server': '服务器',
-            'command': '命令',
-            'output': '输出'
-        };
-        return labels[type] || type;
-    }
-
     deleteNode(nodeId) {
-        const node = this.canvas.querySelector(`.canvas-node[data-id="${nodeId}"]`);
-        if (node) {
-            node.remove();
-        }
-        
-        this.nodes = this.nodes.filter(n => n.id !== nodeId);
-        this.connections = this.connections.filter(c => c.from !== nodeId && c.to !== nodeId);
-        this.updateConnections();
-        
-        this.log(`删除了节点 ${nodeId}`, 'info');
+        const node = this.canvas.querySelector(`.canvas-node[data-id="${nodeId}"]`)
+        if (node) node.remove()
+        this.nodes = this.nodes.filter(n => n.id !== nodeId)
+        this.connections = this.connections.filter(c => c.from !== nodeId && c.to !== nodeId)
+        this.updateConnections()
     }
-
     createConnection(fromId, toId) {
-        const exists = this.connections.some(c => c.from === fromId && c.to === toId);
-        if (exists) return;
-        
-        this.connections.push({ from: parseInt(fromId), to: parseInt(toId) });
-        this.updateConnections();
-        this.log(`创建了连接: ${fromId} -> ${toId}`, 'info');
+        const exists = this.connections.some(c => c.from === parseInt(fromId) && c.to === parseInt(toId))
+        if (exists) return
+        this.connections.push({ from: parseInt(fromId), to: parseInt(toId) })
+        this.updateConnections()
     }
-
     updateConnections() {
-        this.connectionsLayer.innerHTML = '';
-        
-        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        defs.innerHTML = `
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="#999" />
-            </marker>
-        `;
-        this.connectionsLayer.appendChild(defs);
-        
+        const svg = this.connectionsLayer
+        // 移除所有路径，但保留临时预览线（如果有）
+        const paths = svg.querySelectorAll('path:not(#temp-connection)')
+        paths.forEach(p => p.remove())
+
         this.connections.forEach(conn => {
-            const fromNode = this.canvas.querySelector(`.canvas-node[data-id="${conn.from}"]`);
-            const toNode = this.canvas.querySelector(`.canvas-node[data-id="${conn.to}"]`);
+            const fromEl = this.canvas.querySelector(`.canvas-node[data-id="${conn.from}"]`)
+            const toEl = this.canvas.querySelector(`.canvas-node[data-id="${conn.to}"]`)
+            if (!fromEl || !toEl) return
             
-            if (!fromNode || !toNode) return;
-            
-            const fromRect = fromNode.getBoundingClientRect();
-            const toRect = toNode.getBoundingClientRect();
-            const canvasRect = this.canvas.getBoundingClientRect();
-            
-            const fromX = fromNode.offsetLeft + fromNode.offsetWidth;
-            const fromY = fromNode.offsetTop + fromNode.offsetHeight / 2;
-            const toX = toNode.offsetLeft;
-            const toY = toNode.offsetTop + toNode.offsetHeight / 2;
-            
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            const midX = (fromX + toX) / 2;
-            const d = `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`;
-            
-            path.setAttribute('d', d);
-            path.setAttribute('class', 'connection-line');
-            
-            this.connectionsLayer.appendChild(path);
-        });
-    }
+            const fromOut = fromEl.querySelector('.connector.output')
+            const toIn = toEl.querySelector('.connector.input')
+            if (!fromOut || !toIn) return
 
-    selectNode(node) {
-        document.querySelectorAll('.canvas-node').forEach(n => n.classList.remove('selected'));
-        node.classList.add('selected');
-    }
+            const cr = this.canvas.getBoundingClientRect()
+            const fr = fromOut.getBoundingClientRect()
+            const tr = toIn.getBoundingClientRect()
 
+            const x1 = fr.left + fr.width / 2 - cr.left
+            const y1 = fr.top + fr.height / 2 - cr.top
+            const x2 = tr.left + tr.width / 2 - cr.left
+            const y2 = tr.top + tr.height / 2 - cr.top
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+            path.setAttribute('d', `M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`)
+            path.setAttribute('stroke', '#667eea')
+            path.setAttribute('fill', 'transparent')
+            path.setAttribute('stroke-width', '2')
+            // 插入到第一个位置，确保在节点下方（虽然 svg 在 div 下层，但为了逻辑清晰）
+            svg.insertBefore(path, svg.firstChild)
+        })
+    }
     clearCanvas() {
-        const nodes = this.canvas.querySelectorAll('.canvas-node');
-        nodes.forEach(node => node.remove());
-        this.nodes = [];
-        this.connections = [];
-        this.updateConnections();
-        this.consoleOutput.innerHTML = '<p class="info">画布已清空</p>';
-        this.nextNodeId = 1;
+        const nodes = this.canvas.querySelectorAll('.canvas-node')
+        nodes.forEach(n => n.remove())
+        this.nodes = []
+        this.connections = []
+        this.updateConnections()
+        this.consoleOutput.innerHTML = '<p class="info">画布已清空</p>'
+        this.nextNodeId = 1
     }
-
-    log(message, type = 'info') {
-        const timestamp = new Date().toLocaleTimeString();
-        const p = document.createElement('p');
-        p.className = type;
-        p.textContent = `[${timestamp}] ${message}`;
-        this.consoleOutput.appendChild(p);
-        this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
+    findConnectedSteps(serverId) {
+        const steps = []
+        const visited = new Set()
+        const dfs = id => {
+            if (visited.has(id)) return
+            visited.add(id)
+            const outs = this.connections.filter(c => c.from === id)
+            for (const c of outs) {
+                const node = this.nodes.find(n => n.id === c.to)
+                if (!node) continue
+                if (node.type === 'upload' || node.type === 'command' || node.type === 'output') {
+                    steps.push(node)
+                }
+                dfs(c.to)
+            }
+        }
+        dfs(serverId)
+        return steps
     }
-
     async runWorkflow() {
-        this.consoleOutput.innerHTML = '';
-        this.log('开始执行工作流...', 'info');
-        
-        const serverNodes = this.nodes.filter(n => n.type === 'server');
-        
+        this.consoleOutput.innerHTML = ''
+        const serverNodes = this.nodes.filter(n => n.type === 'server')
         if (serverNodes.length === 0) {
-            this.log('错误: 没有找到服务器节点', 'error');
-            return;
+            this.log('错误: 没有找到服务器节点', 'error')
+            return
         }
-        
-        for (const serverNode of serverNodes) {
-            const nodeEl = this.canvas.querySelector(`.canvas-node[data-id="${serverNode.id}"]`);
-            nodeEl.classList.add('running');
-            
-            this.log(`连接服务器: ${serverNode.serverName} (${serverNode.serverHost})`, 'info');
-            
-            const commands = this.findConnectedCommands(serverNode.id);
-            
-            for (const commandNode of commands) {
-                const cmdNodeEl = this.canvas.querySelector(`.canvas-node[data-id="${commandNode.id}"]`);
-                cmdNodeEl.classList.add('running');
-                
-                if (!commandNode.command) {
-                    this.log(`警告: 命令节点未设置命令`, 'warning');
-                    cmdNodeEl.classList.remove('running');
-                    continue;
-                }
-                
-                this.log(`执行命令: ${commandNode.command}`, 'info');
-                
-                try {
-                    const result = await ServerAPI.executeCommand(serverNode.serverId, commandNode.command);
-                    
-                    if (result.status === 'success') {
-                        this.log(`命令执行成功`, 'success');
-                        this.log(`输出:\n${result.data.output || '无输出'}`, 'info');
-                        if (result.data.error) {
-                            this.log(`错误输出:\n${result.data.error}`, 'warning');
+        let hasExecutedAny = false
+        for (const sn of serverNodes) {
+            const steps = this.findConnectedSteps(sn.id)
+            if (steps.length === 0) {
+                this.log(`提示: 服务器 "${sn.serverName || '未命名'}" 未连接任何任务`, 'warning')
+                continue
+            }
+            for (const step of steps) {
+                hasExecutedAny = true
+                if (step.type === 'upload') {
+                    if (!step.upload || !step.upload.file || !step.upload.remote) {
+                        this.log('警告: 上传节点未设置文件或路径', 'warning')
+                        continue
+                    }
+                    try {
+                        const res = await ServerAPI.uploadFile(sn.serverId, step.upload.file, step.upload.remote)
+                        if (res.status === 'success') {
+                            this.log(`上传成功: ${step.upload.remote}`, 'success')
+                        } else {
+                            this.log(`上传失败: ${res.message || ''}`, 'error')
                         }
-                        cmdNodeEl.classList.remove('running');
-                        cmdNodeEl.classList.add('success');
-                        
-                        this.updateOutputNodes(commandNode.id, result.data);
-                    } else {
-                        this.log(`命令执行失败: ${result.message}`, 'error');
-                        cmdNodeEl.classList.remove('running');
-                        cmdNodeEl.classList.add('error');
+                    } catch (e) {
+                        this.log(`上传出错: ${e.message}`, 'error')
                     }
-                } catch (error) {
-                    this.log(`执行出错: ${error.message}`, 'error');
-                    cmdNodeEl.classList.remove('running');
-                    cmdNodeEl.classList.add('error');
+                } else if (step.type === 'command') {
+                    if (!step.command) {
+                        this.log('警告: 命令节点未设置命令', 'warning')
+                        continue
+                    }
+                    try {
+                        const res = await ServerAPI.executeCommand(sn.serverId, step.command)
+                        if (res.status === 'success') {
+                            this.log(`命令成功: ${step.command}`, 'success')
+                            const d = res.data || {}
+                            this.addOutput(`输出:\n${d.output || ''}\n错误:\n${d.error || ''}`)
+                            // 更新连接的 Output 节点内容
+                            const outNode = steps.find(s => s.type === 'output')
+                            if (outNode) {
+                                const el = this.canvas.querySelector(`.canvas-node[data-id="${outNode.id}"] .node-content`)
+                                if (el) el.textContent = (d.output || '') + (d.error ? '\n错误:\n' + d.error : '')
+                            }
+                        } else {
+                            this.log(`命令失败: ${res.message || ''}`, 'error')
+                        }
+                    } catch (e) {
+                        this.log(`执行出错: ${e.message}`, 'error')
+                    }
                 }
             }
-            
-            nodeEl.classList.remove('running');
-            nodeEl.classList.add('success');
         }
-        
-        this.log('工作流执行完成', 'success');
-    }
-
-    findConnectedCommands(nodeId) {
-        const commands = [];
-        const visited = new Set();
-        
-        const search = (currentId) => {
-            if (visited.has(currentId)) return;
-            visited.add(currentId);
-            
-            const outgoing = this.connections.filter(c => c.from === currentId);
-            for (const conn of outgoing) {
-                const node = this.nodes.find(n => n.id === conn.to);
-                if (node) {
-                    if (node.type === 'command') {
-                        commands.push(node);
-                    } else if (node.type === 'output') {
-                        continue;
-                    }
-                    search(conn.to);
-                }
-            }
-        };
-        
-        search(nodeId);
-        return commands;
-    }
-
-    updateOutputNodes(commandNodeId, result) {
-        const outgoing = this.connections.filter(c => c.from === commandNodeId);
-        for (const conn of outgoing) {
-            const node = this.nodes.find(n => n.id === conn.to);
-            if (node && node.type === 'output') {
-                const nodeEl = this.canvas.querySelector(`.canvas-node[data-id="${node.id}"]`);
-                nodeEl.classList.add('success');
-                
-                const content = nodeEl.querySelector('.node-content');
-                const outputText = result.output || result.error || '无输出';
-                content.textContent = outputText.substring(0, 50) + (outputText.length > 50 ? '...' : '');
-                
-                this.addOutputResult(node.id, result);
-            }
+        if (!hasExecutedAny) {
+            this.log('未执行任何任务，请检查连线', 'warning')
+        } else {
+            this.log('工作流执行完成', 'success')
         }
     }
-
-    addOutputResult(nodeId, result) {
-        const node = this.nodes.find(n => n.id === nodeId);
-        const container = document.getElementById('output-container');
-        
-        const outputItem = document.createElement('div');
-        outputItem.className = 'output-item';
-        outputItem.innerHTML = `
-            <div class="output-header">
-                <span class="output-title">${node.description || '输出结果'}</span>
-            </div>
-            <div class="output-content">
-${result.output || result.error || '无输出'}
-${result.error ? '\n[错误]\n' + result.error : ''}
-            </div>
-        `;
-        
-        container.appendChild(outputItem);
+    addOutput(text) {
+        const container = document.getElementById('output-container')
+        const item = document.createElement('div')
+        item.className = 'output-item'
+        item.innerHTML = `<div class="output-header"><span class="output-title">输出</span></div><div class="output-content">${text}</div>`
+        container.appendChild(item)
+    }
+    log(text, level='info') {
+        const p = document.createElement('p')
+        p.className = level
+        p.textContent = text
+        this.consoleOutput.appendChild(p)
     }
 }
-
-// 初始化工作流编辑器
-document.addEventListener('DOMContentLoaded', () => {
-    new WorkflowEditor();
-});
+document.addEventListener('DOMContentLoaded', () => new WorkflowEditor())

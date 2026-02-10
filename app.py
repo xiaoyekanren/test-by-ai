@@ -3,6 +3,7 @@ from flask_cors import CORS
 import psutil
 from datetime import datetime
 import os
+import tempfile
 import json
 import sqlite3
 from pathlib import Path
@@ -743,6 +744,85 @@ def fetch_remote_api(server, path, params=None, method='GET', json_data=None, ti
 
     return {'status':'error','message':'Unsupported path for SSH proxy', 'diagnosis':'NotImplemented'}
 
+def sftp_upload(server, local_path, remote_path, timeout=10):
+    host = server.get('host')
+    username = server.get('username') or None
+    password = server.get('password') or None
+    ports = [22]
+    try:
+        if server.get('port'):
+            ports.append(int(server.get('port')))
+    except Exception:
+        pass
+    last_exc = None
+    for p in ports:
+        try:
+            transport = paramiko.Transport((host, p))
+            transport.connect(username=username, password=password)
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            sftp.put(local_path, remote_path)
+            sftp.close()
+            transport.close()
+            return {'status': 'success'}
+        except Exception as e:
+            last_exc = e
+            try:
+                transport.close()
+            except Exception:
+                pass
+            continue
+    return {'status': 'error', 'message': str(last_exc) if last_exc else 'SFTP failed'}
+
+@app.route('/api/servers/<int:server_id>/upload', methods=['POST'])
+def upload_file_to_server(server_id):
+    try:
+        remote_path = request.form.get('remote_path', '')
+        file = request.files.get('file')
+        if not file or not remote_path:
+            return jsonify({'status': 'error', 'message': '缺少文件或远程路径'}), 400
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT host, port, username, password FROM servers WHERE id = ?', (server_id,))
+        server = c.fetchone()
+        conn.close()
+        if not server:
+            return jsonify({'status': 'error', 'message': '服务器不存在'}), 404
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        tmp_path = tmp.name
+        file.save(tmp_path)
+        server_dict = {'host': server['host'], 'port': server['port'], 'username': server['username'], 'password': server['password']}
+        res = sftp_upload(server_dict, tmp_path, remote_path)
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+        if res.get('status') != 'success':
+            return jsonify({'status': 'error', 'message': res.get('message', '上传失败')}), 400
+        return jsonify({'status': 'success', 'message': '文件上传成功'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/servers/<int:server_id>/execute', methods=['POST'])
+def execute_command_on_server(server_id):
+    try:
+        data = request.get_json()
+        command = data.get('command', '')
+        if not command:
+            return jsonify({'status': 'error', 'message': '命令不能为空'}), 400
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT host, port, username, password FROM servers WHERE id = ?', (server_id,))
+        server = c.fetchone()
+        conn.close()
+        if not server:
+            return jsonify({'status': 'error', 'message': '服务器不存在'}), 404
+        server_dict = {'host': server['host'], 'port': server['port'], 'username': server['username'], 'password': server['password']}
+        result = ssh_run_command(server_dict, command, timeout=30)
+        if 'error' in result:
+            return jsonify({'status': 'error', 'message': result['error'], 'data': {'output': '', 'error': result['error'], 'exit_status': -1}}), 400
+        return jsonify({'status': 'success', 'message': '命令执行成功', 'data': {'output': result.get('stdout', ''), 'error': result.get('stderr', ''), 'exit_status': result.get('exit_status')}}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/servers/<int:server_id>/proxy/server/status', methods=['GET'])
 def proxy_server_status(server_id):
@@ -879,72 +959,6 @@ def proxy_server_disk(server_id):
 
 
 
-# ==================== 工作流执行接口 ====================
-
-@app.route('/api/servers/<int:server_id>/execute', methods=['POST'])
-def execute_command_on_server(server_id):
-    """在指定服务器上执行命令"""
-    try:
-        data = request.get_json()
-        command = data.get('command', '')
-        
-        if not command:
-            return jsonify({
-                'status': 'error',
-                'message': '命令不能为空'
-            }), 400
-        
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute('SELECT host, port, username, password FROM servers WHERE id = ?', (server_id,))
-        server = c.fetchone()
-        conn.close()
-        
-        if not server:
-            return jsonify({
-                'status': 'error',
-                'message': '服务器不存在'
-            }), 404
-        
-        app.logger.info(f"🔧 Executing command on server {server_id} ({server['host']}): {command[:100]}")
-        
-        server_dict = {
-            'host': server['host'],
-            'port': server['port'],
-            'username': server['username'],
-            'password': server['password']
-        }
-        
-        result = ssh_run_command(server_dict, command, timeout=30)
-        
-        if 'error' in result:
-            app.logger.error(f"❌ Command execution failed: {result['error']}")
-            return jsonify({
-                'status': 'error',
-                'message': result['error'],
-                'data': {
-                    'output': '',
-                    'error': result['error'],
-                    'exit_status': -1
-                }
-            }), 400
-        
-        app.logger.info(f"✅ Command executed successfully with exit_status={result.get('exit_status')}")
-        return jsonify({
-            'status': 'success',
-            'message': '命令执行成功',
-            'data': {
-                'output': result.get('stdout', ''),
-                'error': result.get('stderr', ''),
-                'exit_status': result.get('exit_status')
-            }
-        }), 200
-    except Exception as e:
-        app.logger.error(f"❌ Error in execute_command_on_server: {type(e).__name__}: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
 
 
 # ==================== 前端路由 ====================
@@ -966,11 +980,10 @@ def servers():
     """服务器管理页面"""
     return render_template('servers.html')
 
-
 @app.route('/workflow')
 def workflow():
-    """工作流编辑器页面"""
     return render_template('workflow.html')
+
 
 
 # ==================== 错误处理 ====================
