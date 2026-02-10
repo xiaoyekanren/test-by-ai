@@ -84,7 +84,7 @@ class ServerAPI {
             method: 'POST'
         });
     }
-
+    
     static async executeCommand(serverId, command) {
         return this.request(`/servers/${serverId}/execute`, {
             method: 'POST',
@@ -93,6 +93,17 @@ class ServerAPI {
             },
             body: JSON.stringify({ command })
         });
+    }
+    
+    static async uploadFile(serverId, file, remotePath) {
+        const form = new FormData()
+        form.append('file', file)
+        form.append('remote_path', remotePath)
+        return this.request(`/servers/${serverId}/upload`, {
+            method: 'POST',
+            body: form,
+            headers: {}
+        })
     }
 
     static async request(endpoint, options = {}) {
@@ -105,6 +116,9 @@ class ServerAPI {
         };
 
         const finalOptions = { ...defaultOptions, ...options };
+        if (finalOptions.body instanceof FormData) {
+            delete finalOptions.headers['Content-Type'];
+        }
 
         try {
             const response = await fetch(url, finalOptions);
