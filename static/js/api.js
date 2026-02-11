@@ -134,19 +134,29 @@ class ServerAPI {
         try {
             const response = await fetch(url, finalOptions);
             
-            if (!response.ok) {
-                // 尝试解析错误信息
-                let errorMsg = `HTTP error! status: ${response.status}`;
-                try {
-                    const errData = await response.json();
-                    if (errData.message) errorMsg = errData.message;
-                } catch (e) {
-                    // ignore
+            // 尝试解析响应 JSON，无论状态码如何
+            let responseData;
+            try {
+                responseData = await response.json();
+            } catch (e) {
+                // 如果解析失败，说明不是 JSON 格式
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                throw new Error(errorMsg);
+                // 如果是 200 OK 但不是 JSON，可能返回了空或其他内容
+                return {}; 
             }
 
-            return await response.json();
+            if (!response.ok) {
+                // 如果有具体的错误信息，抛出该信息
+                const errorMsg = responseData.message || `HTTP error! status: ${response.status}`;
+                // 将整个错误对象包装抛出，以便调用者能获取更多上下文
+                const err = new Error(errorMsg);
+                err.data = responseData;
+                throw err;
+            }
+
+            return responseData;
         } catch (error) {
             console.error('API request failed:', error);
             return {
