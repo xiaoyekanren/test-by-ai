@@ -17,6 +17,57 @@ let currentSort = {
     direction: 'desc'
 };
 
+let groupByTag = true; // 是否按标签分组
+
+function createServerHeaderRow() {
+    const fields = [
+        { key: 'name', label: '服务器名称', class: 'server-name' },
+        { key: 'host', label: '主机地址', class: 'server-host' },
+        { key: 'port', label: '端口', class: 'server-port' },
+        { key: 'username', label: '用户名', class: 'server-username' },
+        { key: 'status', label: '状态', class: 'server-status' }
+    ];
+
+    const headerCells = fields.map(field => {
+        const isSorted = currentSort.field === field.key;
+        const sortClass = isSorted ? (currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+        return `
+            <div class="header-cell ${field.class} ${sortClass}" onclick="sortServers('${field.key}')">
+                ${field.label}<span class="sort-icon"></span>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="server-header">
+            ${headerCells}
+            <div class="header-cell server-actions">操作</div>
+            <div class="header-cell server-tags" onclick="toggleGrouping()">
+                标签 <span class="sort-icon" style="opacity: ${groupByTag ? 1 : 0.3}">🏷️</span>
+            </div>
+            <div class="header-cell server-created" onclick="sortServers('created_at')">
+                创建时间<span class="sort-icon ${currentSort.field === 'created_at' ? (currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc') : ''}"></span>
+            </div>
+            <div class="header-cell server-description">描述</div>
+        </div>
+    `;
+}
+
+function toggleGrouping() {
+    groupByTag = !groupByTag;
+    loadServers();
+}
+
+function sortServers(field) {
+    if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+    }
+    loadServers();
+}
+
 function displayServers(servers) {
     const container = document.getElementById('server-list-container');
 
@@ -57,61 +108,103 @@ function displayServers(servers) {
         return 0;
     });
 
-    container.innerHTML = `
-        <div class="server-list">
-            ${createServerHeaderRow()}
-            ${sortedServers.map(server => createServerRow(server)).join('')}
-        </div>
-    `;
-}
+    if (groupByTag) {
+        // 分组逻辑
+        const groups = {};
+        const noTagServers = [];
 
-function createServerHeaderRow() {
-    const fields = [
-        { key: 'name', label: '服务器名称', class: 'server-name' },
-        { key: 'host', label: '主机地址', class: 'server-host' },
-        { key: 'port', label: '端口', class: 'server-port' },
-        { key: 'username', label: '用户名', class: 'server-username' },
-        { key: 'created_at', label: '创建时间', class: 'server-created' },
-        { key: 'status', label: '状态', class: 'server-status' }
-    ];
+        sortedServers.forEach(server => {
+            if (server.tags && server.tags.trim()) {
+                const tags = server.tags.split(',').map(t => t.trim()).filter(t => t);
+                if (tags.length > 0) {
+                    tags.forEach(tag => {
+                        if (!groups[tag]) groups[tag] = [];
+                        // 避免同一个服务器在同一个标签组重复（虽然理论上不会，但以防万一）
+                        if (!groups[tag].find(s => s.id === server.id)) {
+                            groups[tag].push(server);
+                        }
+                    });
+                } else {
+                    noTagServers.push(server);
+                }
+            } else {
+                noTagServers.push(server);
+            }
+        });
 
-    const headerCells = fields.map(field => {
-        const isSorted = currentSort.field === field.key;
-        const sortClass = isSorted ? (currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-        return `
-            <div class="header-cell ${field.class} ${sortClass}" onclick="sortServers('${field.key}')">
-                ${field.label}<span class="sort-icon"></span>
+        // 如果一个服务器有多个标签，它会出现在多个组中。
+        // 如果完全没有标签的服务器，单独放一组。
+        
+        let html = '';
+        
+        // 按标签名排序
+        Object.keys(groups).sort().forEach(tag => {
+            html += createServerGroup(tag, groups[tag]);
+        });
+        
+        if (noTagServers.length > 0) {
+            html += createServerGroup('未分类', noTagServers);
+        }
+        
+        // 如果没有任何分组（所有服务器都没标签），直接显示列表
+        if (Object.keys(groups).length === 0) {
+             html = `
+                <div class="server-group">
+                    <div class="server-list">
+                        ${createServerHeaderRow()}
+                        ${sortedServers.map(server => createServerRow(server)).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+    } else {
+        // 不分组显示
+        container.innerHTML = `
+            <div class="server-group">
+                <div class="server-list">
+                    ${createServerHeaderRow()}
+                    ${sortedServers.map(server => createServerRow(server)).join('')}
+                </div>
             </div>
         `;
-    }).join('');
-
-    return `
-        <div class="server-header">
-            ${headerCells}
-            <div class="header-cell server-actions">操作</div>
-            <div class="header-cell server-description">描述</div>
-        </div>
-    `;
+    }
 }
 
-function sortServers(field) {
-    if (currentSort.field === field) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSort.field = field;
-        currentSort.direction = 'asc';
-    }
-    loadServers();
+function createServerGroup(title, servers) {
+    return `
+        <div class="server-group">
+            <div class="group-header">
+                <div class="group-title">🏷️ ${title}</div>
+                <div class="group-count">${servers.length}</div>
+            </div>
+            <div class="server-list">
+                ${createServerHeaderRow()}
+                ${servers.map(server => createServerRow(server)).join('')}
+            </div>
+        </div>
+    `;
 }
 
 function createServerRow(server) {
+    // 处理标签显示
+    let tagsHtml = '';
+    if (server.tags) {
+        tagsHtml = server.tags.split(',')
+            .map(t => t.trim())
+            .filter(t => t)
+            .map(t => `<span class="tag-badge">${t}</span>`)
+            .join('');
+    }
+
     return `
         <div class="server-row">
             <div class="server-name">${server.name}</div>
             <div class="server-host">${server.host}</div>
             <div class="server-port">${server.port}</div>
             <div class="server-username">${server.username || '--'}</div>
-            <div class="server-created">${formatDateTime(server.created_at)}</div>
             <div class="server-status">
                 <span class="status-badge status-${server.status}">${getStatusText(server.status)}</span>
             </div>
@@ -126,6 +219,8 @@ function createServerRow(server) {
                     删除
                 </button>
             </div>
+            <div class="server-tags">${tagsHtml}</div>
+            <div class="server-created">${formatDateTime(server.created_at)}</div>
             <div class="server-description" title="${server.description || ''}">${server.description || '--'}</div>
         </div>
     `;
@@ -186,6 +281,7 @@ async function openEditServerModal(serverId) {
             document.getElementById('edit-server-username').value = server.username || '';
             document.getElementById('edit-server-password').value = ''; // 密码不回显
             document.getElementById('edit-server-description').value = server.description || '';
+            document.getElementById('edit-server-tags').value = server.tags || '';
 
             modal.style.display = 'block';
         } else {

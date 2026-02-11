@@ -30,11 +30,19 @@ def init_db():
             username TEXT,
             password TEXT,
             description TEXT,
+            tags TEXT,
             status TEXT DEFAULT 'offline',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # 检查 tags 列是否存在（针对旧数据库）
+    try:
+        c.execute('SELECT tags FROM servers LIMIT 1')
+    except sqlite3.OperationalError:
+        c.execute('ALTER TABLE servers ADD COLUMN tags TEXT')
+        
     conn.commit()
     conn.close()
 
@@ -262,7 +270,7 @@ def list_servers():
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute('SELECT id, name, host, port, username, description, status, created_at FROM servers ORDER BY created_at DESC')
+        c.execute('SELECT id, name, host, port, username, description, tags, status, created_at FROM servers ORDER BY created_at DESC')
         servers = [dict(row) for row in c.fetchall()]
         conn.close()
         
@@ -294,8 +302,8 @@ def add_server():
         c = conn.cursor()
         
         c.execute('''
-            INSERT INTO servers (name, host, port, username, password, description, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO servers (name, host, port, username, password, description, tags, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['name'],
             data['host'],
@@ -303,6 +311,7 @@ def add_server():
             data.get('username', ''),
             data.get('password', ''),
             data.get('description', ''),
+            data.get('tags', ''),
             'offline'
         ))
         
@@ -394,6 +403,9 @@ def update_server(server_id):
         if 'description' in data:
             update_fields.append('description = ?')
             update_values.append(data['description'])
+        if 'tags' in data:
+            update_fields.append('tags = ?')
+            update_values.append(data['tags'])
         
         if update_fields:
             update_fields.append('updated_at = CURRENT_TIMESTAMP')
