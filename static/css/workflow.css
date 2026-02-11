@@ -74,10 +74,10 @@
 
 .draggable-items.multi-column {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(130px, 1fr)); /* 自适应宽度，每列至少 130px */
     gap: 8px;
     align-items: stretch;
-    width: 400px;
+    width: auto; /* 移除固定宽度 400px */
 }
 
 .draggable-item { 
