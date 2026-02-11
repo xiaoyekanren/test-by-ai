@@ -380,38 +380,45 @@
 
 /* 输出面板美化 */
 .output-item {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 6px;
+    border-radius: 4px;
     overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: none;
 }
 
 .cmd-result-header {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
-    font-size: 13px;
+    font-size: 12px;
     gap: 8px;
+    cursor: pointer; /* 增加点击手势 */
+    user-select: none;
+}
+
+.cmd-result-header:hover {
+    background: #f3f4f6;
 }
 
 .cmd-result-header.success {
-    border-left: 4px solid var(--success-color);
+    border-left: 3px solid var(--success-color);
 }
 
 .cmd-result-header.error {
-    border-left: 4px solid var(--danger-color);
+    border-left: 3px solid var(--danger-color);
 }
 
 .server-badge {
     background: #e0e7ff;
     color: #4338ca;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 1px 4px;
+    border-radius: 3px;
     font-weight: 500;
+    font-size: 11px;
 }
 
 .cmd-text {
@@ -421,37 +428,67 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 12px;
 }
 
 .status-tag {
     font-weight: bold;
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 4px;
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
 }
 
 .cmd-result-header.success .status-tag {
-    background: #d1fae5;
-    color: #065f46;
+    background: transparent;
+    color: var(--success-color);
 }
 
 .cmd-result-header.error .status-tag {
-    background: #fee2e2;
-    color: #991b1b;
+    background: transparent;
+    color: var(--danger-color);
 }
 
 .cmd-result-body {
-    padding: 12px;
-    background: #1e1e1e; /* 黑色背景 */
+    padding: 8px 10px;
+    background: #1e1e1e; 
     color: #d4d4d4;
     font-family: 'Monaco', 'Consolas', monospace;
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 12px;
+    line-height: 1.4;
     overflow-x: auto;
+    border-top: 1px solid #333;
+    display: none; /* 默认折叠 */
+}
+
+/* 展开状态 */
+.output-item.expanded .cmd-result-body {
+    display: block;
+}
+
+.output-item.expanded .cmd-result-header {
+    border-bottom-color: #e5e7eb;
+    background: #f3f4f6;
+}
+
+/* 箭头指示器 */
+.toggle-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    transition: transform 0.2s;
+    font-size: 10px;
+}
+
+.output-item.expanded .toggle-icon {
+    transform: rotate(90deg);
 }
 
 .cmd-output-section {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .cmd-output-section:last-child {
@@ -459,10 +496,10 @@
 }
 
 .section-title {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    margin-bottom: 4px;
-    opacity: 0.7;
+    margin-bottom: 2px;
+    opacity: 0.6;
     font-weight: bold;
 }
 
@@ -478,7 +515,8 @@
 .cmd-output-empty {
     color: #6b7280;
     font-style: italic;
-    font-size: 12px;
+    font-size: 11px;
+    padding: 4px 0;
 }
 
 /* 移除重复定义，继承 style.css */
