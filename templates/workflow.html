@@ -1,133 +1,119 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作流</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/css/workflow.css">
-</head>
-<body>
-    <div class="container">
-        <nav class="sidebar">
-            <div class="logo">
-                <h2>服务器管理系统</h2>
-            </div>
-            <ul class="nav-menu">
-                <li><a href="/"><span class="nav-label" title="首页">首页</span></a></li>
-                <li><a href="/integrated"><span class="nav-label" title="集成监控">集成监控</span></a></li>
-                <li><a href="/servers"><span class="nav-label" title="服务器管理">服务器管理</span></a></li>
-                <li><a href="/workflow" class="active"><span class="nav-label" title="工作流">工作流</span></a></li>
-                <li><a href="#" class="coming-soon"><span class="nav-label" title="服务部署">服务部署</span></a></li>
-            </ul>
-        </nav>
-        <main class="main-content">
-            <header class="top-bar">
-                <div>
-                    <h1>工作流编辑器</h1>
+{% extends 'base.html' %}
+
+{% block title %}工作流 - 服务器管理系统{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workflow.css') }}">
+{% endblock %}
+
+{% block header_content %}
+<div>
+    <h1>工作流编辑器</h1>
+</div>
+<div class="top-actions">
+    <div class="zoom-controls">
+        <button id="zoom-out" class="btn btn-secondary" title="缩小">-</button>
+        <span id="zoom-level">100%</span>
+        <button id="zoom-in" class="btn btn-secondary" title="放大">+</button>
+        <button id="zoom-reset" class="btn btn-secondary" title="重置">重置</button>
+    </div>
+    <button id="toggle-components" class="btn btn-secondary">折叠组件面板</button>
+    <button id="clear-btn" class="btn btn-secondary">清空画布</button>
+    <button id="run-btn" class="btn btn-primary">运行工作流</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="content workflow-content">
+    <div class="workflow-container">
+        <div class="workspace">
+            <div id="canvas" class="canvas">
+                <div id="canvas-content" class="canvas-content">
+                    <svg id="connections" class="connections-layer"></svg>
                 </div>
-                <div class="top-actions">
-                    <div class="zoom-controls">
-                        <button id="zoom-out" class="btn btn-secondary" title="缩小">-</button>
-                        <span id="zoom-level">100%</span>
-                        <button id="zoom-in" class="btn btn-secondary" title="放大">+</button>
-                        <button id="zoom-reset" class="btn btn-secondary" title="重置">重置</button>
+                <aside class="component-panel draggable-panel">
+                    <div class="panel-header">
+                        <h3>组件库</h3>
+                        <div class="drag-handle">✥</div>
                     </div>
-                    <button id="toggle-components" class="btn btn-secondary">折叠组件面板</button>
-                    <button id="clear-btn" class="btn btn-secondary">清空画布</button>
-                    <button id="run-btn" class="btn btn-primary">运行工作流</button>
-                </div>
-            </header>
-            <div class="content workflow-content">
-                <div class="workflow-container">
-                    <div class="workspace">
-                        <div id="canvas" class="canvas">
-                            <div id="canvas-content" class="canvas-content">
-                                <svg id="connections" class="connections-layer"></svg>
-                            </div>
-                            <aside class="component-panel draggable-panel">
-                                <div class="panel-header">
-                                    <h3>组件库</h3>
-                                    <div class="drag-handle">✥</div>
-                                </div>
-                                <div class="component-section">
-                                    <h4>服务器</h4>
-                                    <div id="server-list" class="draggable-items"></div>
-                                </div>
-                                <div class="component-section">
-                                    <h4>事件</h4>
-                                    <div class="draggable-item" draggable="true" data-type="upload">
-                                        <span class="icon">⬆️</span>
-                                        <span>上传文件</span>
-                                    </div>
-                                    <div class="draggable-item" draggable="true" data-type="command">
-                                        <span class="icon">⚡</span>
-                                        <span>执行命令</span>
-                                    </div>
-                                    <div class="draggable-item" draggable="true" data-type="output">
-                                        <span class="icon">📋</span>
-                                        <span>结果显示</span>
-                                    </div>
-                                </div>
-                            </aside>
+                    <div class="component-section">
+                        <h4>服务器</h4>
+                        <div id="server-list" class="draggable-items"></div>
+                    </div>
+                    <div class="component-section">
+                        <h4>事件</h4>
+                        <div class="draggable-item" draggable="true" data-type="upload">
+                            <span class="icon">⬆️</span>
+                            <span>上传文件</span>
                         </div>
-                        <div class="splitter" id="workspace-splitter"></div>
-                        <aside class="result-panel">
-                            <h3>执行结果</h3>
-                            <div id="output-container">
-                                <div class="output-item" id="output-console">
-                                    <div class="output-header">
-                                        <span class="output-title">控制台</span>
-                                    </div>
-                                    <div class="output-content" id="console-output">
-                                        <p class="info">拖拽组件到画布开始构建工作流</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </aside>
+                        <div class="draggable-item" draggable="true" data-type="command">
+                            <span class="icon">⚡</span>
+                            <span>执行命令</span>
+                        </div>
+                        <div class="draggable-item" draggable="true" data-type="output">
+                            <span class="icon">📋</span>
+                            <span>结果显示</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+            <div class="splitter" id="workspace-splitter"></div>
+            <aside class="result-panel">
+                <h3>执行结果</h3>
+                <div id="output-container">
+                    <div class="output-item" id="output-console">
+                        <div class="output-header">
+                            <span class="output-title">控制台</span>
+                        </div>
+                        <div class="output-content" id="console-output">
+                            <p class="info">拖拽组件到画布开始构建工作流</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </main>
-    </div>
-    <div id="command-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>编辑命令</h3>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <label for="command-input">命令</label>
-                <input type="text" id="command-input" class="form-input" placeholder="例如: ls -la">
-                <label for="command-description">描述</label>
-                <input type="text" id="command-description" class="form-input" placeholder="描述">
-            </div>
-            <div class="modal-footer">
-                <button id="cancel-command" class="btn btn-secondary">取消</button>
-                <button id="save-command" class="btn btn-primary">保存</button>
-            </div>
+            </aside>
         </div>
     </div>
-    <div id="upload-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>上传文件</h3>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <label for="upload-file">选择文件</label>
-                <div id="current-file-info" style="margin-bottom: 10px; font-size: 12px; color: #666;"></div>
-                <input type="file" id="upload-file" class="form-input">
-                <label for="remote-path">远程路径</label>
-                <input type="text" id="remote-path" class="form-input" placeholder="/tmp/upload.bin">
-            </div>
-            <div class="modal-footer">
-                <button id="cancel-upload" class="btn btn-secondary">取消</button>
-                <button id="save-upload" class="btn btn-primary">保存</button>
-            </div>
+</div>
+
+<div id="command-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>编辑命令</h3>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <label for="command-input">命令</label>
+            <input type="text" id="command-input" class="form-input" placeholder="例如: ls -la">
+            <label for="command-description">描述</label>
+            <input type="text" id="command-description" class="form-input" placeholder="描述">
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-command" class="btn btn-secondary">取消</button>
+            <button id="save-command" class="btn btn-primary">保存</button>
         </div>
     </div>
-    <script src="/static/js/api.js"></script>
-    <script src="/static/js/workflow.js"></script>
-</body>
-</html>
+</div>
+<div id="upload-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>上传文件</h3>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <label for="upload-file">选择文件</label>
+            <div id="current-file-info" style="margin-bottom: 10px; font-size: 12px; color: #666;"></div>
+            <input type="file" id="upload-file" class="form-input">
+            <label for="remote-path">远程路径</label>
+            <input type="text" id="remote-path" class="form-input" placeholder="/tmp/upload.bin">
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-upload" class="btn btn-secondary">取消</button>
+            <button id="save-upload" class="btn btn-primary">保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}

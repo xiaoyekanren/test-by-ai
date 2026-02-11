@@ -1,51 +1,35 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>集成监控 - 服务器管理系统</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-    <div class="container">
-        <nav class="sidebar">
-            <div class="logo">
-                <h2>服务器管理系统</h2>
-            </div>
-            <ul class="nav-menu">
-                <li><a href="/"><span class="nav-label" title="首页">首页</span></a></li>
-                <li><a href="/integrated" class="active"><span class="nav-label" title="集成监控">集成监控</span></a></li>
-                <li><a href="/servers"><span class="nav-label" title="服务器管理">服务器管理</span></a></li>
-                <li><a href="/workflow"><span class="nav-label" title="工作流">工作流</span></a></li>
-                <li><a href="#" class="coming-soon"><span class="nav-label" title="服务部署">服务部署</span></a></li>
-            </ul>
-        </nav>
-        
-        <main class="main-content">
-            <header class="top-bar">
-                <div>
-                    <h1>集成监控面板</h1>
-                </div>
-                <span id="current-time"></span>
-            </header>
-            
-            <div class="content" id="monitoring-content">
-                <!-- 错误通知容器 -->
-                <div id="error-notification" class="notification-container"></div>
-                
-                <!-- 所有主机的仪表板 -->
-                <section class="section">
-                    <h2>系统资源监控</h2>
-                    <div id="multi-host-dashboard" class="multi-host-dashboard">
-                        <div class="loading">加载中...</div>
-                    </div>
-                </section>
-            </div>
-        </main>
-    </div>
+{% extends 'base.html' %}
 
-    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/integrated.js') }}"></script>
-</body>
-</html>
+{% block title %}集成监控 - 服务器管理系统{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block header_content %}
+<div>
+    <h1>集成监控面板</h1>
+</div>
+<div class="user-info">
+    <span id="current-time"></span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="content" id="monitoring-content">
+    <!-- 错误通知容器 -->
+    <div id="error-notification" class="notification-container"></div>
+    
+    <!-- 所有主机的仪表板 -->
+    <section class="section">
+        <h2>系统资源监控</h2>
+        <div id="multi-host-dashboard" class="multi-host-dashboard">
+            <div class="loading">加载中...</div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/integrated.js') }}"></script>
+{% endblock %}
