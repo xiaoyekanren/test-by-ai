@@ -66,6 +66,13 @@
 
 .draggable-items { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 
+.draggable-items.multi-column {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    align-items: stretch;
+}
+
 .draggable-item { 
     padding: 10px 12px; 
     background: #fff; 
