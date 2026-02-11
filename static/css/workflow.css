@@ -110,6 +110,7 @@
     min-width: 130px; /* 保证基本宽度 */
     max-width: 100%;
     align-self: flex-start; /* 关键：防止 flex item 在交叉轴上被拉伸 */
+    flex: 0 0 auto; /* 禁止伸缩 */
 }
 
 .draggable-item:hover { 
