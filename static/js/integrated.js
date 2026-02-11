@@ -124,12 +124,17 @@ function initializeMonitors() {
     startAllPolling();
 }
 
+let monitorSortState = { field: 'name', direction: 'asc' }; // 监控面板排序状态
+
 function renderDashboard() {
     const dashboard = document.getElementById('multi-host-dashboard');
     if (!dashboard) {
         console.error('未找到 multi-host-dashboard 元素');
         return;
     }
+
+    // 保存当前的滚动位置
+    const scrollPos = dashboard.scrollTop;
 
     dashboard.innerHTML = '';
 
@@ -202,15 +207,17 @@ function renderDashboard() {
         dashboard.appendChild(createGroupContainer('未分类', noTagServers));
     }
 
+    // 恢复滚动位置
+    if (dashboard.scrollTop !== undefined) {
+        dashboard.scrollTop = scrollPos;
+    }
+
     console.log(`已渲染 ${Object.keys(hostMonitors).length} 个主机的监控面板`);
 }
 
 function createGroupContainer(title, servers) {
     const container = document.createElement('div');
     container.className = 'server-group'; // 复用 servers.js 的样式类
-    // 移除默认的边框和阴影，因为已经在 dashboard 容器里了，或者保留以区分组？
-    // 为了紧凑布局，我们可能希望去掉 .server-group 的部分样式，或者在 style.css 中调整
-    // 这里先直接用，看看效果
     container.style.marginBottom = '0'; // 紧凑布局
     container.style.borderBottom = '1px solid var(--border-color)';
     container.style.borderRadius = '0';
@@ -230,67 +237,96 @@ function createGroupContainer(title, servers) {
     const list = document.createElement('div');
     list.className = 'host-list';
     
-    servers.forEach(server => {
+    // 对组内服务器进行排序
+    const sortedServers = [...servers].sort((a, b) => {
+        const valA = getSortValue(a.key, monitorSortState.field);
+        const valB = getSortValue(b.key, monitorSortState.field);
+        
+        if (valA < valB) return monitorSortState.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return monitorSortState.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    sortedServers.forEach(server => {
         const card = createHostCard(server.key, server.name);
         list.appendChild(card);
+        // 如果有缓存数据，尝试立即填充一次，避免闪烁
+        const host = hostMonitors[server.key];
+        if (host && host.lastData) {
+            // 使用 setTimeout 确保 DOM 已插入
+            setTimeout(() => fillHostCardData(server.key, host.lastData), 0);
+        }
     });
     
     container.appendChild(list);
     return container;
 }
 
-function refreshMonitors() {
-    // 简单粗暴：重新渲染整个面板
-    // 因为数据更新是基于 ID 的，只要 ID 不变，DOM 重建后下一次轮询就能找到元素
-    // 不需要停止轮询，只需要更新 hostMonitors 中可能新增的主机
-    
-    // 确保所有 serversList 中的主机都在 hostMonitors 中
-    serversList.forEach(server => {
-        const serverKey = String(server.id);
-        if (!hostMonitors[serverKey]) {
-             hostMonitors[serverKey] = {
-                hostName: server.name,
-                failures: 0,
-                intervals: []
-            };
-            // 对新主机启动轮询
-            startPollingForHost(serverKey);
-        }
-    });
+function getSortValue(hostKey, field) {
+    const host = hostMonitors[hostKey];
+    if (!host) return 0;
 
-    // 重新渲染 DOM
-    renderDashboard();
-    
-    // 注意：如果服务器被删除了，hostMonitors 里还有残留，但因为 serversList 里没了，
-    // renderDashboard 不会渲染它，所以 UI 上会消失。
-    // 它的轮询还在跑，但 updateDashboardForHost 找不到 DOM 元素，会静默失败 (需要加个检查)
-    
-    // 清理已删除主机的轮询任务
-    const activeKeys = new Set(['local', ...serversList.map(s => String(s.id))]);
-    for (const key in hostMonitors) {
-        if (!activeKeys.has(key)) {
-            console.log(`停止已删除主机的监控: ${key}`);
-            hostMonitors[key].intervals.forEach(id => clearInterval(id));
-            delete hostMonitors[key];
-        }
+    // 静态字段
+    if (field === 'name') return host.hostName || '';
+    if (field === 'status') {
+        // 简单的状态排序：在线 > 离线 > 未知
+        // 我们没有直接存储 status 字符串，但有 failures 计数
+        // failures > 3 为离线
+        return host.failures > 3 ? 0 : 1; 
     }
+
+    // 动态字段，从 lastData 中获取
+    const data = host.lastData;
+    if (!data) return -1; // 无数据排在最后（或最前，取决于需求）
+
+    switch (field) {
+        case 'cpu': return data.cpu?.usage || 0;
+        case 'memory': return data.memory?.percent || 0;
+        case 'cores': return data.cpu?.count || 0;
+        case 'mem_total': return data.memory?.total || 0;
+        case 'mem_used': return data.memory?.used || 0;
+        case 'disk': return data.disk?.percent || 0;
+        default: return 0;
+    }
+}
+
+function sortMonitor(field) {
+    if (monitorSortState.field === field) {
+        monitorSortState.direction = monitorSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        monitorSortState.field = field;
+        monitorSortState.direction = 'desc'; // 数值型默认降序更符合直觉
+        if (field === 'name') monitorSortState.direction = 'asc'; // 名称默认升序
+    }
+    renderDashboard();
 }
 
 function createHeaderRow() {
     const header = document.createElement('div');
     header.className = 'monitor-header';
+    
+    const fields = [
+        { key: 'name', label: '主机名称', class: 'host-name' },
+        { key: 'cpu', label: 'CPU', class: 'cpu' },
+        { key: 'memory', label: '内存', class: 'memory' },
+        { key: 'cores', label: 'CPU 核心', class: 'stat' },
+        { key: 'mem_total', label: '总内存', class: 'stat' },
+        { key: 'mem_used', label: '内存使用', class: 'stat' },
+        { key: 'disk', label: '磁盘使用', class: 'stat' },
+        { key: 'status', label: '状态', class: 'stat' }
+    ];
 
-    header.innerHTML = `
-        <div class="header-cell host-name">主机名称</div>
-        <div class="header-cell cpu">CPU</div>
-        <div class="header-cell memory">内存</div>
-        <div class="header-cell stat">CPU 核心</div>
-        <div class="header-cell stat">总内存</div>
-        <div class="header-cell stat">内存使用</div>
-        <div class="header-cell stat">磁盘使用</div>
-        <div class="header-cell stat">状态</div>
-    `;
+    const headerCells = fields.map(field => {
+        const isSorted = monitorSortState.field === field.key;
+        const sortClass = isSorted ? (monitorSortState.direction === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+        return `
+            <div class="header-cell ${field.class} ${sortClass}" onclick="sortMonitor('${field.key}')" style="cursor: pointer; user-select: none;">
+                ${field.label}<span class="sort-icon"></span>
+            </div>
+        `;
+    }).join('');
 
+    header.innerHTML = headerCells;
     return header;
 }
 
@@ -334,6 +370,51 @@ function createHostCard(hostKey, hostName) {
 
 // ==================== 轮询和更新 ====================
 
+// ==================== 辅助函数 ====================
+
+function fillHostCardData(hostKey, sysData) {
+    if (!sysData) return;
+
+    // 更新 CPU 信息
+    if (sysData.cpu) {
+        const cpuUsage = sysData.cpu.usage || 0;
+        const cpuCount = sysData.cpu.count || 1;
+
+        const cpuProgress = document.getElementById(`cpu-progress-${hostKey}`);
+        const cpuValue = document.getElementById(`cpu-value-${hostKey}`);
+        if (cpuProgress) cpuProgress.style.width = `${Math.min(cpuUsage, 100)}%`;
+        if (cpuValue) cpuValue.textContent = `${cpuUsage.toFixed(0)}%`;
+
+        const coresDiv = document.getElementById(`cores-${hostKey}`);
+        if (coresDiv) coresDiv.textContent = cpuCount;
+    }
+
+    // 更新内存信息
+    if (sysData.memory) {
+        const memTotal = sysData.memory.total || 0;
+        const memUsed = sysData.memory.used || 0;
+        const memPercent = sysData.memory.percent || 0;
+
+        const memProgress = document.getElementById(`mem-progress-${hostKey}`);
+        const memValue = document.getElementById(`mem-value-${hostKey}`);
+        if (memProgress) memProgress.style.width = `${Math.min(memPercent, 100)}%`;
+        if (memValue) memValue.textContent = `${memPercent.toFixed(0)}%`;
+
+        const memTotalDiv = document.getElementById(`mem-total-${hostKey}`);
+        if (memTotalDiv) memTotalDiv.textContent = formatBytes(memTotal);
+
+        const memUsedDiv = document.getElementById(`mem-used-${hostKey}`);
+        if (memUsedDiv) memUsedDiv.textContent = formatBytes(memUsed);
+    }
+
+    // 更新磁盘信息
+    if (sysData.disk) {
+        const diskPercent = sysData.disk.percent || 0;
+        const diskPercentDiv = document.getElementById(`disk-percent-${hostKey}`);
+        if (diskPercentDiv) diskPercentDiv.textContent = `${diskPercent.toFixed(1)}%`;
+    }
+}
+
 function startAllPolling() {
     console.log('开始启动轮询...');
     for (const hostKey in hostMonitors) {
@@ -376,6 +457,9 @@ async function updateDashboardForHost(hostKey) {
     
     const data = result.data;
     
+    // 缓存最新数据，用于排序
+    host.lastData = data.data;
+
     // 检查诊断信息
     if (data.diagnosis && data.diagnosis !== 'success') {
         console.warn(`[${hostKey}] 诊断信息: ${data.diagnosis}`);
