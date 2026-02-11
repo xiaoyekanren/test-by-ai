@@ -37,7 +37,7 @@ class WorkflowEditor {
         this.setupZoom()
         const hint = document.createElement('div')
         hint.className = 'drop-hint'
-        hint.textContent = '将服务器或事件拖到画布'
+        hint.textContent = ''
         this.canvasContent.appendChild(hint)
     }
     setupZoom() {
