@@ -603,14 +603,20 @@ class WorkflowEditor {
             for (const step of steps) {
                 hasExecutedAny = true
                 if (step.type === 'upload') {
-                    if (!step.upload || !step.upload.file || !step.upload.remote) {
-                        this.log('警告: 上传节点未设置文件或路径', 'warning')
+                    if (!step.upload || !step.upload.file) {
+                        this.log('警告: 上传节点未设置文件', 'warning')
                         continue
                     }
+                    // 如果未设置远程路径，留空让后端处理默认值
+                    const remotePath = step.upload.remote || ''
+                    
                     try {
-                        const res = await ServerAPI.uploadFile(sn.serverId, step.upload.file, step.upload.remote)
+                        const res = await ServerAPI.uploadFile(sn.serverId, step.upload.file, remotePath)
                         if (res.status === 'success') {
-                            this.log(`上传成功: ${step.upload.remote}`, 'success')
+                            // 显示实际上传路径（如果后端返回了的话，目前后端没返回最终路径，可以考虑改进）
+                            // 这里先显示预期的路径
+                            const finalPath = remotePath || `/tmp/${step.upload.file.name}`
+                            this.log(`上传成功: ${finalPath}`, 'success')
                         } else {
                             this.log(`上传失败: ${res.message || ''}`, 'error')
                         }

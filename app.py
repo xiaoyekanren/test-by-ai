@@ -744,12 +744,38 @@ def upload_file_to_server(server_id):
     try:
         remote_path = request.form.get('remote_path', '')
         file = request.files.get('file')
-        if not file or not remote_path:
-            return jsonify({'status': 'error', 'message': '缺少文件或远程路径'}), 400
+        
+        # 只要有文件即可，remote_path 可以为空（后端会自动生成默认路径）
+        if not file:
+            return jsonify({'status': 'error', 'message': '缺少文件'}), 400
         
         # 验证文件名安全
         if not file.filename:
             return jsonify({'status': 'error', 'message': '文件名为空'}), 400
+
+        # 处理远程路径：如果以 / 结尾或为空，则追加原始文件名
+        # 注意：这里简单判断是否为目录路径。更严谨的做法可能需要检查远程文件系统，但这里做个约定即可。
+        # 如果 remote_path 为空，默认上传到当前用户主目录或临时目录可能不合适，这里假设用户至少指定了目录。
+        # 如果 remote_path 以 / 结尾，或者看起来像个目录（虽然无法完全确定），我们追加文件名。
+        # 为简单起见，如果 remote_path 以 / 结尾，就追加文件名。
+        if remote_path.endswith('/'):
+            remote_path = os.path.join(remote_path, file.filename)
+        # 另一种情况：用户可能只写了 "/tmp"，意图是目录。
+        # 但我们无法区分 "/tmp" 是文件还是目录。
+        # 我们可以约定：如果 remote_path 是目录，请以 / 结尾。
+        # 或者，我们可以在 SFTP 上传前尝试探测，但这会增加延迟。
+        # 
+        # 改进策略：如果 remote_path 没有扩展名，且 file.filename 有扩展名，
+        # 这种判断也不完全准确（Linux 文件可以无扩展名）。
+        # 
+        # 最稳妥的方式：遵循用户输入。但为了方便，支持以 / 结尾的自动拼接。
+        
+        # 另外，如果 remote_path 完全为空，我们可以默认使用 /tmp/filename
+        if not remote_path:
+             remote_path = f"/tmp/{file.filename}"
+             
+        # 再次确保路径分隔符是正斜杠（Linux/Unix）
+        remote_path = remote_path.replace('\\', '/')
             
         conn = get_db_connection()
         c = conn.cursor()
