@@ -11,6 +11,7 @@ class WorkflowEditor {
         this.commandDescInput = null
         this.uploadFileInput = null
         this.remotePathInput = null
+        this.scale = 1
         this.init()
     }
     truncateToIpLength(name) {
@@ -22,6 +23,7 @@ class WorkflowEditor {
     }
     init() {
         this.canvas = document.getElementById('canvas')
+        this.canvasContent = document.getElementById('canvas-content')
         this.connectionsLayer = document.getElementById('connections')
         this.serverList = document.getElementById('server-list')
         this.consoleOutput = document.getElementById('console-output')
@@ -30,10 +32,143 @@ class WorkflowEditor {
         this.setupCanvasEvents()
         this.setupModals()
         this.setupButtons()
+        this.setupPanelDrag()
+        this.setupSplitter()
+        this.setupZoom()
         const hint = document.createElement('div')
         hint.className = 'drop-hint'
         hint.textContent = '将服务器或事件拖到画布'
-        this.canvas.appendChild(hint)
+        this.canvasContent.appendChild(hint)
+    }
+    setupZoom() {
+        const zoomIn = document.getElementById('zoom-in')
+        const zoomOut = document.getElementById('zoom-out')
+        const zoomReset = document.getElementById('zoom-reset')
+        const zoomLevel = document.getElementById('zoom-level')
+
+        const updateZoom = () => {
+            this.canvasContent.style.transform = `scale(${this.scale})`
+            zoomLevel.textContent = `${Math.round(this.scale * 100)}%`
+        }
+
+        zoomIn.addEventListener('click', () => {
+            if (this.scale < 3) {
+                this.scale += 0.1
+                updateZoom()
+            }
+        })
+
+        zoomOut.addEventListener('click', () => {
+            if (this.scale > 0.5) {
+                this.scale -= 0.1
+                updateZoom()
+            }
+        })
+
+        zoomReset.addEventListener('click', () => {
+            this.scale = 1
+            updateZoom()
+        })
+        
+        // 支持滚轮缩放
+        this.canvas.addEventListener('wheel', e => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault()
+                const delta = e.deltaY > 0 ? -0.1 : 0.1
+                const newScale = Math.max(0.5, Math.min(3, this.scale + delta))
+                if (newScale !== this.scale) {
+                    this.scale = newScale
+                    updateZoom()
+                }
+            }
+        })
+    }
+    setupSplitter() {
+        const splitter = document.getElementById('workspace-splitter')
+        const resultPanel = document.querySelector('.result-panel')
+        const workspace = document.querySelector('.workspace')
+        
+        let isResizing = false
+        let startY, startHeight
+        
+        splitter.addEventListener('mousedown', e => {
+            e.preventDefault()
+            isResizing = true
+            startY = e.clientY
+            startHeight = parseInt(getComputedStyle(resultPanel).height, 10)
+            splitter.classList.add('resizing')
+            document.body.style.cursor = 'row-resize'
+        })
+        
+        document.addEventListener('mousemove', e => {
+            if (!isResizing) return
+            e.preventDefault()
+            
+            // 向上拖动增加高度，向下减少（因为面板在底部）
+            const dy = startY - e.clientY
+            let newHeight = startHeight + dy
+            
+            // 限制高度
+            const maxH = workspace.clientHeight - 100 // 留给canvas至少100px
+            if (newHeight < 100) newHeight = 100
+            if (newHeight > maxH) newHeight = maxH
+            
+            resultPanel.style.height = `${newHeight}px`
+        })
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false
+                splitter.classList.remove('resizing')
+                document.body.style.cursor = ''
+            }
+        })
+    }
+    setupPanelDrag() {
+        const panel = document.querySelector('.component-panel')
+        const header = panel.querySelector('.panel-header')
+        
+        let isDragging = false
+        let startX, startY, initialLeft, initialTop
+
+        header.addEventListener('mousedown', e => {
+            e.preventDefault()
+            isDragging = true
+            startX = e.clientX
+            startY = e.clientY
+            const style = window.getComputedStyle(panel)
+            initialLeft = parseInt(style.left, 10)
+            initialTop = parseInt(style.top, 10)
+            panel.style.cursor = 'move'
+        })
+
+        document.addEventListener('mousemove', e => {
+            if (!isDragging) return
+            e.preventDefault()
+            const dx = e.clientX - startX
+            const dy = e.clientY - startY
+            
+            let newLeft = initialLeft + dx
+            let newTop = initialTop + dy
+            
+            // 边界限制
+            const container = document.getElementById('canvas')
+            const rect = container.getBoundingClientRect()
+            const panelRect = panel.getBoundingClientRect()
+            
+            if (newLeft < 0) newLeft = 0
+            if (newLeft + panelRect.width > rect.width) newLeft = rect.width - panelRect.width
+            if (newTop < 0) newTop = 0
+            if (newTop + panelRect.height > rect.height) newTop = rect.height - panelRect.height
+            
+            panel.style.left = `${newLeft}px`
+            panel.style.top = `${newTop}px`
+        })
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false
+            panel.style.cursor = ''
+        })
     }
     async loadServers() {
         const res = await ServerAPI.listServers()
@@ -75,9 +210,9 @@ class WorkflowEditor {
             const serverId = e.dataTransfer.getData('serverId')
             const serverName = e.dataTransfer.getData('serverName')
             const serverHost = e.dataTransfer.getData('serverHost')
-            const rect = this.canvas.getBoundingClientRect()
-            const x = e.clientX - rect.left - 100
-            const y = e.clientY - rect.top - 40
+            const rect = this.canvasContent.getBoundingClientRect()
+            const x = (e.clientX - rect.left - 100 * this.scale) / this.scale
+            const y = (e.clientY - rect.top - 40 * this.scale) / this.scale
             this.createNode(type, x, y, { serverId, serverName, serverHost })
         })
     }
@@ -139,21 +274,21 @@ class WorkflowEditor {
                 const tempLine = svg.querySelector('#temp-connection')
                 if (!tempLine) return
 
-                const cr = this.canvas.getBoundingClientRect()
+                const cr = this.canvasContent.getBoundingClientRect()
                 let x1, y1, x2, y2
 
                 if (this.connectionSource.type === 'output') {
                     const fr = this.connectionSource.node.getBoundingClientRect()
-                    x1 = fr.right - cr.left
-                    y1 = fr.top + fr.height / 2 - cr.top
-                    x2 = e.clientX - cr.left
-                    y2 = e.clientY - cr.top
+                    x1 = (fr.right - cr.left) / this.scale
+                    y1 = (fr.top + fr.height / 2 - cr.top) / this.scale
+                    x2 = (e.clientX - cr.left) / this.scale
+                    y2 = (e.clientY - cr.top) / this.scale
                 } else {
                     const fr = this.connectionSource.node.getBoundingClientRect()
-                    x1 = e.clientX - cr.left
-                    y1 = e.clientY - cr.top
-                    x2 = fr.left - cr.left
-                    y2 = fr.top + fr.height / 2 - cr.top
+                    x1 = (e.clientX - cr.left) / this.scale
+                    y1 = (e.clientY - cr.top) / this.scale
+                    x2 = (fr.left - cr.left) / this.scale
+                    y2 = (fr.top + fr.height / 2 - cr.top) / this.scale
                 }
                 
                 tempLine.setAttribute('d', `M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`)
@@ -163,9 +298,9 @@ class WorkflowEditor {
             // 处理节点拖拽
             if (this.isDragging && this.draggedNode) {
                 e.preventDefault()
-                const canvasRect = this.canvas.getBoundingClientRect()
-                let x = e.clientX - canvasRect.left - this.dragOffset.x
-                let y = e.clientY - canvasRect.top - this.dragOffset.y
+                const canvasRect = this.canvasContent.getBoundingClientRect()
+                let x = (e.clientX - canvasRect.left) / this.scale - this.dragOffset.x
+                let y = (e.clientY - canvasRect.top) / this.scale - this.dragOffset.y
                 
                 // 简单的边界限制
                 x = Math.max(0, x)
@@ -175,7 +310,7 @@ class WorkflowEditor {
                 this.draggedNode.style.top = y + 'px'
                 
                 // 更新节点数据位置
-                const id = parseInt(this.draggedNode.dataset.id)
+                const id = parseInt(this.draggedNode.dataset.id, 10)
                 const nodeData = this.nodes.find(n => n.id === id)
                 if (nodeData) {
                     nodeData.x = x
@@ -245,7 +380,8 @@ class WorkflowEditor {
             if (!this.currentUploadNode) return
             const id = parseInt(this.currentUploadNode.dataset.id)
             const node = this.nodes.find(n => n.id === id)
-            const file = this.uploadFileInput.files[0] || null
+            const newFile = this.uploadFileInput.files[0]
+            const file = newFile || node.upload?.file || null
             const remote = this.remotePathInput.value || ''
             node.upload = { file, remote }
             this.currentUploadNode.querySelector('.node-content').textContent = remote || '未设置'
@@ -260,8 +396,6 @@ class WorkflowEditor {
             toggle.addEventListener('click', () => {
                 const panel = document.querySelector('.component-panel')
                 panel.classList.toggle('collapsed')
-                const container = document.querySelector('.workflow-container')
-                container.classList.toggle('components-collapsed')
             })
         }
     }
@@ -290,8 +424,19 @@ class WorkflowEditor {
                 content = '双击设置文件与路径'
                 node.addEventListener('dblclick', () => {
                     this.currentUploadNode = node
+                    const id = parseInt(node.dataset.id)
+                    const nodeData = this.nodes.find(n => n.id === id)
+                    
                     this.uploadFileInput.value = ''
-                    this.remotePathInput.value = ''
+                    this.remotePathInput.value = nodeData.upload?.remote || ''
+                    
+                    const fileInfo = document.getElementById('current-file-info')
+                    if (nodeData.upload?.file) {
+                        fileInfo.textContent = `当前已选文件: ${nodeData.upload.file.name}`
+                    } else {
+                        fileInfo.textContent = '当前未选择文件'
+                    }
+                    
                     document.getElementById('upload-modal').style.display = 'block'
                 })
                 break
@@ -326,13 +471,13 @@ class WorkflowEditor {
             e.stopPropagation()
             this.deleteNode(parseInt(node.dataset.id))
         })
-        this.canvas.appendChild(node)
+        this.canvasContent.appendChild(node)
         this.nodes.push(nodeData)
         this.nextNodeId++
         return node
     }
     deleteNode(nodeId) {
-        const node = this.canvas.querySelector(`.canvas-node[data-id="${nodeId}"]`)
+        const node = this.canvasContent.querySelector(`.canvas-node[data-id="${nodeId}"]`)
         if (node) node.remove()
         this.nodes = this.nodes.filter(n => n.id !== nodeId)
         this.connections = this.connections.filter(c => c.from !== nodeId && c.to !== nodeId)
@@ -359,14 +504,14 @@ class WorkflowEditor {
             const toIn = toEl.querySelector('.connector.input')
             if (!fromOut || !toIn) return
 
-            const cr = this.canvas.getBoundingClientRect()
+            const cr = this.canvasContent.getBoundingClientRect()
             const fr = fromOut.getBoundingClientRect()
             const tr = toIn.getBoundingClientRect()
 
-            const x1 = fr.left + fr.width / 2 - cr.left
-            const y1 = fr.top + fr.height / 2 - cr.top
-            const x2 = tr.left + tr.width / 2 - cr.left
-            const y2 = tr.top + tr.height / 2 - cr.top
+            const x1 = (fr.left + fr.width / 2 - cr.left) / this.scale
+            const y1 = (fr.top + fr.height / 2 - cr.top) / this.scale
+            const x2 = (tr.left + tr.width / 2 - cr.left) / this.scale
+            const y2 = (tr.top + tr.height / 2 - cr.top) / this.scale
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
             path.setAttribute('d', `M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`)
@@ -378,7 +523,7 @@ class WorkflowEditor {
         })
     }
     clearCanvas() {
-        const nodes = this.canvas.querySelectorAll('.canvas-node')
+        const nodes = this.canvasContent.querySelectorAll('.canvas-node')
         nodes.forEach(n => n.remove())
         this.nodes = []
         this.connections = []
@@ -450,7 +595,7 @@ class WorkflowEditor {
                             // 更新连接的 Output 节点内容
                             const outNode = steps.find(s => s.type === 'output')
                             if (outNode) {
-                                const el = this.canvas.querySelector(`.canvas-node[data-id="${outNode.id}"] .node-content`)
+                                const el = this.canvasContent.querySelector(`.canvas-node[data-id="${outNode.id}"] .node-content`)
                                 if (el) el.textContent = (d.output || '') + (d.error ? '\n错误:\n' + d.error : '')
                             }
                         } else {

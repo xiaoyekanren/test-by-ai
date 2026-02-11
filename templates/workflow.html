@@ -27,41 +27,51 @@
                     <h1>工作流编辑器</h1>
                 </div>
                 <div class="top-actions">
+                    <div class="zoom-controls">
+                        <button id="zoom-out" class="btn btn-secondary" title="缩小">-</button>
+                        <span id="zoom-level">100%</span>
+                        <button id="zoom-in" class="btn btn-secondary" title="放大">+</button>
+                        <button id="zoom-reset" class="btn btn-secondary" title="重置">重置</button>
+                    </div>
                     <button id="toggle-components" class="btn btn-secondary">折叠组件面板</button>
                     <button id="clear-btn" class="btn btn-secondary">清空画布</button>
                     <button id="run-btn" class="btn btn-primary">运行工作流</button>
                 </div>
             </header>
-            <div class="content">
+            <div class="content workflow-content">
                 <div class="workflow-container">
-                    <aside class="component-panel">
-                        <h3>组件库</h3>
-                        <div class="component-section">
-                            <h4>服务器</h4>
-                            <div id="server-list" class="draggable-items"></div>
-                        </div>
-                        <div class="component-section">
-                            <h4>事件</h4>
-                            <div class="draggable-item" draggable="true" data-type="upload">
-                                <span class="icon">⬆️</span>
-                                <span>上传文件</span>
-                            </div>
-                            <div class="draggable-item" draggable="true" data-type="command">
-                                <span class="icon">⚡</span>
-                                <span>执行命令</span>
-                            </div>
-                            <div class="draggable-item" draggable="true" data-type="output">
-                                <span class="icon">📋</span>
-                                <span>结果显示</span>
-                            </div>
-                        </div>
-                    </aside>
                     <div class="workspace">
-                        <main class="canvas-area">
-                            <div id="canvas" class="canvas">
+                        <div id="canvas" class="canvas">
+                            <div id="canvas-content" class="canvas-content">
                                 <svg id="connections" class="connections-layer"></svg>
                             </div>
-                        </main>
+                            <aside class="component-panel draggable-panel">
+                                <div class="panel-header">
+                                    <h3>组件库</h3>
+                                    <div class="drag-handle">✥</div>
+                                </div>
+                                <div class="component-section">
+                                    <h4>服务器</h4>
+                                    <div id="server-list" class="draggable-items"></div>
+                                </div>
+                                <div class="component-section">
+                                    <h4>事件</h4>
+                                    <div class="draggable-item" draggable="true" data-type="upload">
+                                        <span class="icon">⬆️</span>
+                                        <span>上传文件</span>
+                                    </div>
+                                    <div class="draggable-item" draggable="true" data-type="command">
+                                        <span class="icon">⚡</span>
+                                        <span>执行命令</span>
+                                    </div>
+                                    <div class="draggable-item" draggable="true" data-type="output">
+                                        <span class="icon">📋</span>
+                                        <span>结果显示</span>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+                        <div class="splitter" id="workspace-splitter"></div>
                         <aside class="result-panel">
                             <h3>执行结果</h3>
                             <div id="output-container">
@@ -106,6 +116,7 @@
             </div>
             <div class="modal-body">
                 <label for="upload-file">选择文件</label>
+                <div id="current-file-info" style="margin-bottom: 10px; font-size: 12px; color: #666;"></div>
                 <input type="file" id="upload-file" class="form-input">
                 <label for="remote-path">远程路径</label>
                 <input type="text" id="remote-path" class="form-input" placeholder="/tmp/upload.bin">
