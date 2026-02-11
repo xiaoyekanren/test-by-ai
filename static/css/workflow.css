@@ -91,17 +91,18 @@
     gap: 6px; 
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
     user-select: none; 
-    width: 100%; /* 默认宽度占满容器 */
+    /* width: 100%;  移除默认的 100% 宽度，避免在单列模式下强制占满 */
+    width: auto;
     box-sizing: border-box;
     box-shadow: var(--shadow-sm);
     font-size: 12px;
     color: var(--text-color);
-    /* 移除 min-width 和 max-width，让其完全跟随容器 */
 }
 
 /* 在多列布局下，限制最小宽度以保证可读性 */
 .draggable-items.multi-column .draggable-item {
     min-width: 130px;
+    width: 100%; /* 多列模式下需要占满网格单元 */
 }
 
 /* 在单列布局下（默认），让其自适应内容宽度，而不是强制占满 */
