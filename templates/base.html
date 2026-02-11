@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}服务器管理系统{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h2>服务器管理系统</h2>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="nav-label" title="首页">首页</span></a></li>
+                <li><a href="/integrated" class="{% if request.path == '/integrated' %}active{% endif %}"><span class="nav-label" title="集成监控">集成监控</span></a></li>
+                <li><a href="/servers" class="{% if request.path == '/servers' %}active{% endif %}"><span class="nav-label" title="服务器管理">服务器管理</span></a></li>
+                <li><a href="/workflow" class="{% if request.path == '/workflow' %}active{% endif %}"><span class="nav-label" title="工作流">工作流</span></a></li>
+                <li><a href="#" class="coming-soon"><span class="nav-label" title="服务部署">服务部署</span></a></li>
+            </ul>
+        </nav>
+        
+        <main class="main-content">
+            <header class="top-bar">
+                {% block header_content %}
+                <div>
+                    <h1>{% block page_title %}服务器管理系统{% endblock %}</h1>
+                </div>
+                <div class="user-info">
+                    <span id="current-time"></span>
+                </div>
+                {% endblock %}
+            </header>
+            
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+    
+    <script>
+        // 全局时间显示逻辑
+        function updateTime() {
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+    </script>
+</body>
+</html>
