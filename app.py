@@ -746,26 +746,52 @@ def upload_file_to_server(server_id):
         file = request.files.get('file')
         if not file or not remote_path:
             return jsonify({'status': 'error', 'message': '缺少文件或远程路径'}), 400
+        
+        # 验证文件名安全
+        if not file.filename:
+            return jsonify({'status': 'error', 'message': '文件名为空'}), 400
+            
         conn = get_db_connection()
         c = conn.cursor()
         c.execute('SELECT host, port, username, password FROM servers WHERE id = ?', (server_id,))
         server = c.fetchone()
         conn.close()
+        
         if not server:
             return jsonify({'status': 'error', 'message': '服务器不存在'}), 404
-        tmp = tempfile.NamedTemporaryFile(delete=False)
-        tmp_path = tmp.name
-        file.save(tmp_path)
-        server_dict = {'host': server['host'], 'port': server['port'], 'username': server['username'], 'password': server['password']}
-        res = sftp_upload(server_dict, tmp_path, remote_path)
+            
+        # 使用更稳健的临时文件处理
         try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-        if res.get('status') != 'success':
-            return jsonify({'status': 'error', 'message': res.get('message', '上传失败')}), 400
-        return jsonify({'status': 'success', 'message': '文件上传成功'}), 200
+            # 确保临时文件名保留原始扩展名（有些系统或场景可能需要）
+            suffix = os.path.splitext(file.filename)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                file.save(tmp.name)
+                tmp_path = tmp.name
+                
+            server_dict = {'host': server['host'], 'port': server['port'], 'username': server['username'], 'password': server['password']}
+            
+            # 执行 SFTP 上传
+            app.logger.info(f"📤 Uploading {file.filename} to {server['host']}:{remote_path}")
+            res = sftp_upload(server_dict, tmp_path, remote_path)
+            
+            # 清理临时文件
+            try:
+                os.remove(tmp_path)
+            except Exception as e:
+                app.logger.warning(f"⚠️ Failed to remove temp file {tmp_path}: {e}")
+                
+            if res.get('status') != 'success':
+                app.logger.error(f"❌ SFTP upload failed: {res.get('message')}")
+                return jsonify({'status': 'error', 'message': res.get('message', '上传失败')}), 400
+                
+            return jsonify({'status': 'success', 'message': '文件上传成功'}), 200
+            
+        except Exception as e:
+            app.logger.error(f"❌ Upload process error: {e}")
+            return jsonify({'status': 'error', 'message': f'上传处理错误: {str(e)}'}), 500
+            
     except Exception as e:
+        app.logger.error(f"❌ Unhandled upload error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/servers/<int:server_id>/execute', methods=['POST'])
