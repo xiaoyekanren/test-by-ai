@@ -8,7 +8,7 @@
 
 {% block header_content %}
 <div>
-    <h1>工作流编辑器</h1>
+    <h1>工作流编辑器 <span id="current-workflow-name" style="font-size: 14px; color: #666; font-weight: normal; margin-left: 10px; display: none;"></span></h1>
 </div>
 <div class="top-actions">
     <div class="zoom-controls">
@@ -17,6 +17,13 @@
         <button id="zoom-in" class="btn btn-secondary" title="放大">+</button>
         <button id="zoom-reset" class="btn btn-secondary" title="重置">重置</button>
     </div>
+    <div class="action-group">
+        <button id="load-workflow-btn" class="btn btn-secondary">📂 加载</button>
+        <button id="save-workflow-btn" class="btn btn-secondary">💾 保存</button>
+        <button id="save-as-workflow-btn" class="btn btn-secondary">📑 另存为</button>
+        <button id="global-vars-btn" class="btn btn-secondary">🌐 全局变量</button>
+    </div>
+    <div class="divider"></div>
     <button id="clear-btn" class="btn btn-secondary">清空画布</button>
     <button id="run-btn" class="btn btn-primary">运行工作流</button>
 </div>
@@ -69,6 +76,45 @@
     </div>
 </div>
 
+<!-- 保存工作流弹窗 -->
+<div id="save-workflow-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>保存工作流</h3>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <label for="workflow-name">名称</label>
+            <input type="text" id="workflow-name" class="form-input" placeholder="请输入工作流名称">
+            <label for="workflow-desc">描述</label>
+            <input type="text" id="workflow-desc" class="form-input" placeholder="可选描述">
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-save-wf" class="btn btn-secondary">取消</button>
+            <button id="confirm-save-wf" class="btn btn-primary">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 加载工作流弹窗 -->
+<div id="load-workflow-modal" class="modal">
+    <div class="modal-content" style="width: 600px;">
+        <div class="modal-header">
+            <h3>加载工作流</h3>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div id="workflow-list" class="workflow-list">
+                <!-- 动态生成列表 -->
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-load-wf" class="btn btn-secondary">关闭</button>
+        </div>
+    </div>
+</div>
+
 <div id="command-modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -78,6 +124,8 @@
         <div class="modal-body">
             <label for="command-input">命令</label>
             <input type="text" id="command-input" class="form-input" placeholder="例如: ls -la">
+            <label for="command-ref-name">引用名称 (变量名)</label>
+            <input type="text" id="command-ref-name" class="form-input" placeholder="例如: step1 (后续可用 {{ '{{' }}step1.output{{ '}}' }})">
             <label for="command-description">描述</label>
             <input type="text" id="command-description" class="form-input" placeholder="描述">
         </div>
@@ -99,10 +147,63 @@
             <input type="file" id="upload-file" class="form-input">
             <label for="remote-path">远程路径</label>
             <input type="text" id="remote-path" class="form-input" placeholder="/tmp/upload.bin">
+            <label for="upload-ref-name">引用名称 (变量名)</label>
+            <input type="text" id="upload-ref-name" class="form-input" placeholder="例如: upload1">
         </div>
         <div class="modal-footer">
             <button id="cancel-upload" class="btn btn-secondary">取消</button>
             <button id="save-upload" class="btn btn-primary">保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="connection-popover" class="connection-popover" style="display: none;">
+    <div class="popover-content">
+        <div class="popover-row">
+            <label>类型:</label>
+            <select id="conn-type-select">
+                <option value="default">默认 (Always)</option>
+                <option value="success">成功时 (Success)</option>
+                <option value="failure">失败时 (Failure)</option>
+            </select>
+        </div>
+        <div class="popover-actions">
+            <button id="delete-conn-btn" class="btn btn-sm btn-danger">删除连线</button>
+        </div>
+    </div>
+</div>
+
+<!-- 全局变量弹窗 -->
+<div id="global-vars-modal" class="modal">
+    <div class="modal-content" style="width: 700px;">
+        <div class="modal-header">
+            <h3>全局变量管理</h3>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="global-vars-container">
+                <div class="new-var-form">
+                    <input type="text" id="new-var-key" class="form-input" placeholder="变量名 (如: deploy_path)" style="width: 30%;">
+                    <input type="text" id="new-var-value" class="form-input" placeholder="变量值" style="width: 40%;">
+                    <input type="text" id="new-var-desc" class="form-input" placeholder="描述" style="width: 20%;">
+                    <button id="add-global-var-btn" class="btn btn-primary" style="width: 8%;">+</button>
+                </div>
+                <div class="vars-list-header">
+                    <span style="width: 30%;">变量名</span>
+                    <span style="width: 40%;">值</span>
+                    <span style="width: 20%;">描述</span>
+                    <span style="width: 10%;">操作</span>
+                </div>
+                <div id="global-vars-list" class="vars-list">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+            <div class="help-text" style="margin-top: 10px; color: #666; font-size: 12px;">
+                💡 使用方式: 在命令或路径中使用 {{ '{{' }}global.变量名{{ '}}' }} 引用
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="close-global-vars" class="btn btn-secondary">关闭</button>
         </div>
     </div>
 </div>

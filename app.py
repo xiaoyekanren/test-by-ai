@@ -43,6 +43,29 @@ def init_db():
     except sqlite3.OperationalError:
         c.execute('ALTER TABLE servers ADD COLUMN tags TEXT')
         
+    # 创建工作流表
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS workflows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            data TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 创建全局变量表
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS global_variables (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+        
     conn.commit()
     conn.close()
 
@@ -978,6 +1001,179 @@ def proxy_server_disk(server_id):
 
 
 
+
+
+# ==================== 全局变量接口 ====================
+
+@app.route('/api/globals', methods=['GET'])
+def list_globals():
+    """获取所有全局变量"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT key, value, description, updated_at FROM global_variables ORDER BY key')
+        variables = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return jsonify({'status': 'success', 'data': variables}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/globals', methods=['POST'])
+def create_global():
+    """创建或更新全局变量"""
+    try:
+        data = request.get_json()
+        key = data.get('key')
+        value = data.get('value')
+        description = data.get('description', '')
+        
+        if not key:
+            return jsonify({'status': 'error', 'message': '变量名不能为空'}), 400
+            
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # 使用 REPLACE INTO 实现 upsert
+        c.execute('REPLACE INTO global_variables (key, value, description, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+                 (key, value, description))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': '变量保存成功'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/globals/<key>', methods=['DELETE'])
+def delete_global(key):
+    """删除全局变量"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('DELETE FROM global_variables WHERE key = ?', (key,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': '变量已删除'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 工作流管理接口 ====================
+
+@app.route('/api/workflows', methods=['GET'])
+def list_workflows():
+    """获取工作流列表"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT id, name, description, updated_at FROM workflows ORDER BY updated_at DESC')
+        workflows = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return jsonify({'status': 'success', 'data': workflows}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/workflows', methods=['POST'])
+def create_workflow():
+    """创建新工作流"""
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        workflow_data = data.get('data') # JSON string
+        description = data.get('description', '')
+        
+        if not name or not workflow_data:
+            return jsonify({'status': 'error', 'message': '名称和数据不能为空'}), 400
+            
+        # 验证 data 是否为有效 JSON
+        try:
+            if isinstance(workflow_data, str):
+                json.loads(workflow_data)
+            else:
+                workflow_data = json.dumps(workflow_data)
+        except json.JSONDecodeError:
+            return jsonify({'status': 'error', 'message': '数据格式错误'}), 400
+
+        conn = get_db_connection()
+        c = conn.cursor()
+        try:
+            c.execute('INSERT INTO workflows (name, data, description) VALUES (?, ?, ?)',
+                     (name, workflow_data, description))
+            conn.commit()
+            wf_id = c.lastrowid
+            conn.close()
+            return jsonify({'status': 'success', 'message': '工作流保存成功', 'data': {'id': wf_id}}), 201
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({'status': 'error', 'message': '工作流名称已存在'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/workflows/<int:wf_id>', methods=['GET'])
+def get_workflow(wf_id):
+    """获取指定工作流"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT * FROM workflows WHERE id = ?', (wf_id,))
+        row = c.fetchone()
+        conn.close()
+        
+        if not row:
+            return jsonify({'status': 'error', 'message': '工作流不存在'}), 404
+            
+        return jsonify({'status': 'success', 'data': dict(row)}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/workflows/<int:wf_id>', methods=['PUT'])
+def update_workflow(wf_id):
+    """更新工作流"""
+    try:
+        data = request.get_json()
+        workflow_data = data.get('data')
+        description = data.get('description')
+        
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        update_fields = []
+        params = []
+        
+        if workflow_data:
+            if not isinstance(workflow_data, str):
+                workflow_data = json.dumps(workflow_data)
+            update_fields.append('data = ?')
+            params.append(workflow_data)
+            
+        if description is not None:
+            update_fields.append('description = ?')
+            params.append(description)
+            
+        if not update_fields:
+            return jsonify({'status': 'success', 'message': '无变更'}), 200
+            
+        update_fields.append('updated_at = CURRENT_TIMESTAMP')
+        params.append(wf_id)
+        
+        c.execute(f'UPDATE workflows SET {", ".join(update_fields)} WHERE id = ?', params)
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'message': '工作流更新成功'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/workflows/<int:wf_id>', methods=['DELETE'])
+def delete_workflow(wf_id):
+    """删除工作流"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('DELETE FROM workflows WHERE id = ?', (wf_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': '工作流已删除'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ==================== 前端路由 ====================
 

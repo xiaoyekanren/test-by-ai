@@ -180,12 +180,17 @@
 .connection-path {
     pointer-events: stroke; /* 允许点击路径线条 */
     cursor: pointer;
-    transition: stroke-width 0.2s, stroke 0.2s;
+    transition: stroke-width 0.2s, stroke 0.2s, filter 0.2s;
 }
 
 .connection-path:hover {
     stroke-width: 4px;
-    stroke: var(--primary-color);
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.2));
+}
+
+.connection-path.selected {
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 4px rgba(79, 70, 229, 0.4));
 }
 
 .splitter {
@@ -553,6 +558,42 @@
     border-left: 3px solid var(--danger-color);
 }
 
+/* 顶部动作栏 */
+.top-actions { display: flex; gap: 10px; align-items: center; }
+.action-group { display: flex; gap: 8px; }
+.divider { width: 1px; height: 24px; background: #e5e7eb; margin: 0 8px; }
+
+/* 工作流列表样式 */
+.workflow-list {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.workflow-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.workflow-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.wf-info h4 { margin: 0 0 4px 0; font-size: 14px; color: var(--text-color); }
+.wf-info p { margin: 0; font-size: 12px; color: var(--text-muted); }
+.wf-meta { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+.wf-actions { display: flex; gap: 8px; }
+
 /* ==================== 模态框通用优化 (执行命令 & 上传文件) ==================== */
 .modal-body {
     display: flex;
@@ -639,4 +680,161 @@
 #current-file-info::before {
     content: '📄';
     font-size: 16px;
+}
+
+/* 连线设置弹窗 */
+.connection-popover {
+    position: fixed;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    width: 200px;
+    padding: 12px;
+}
+
+.popover-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.popover-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.popover-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.popover-row select {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+.popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+}
+.btn-success:hover:not(:disabled) {
+    background-color: #059669;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+    border: none;
+}
+.btn-danger:hover:not(:disabled) {
+    background-color: #dc2626;
+}
+
+/* 按钮禁用状态 */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #e5e7eb;
+    color: #9ca3af;
+    border-color: #d1d5db;
+}
+
+/* 全局变量弹窗样式 */
+.global-vars-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.new-var-form {
+    display: flex;
+    gap: 8px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.vars-list-header {
+    display: flex;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 0 8px;
+}
+
+.vars-list {
+    max-height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px;
+    background: #f9fafb;
+}
+
+.var-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    background: white;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 13px;
+    gap: 8px;
+}
+
+.var-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.var-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.var-item .var-key {
+    font-family: 'Monaco', monospace;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.var-item .var-value {
+    color: var(--text-color);
+}
+
+.var-item .var-desc {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* 框选样式 */
+.selection-box {
+    position: absolute;
+    background: rgba(102, 126, 234, 0.1);
+    border: 1px dashed var(--primary-color);
+    pointer-events: none;
+    z-index: 1000;
 }
