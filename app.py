@@ -106,8 +106,8 @@ def get_processes():
                 processes.append({
                     'pid': proc.info['pid'],
                     'name': proc.info['name'],
-                    'cpu': proc.info['cpu_percent'],
-                    'memory': proc.info['memory_percent']
+                    'cpu': proc.info['cpu_percent'] or 0.0,
+                    'memory': proc.info['memory_percent'] or 0.0
                 })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
