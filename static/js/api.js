@@ -99,10 +99,11 @@ class ServerAPI {
         const form = new FormData()
         form.append('file', file)
         form.append('remote_path', remotePath)
+        // 显式删除 headers 中的 Content-Type，让浏览器自动设置 boundary
         return this.request(`/servers/${serverId}/upload`, {
             method: 'POST',
             body: form,
-            headers: {}
+            headers: {} 
         })
     }
 
@@ -115,16 +116,34 @@ class ServerAPI {
             }
         };
 
-        const finalOptions = { ...defaultOptions, ...options };
-        if (finalOptions.body instanceof FormData) {
-            delete finalOptions.headers['Content-Type'];
+        // 如果 headers 中有 Content-Type 且为空或 undefined，则删除它
+        // 这通常用于 FormData 上传，需要浏览器自动生成 multipart/form-data; boundary=...
+        const mergedHeaders = { ...defaultOptions.headers, ...options.headers };
+        
+        // 特别处理：如果 options.body 是 FormData，必须删除 Content-Type
+        if (options.body instanceof FormData) {
+            delete mergedHeaders['Content-Type'];
         }
+
+        const finalOptions = { 
+            ...defaultOptions, 
+            ...options,
+            headers: mergedHeaders
+        };
 
         try {
             const response = await fetch(url, finalOptions);
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // 尝试解析错误信息
+                let errorMsg = `HTTP error! status: ${response.status}`;
+                try {
+                    const errData = await response.json();
+                    if (errData.message) errorMsg = errData.message;
+                } catch (e) {
+                    // ignore
+                }
+                throw new Error(errorMsg);
             }
 
             return await response.json();
