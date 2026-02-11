@@ -177,6 +177,17 @@
     z-index: 0;
 }
 
+.connection-path {
+    pointer-events: stroke; /* 允许点击路径线条 */
+    cursor: pointer;
+    transition: stroke-width 0.2s, stroke 0.2s;
+}
+
+.connection-path:hover {
+    stroke-width: 4px;
+    stroke: var(--primary-color);
+}
+
 .splitter {
     height: 1px;
     background: var(--border-color);
