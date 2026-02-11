@@ -64,7 +64,13 @@
     font-weight: 600;
 }
 
-.draggable-items { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.draggable-items { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 8px; 
+    align-items: flex-start;
+    width: 100%;
+}
 
 .draggable-items.multi-column {
     display: grid;
@@ -90,7 +96,8 @@
     box-shadow: var(--shadow-sm);
     font-size: 13px;
     color: var(--text-color);
-    min-width: 160px; /* 稍微减小最小宽度，适应更紧凑布局 */
+    min-width: 160px;
+    max-width: 100%; /* 允许在单列模式下占满容器 */
 }
 
 .draggable-item:hover { 
