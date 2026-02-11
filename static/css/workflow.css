@@ -90,6 +90,7 @@
     box-shadow: var(--shadow-sm);
     font-size: 13px;
     color: var(--text-color);
+    min-width: 180px; /* 确保能容纳 IP 地址 */
 }
 
 .draggable-item:hover { 
@@ -98,9 +99,16 @@
     transform: translateY(-1px);
 }
 
-.draggable-item .icon { font-size: 16px; }
+.draggable-item .icon { font-size: 16px; flex-shrink: 0; }
 
-.draggable-item .server-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draggable-item .server-name { 
+    flex: 1; 
+    min-width: 0; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    font-family: 'JetBrains Mono', 'Fira Code', monospace; /* 使用等宽字体以优化 IP 显示 */
+}
 
 .zoom-controls { display: flex; align-items: center; gap: 4px; margin-right: 16px; background: white; padding: 4px; border-radius: var(--btn-radius); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); }
 .zoom-controls span { min-width: 48px; text-align: center; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
