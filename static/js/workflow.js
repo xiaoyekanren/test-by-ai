@@ -24,6 +24,14 @@ class WorkflowEditor {
         this.selectionStart = null
         this.clipboard = null
         
+        // 画布平移
+        this.panX = 0
+        this.panY = 0
+        this.isPanning = false
+        this.panStart = { x: 0, y: 0 }
+        
+        this.alignmentPopover = null
+        
         this.init()
     }
 
@@ -52,6 +60,9 @@ class WorkflowEditor {
         this.setupPanelDrag()
         this.setupSplitter()
         this.setupZoom()
+        this.setupAlignment() // 新增对齐功能
+        
+        this.alignmentPopover = document.getElementById('alignment-popover')
         
         const hint = document.createElement('div')
         hint.className = 'drop-hint'
@@ -71,9 +82,18 @@ class WorkflowEditor {
         const zoomLevel = document.getElementById('zoom-level')
 
         const updateZoom = () => {
-            this.canvasContent.style.transform = `scale(${this.scale})`
+            // 同时应用平移和缩放
+            this.canvasContent.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`
             zoomLevel.textContent = `${Math.round(this.scale * 100)}%`
+            // 更新背景网格位置以产生视差效果（可选）
+            this.canvas.style.backgroundPosition = `${this.panX}px ${this.panY}px`
+            
+            // 更新浮窗位置
+            this.updateAlignmentPopover()
         }
+        
+        // 暴露给类实例，方便其他方法调用
+        this.updateTransform = updateZoom
 
         zoomIn.addEventListener('click', () => {
             if (this.scale < 3) {
@@ -91,10 +111,12 @@ class WorkflowEditor {
 
         zoomReset.addEventListener('click', () => {
             this.scale = 1
+            this.panX = 0
+            this.panY = 0
             updateZoom()
         })
         
-        // 支持滚轮缩放
+        // 支持滚轮缩放与平移
         this.canvas.addEventListener('wheel', e => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault()
@@ -104,8 +126,187 @@ class WorkflowEditor {
                     this.scale = newScale
                     updateZoom()
                 }
+            } else {
+                // 如果没有按住Ctrl，滚轮用于平移
+                e.preventDefault()
+                this.panX -= e.deltaX
+                this.panY -= e.deltaY
+                updateZoom()
+            }
+        }, { passive: false })
+    }
+
+    setupAlignment() {
+        // 对齐按钮事件绑定
+        const alignLeft = document.getElementById('align-left')
+        const alignCenterH = document.getElementById('align-center-h')
+        const alignRight = document.getElementById('align-right')
+        const alignTop = document.getElementById('align-top')
+        const alignCenterV = document.getElementById('align-center-v')
+        const alignBottom = document.getElementById('align-bottom')
+        const distH = document.getElementById('dist-h')
+        const distV = document.getElementById('dist-v')
+        
+        if (!alignLeft) return 
+        
+        const getSelectedNodes = () => {
+            if (this.selectedNodes.size < 2) {
+                this.addSystemMessage('请先选择至少两个节点', 'warning')
+                return []
+            }
+            return Array.from(this.selectedNodes).map(id => this.nodes.find(n => n.id === id)).filter(n => n)
+        }
+        
+        const updateNodes = (nodes) => {
+            nodes.forEach(n => {
+                const el = this.canvasContent.querySelector(`.canvas-node[data-id="${n.id}"]`)
+                if (el) {
+                    el.style.left = n.x + 'px'
+                    el.style.top = n.y + 'px'
+                }
+            })
+            this.updateConnections()
+        }
+        
+        alignLeft.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+            const minX = Math.min(...nodes.map(n => n.x))
+            nodes.forEach(n => n.x = minX)
+            updateNodes(nodes)
+        })
+        
+        alignCenterH.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+            const minX = Math.min(...nodes.map(n => n.x))
+            const maxX = Math.max(...nodes.map(n => n.x + 260)) 
+            const centerX = minX + (maxX - minX) / 2
+            nodes.forEach(n => n.x = centerX - 130) 
+            updateNodes(nodes)
+        })
+        
+        alignRight.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+            const maxX = Math.max(...nodes.map(n => n.x))
+            nodes.forEach(n => n.x = maxX)
+            updateNodes(nodes)
+        })
+        
+        alignTop.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+            const minY = Math.min(...nodes.map(n => n.y))
+            nodes.forEach(n => n.y = minY)
+            updateNodes(nodes)
+        })
+        
+        alignCenterV.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+            const rects = nodes.map(n => {
+                const el = this.canvasContent.querySelector(`.canvas-node[data-id="${n.id}"]`)
+                return { y: n.y, h: el ? el.offsetHeight : 100 }
+            })
+            const totalMinY = Math.min(...rects.map(r => r.y))
+            const totalMaxY = Math.max(...rects.map(r => r.y + r.h))
+            const centerLine = (totalMinY + totalMaxY) / 2
+            
+            nodes.forEach((n, i) => {
+                n.y = centerLine - rects[i].h / 2
+            })
+            updateNodes(nodes)
+        })
+        
+        alignBottom.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 2) return
+             const rects = nodes.map(n => {
+                const el = this.canvasContent.querySelector(`.canvas-node[data-id="${n.id}"]`)
+                return { id: n.id, y: n.y, h: el ? el.offsetHeight : 100 }
+            })
+            const maxBottom = Math.max(...rects.map(r => r.y + r.h))
+            nodes.forEach((n, i) => {
+                n.y = maxBottom - rects[i].h
+            })
+            updateNodes(nodes)
+        })
+        
+        distH.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 3) return
+            nodes.sort((a, b) => a.x - b.x)
+            const first = nodes[0]
+            const last = nodes[nodes.length - 1]
+            const totalSpan = last.x - first.x
+            const gap = totalSpan / (nodes.length - 1)
+            nodes.forEach((n, i) => {
+                n.x = first.x + gap * i
+            })
+            updateNodes(nodes)
+        })
+        
+        distV.addEventListener('click', () => {
+            const nodes = getSelectedNodes()
+            if (nodes.length < 3) return
+            nodes.sort((a, b) => a.y - b.y)
+            const first = nodes[0]
+            const last = nodes[nodes.length - 1]
+            const totalSpan = last.y - first.y
+            const gap = totalSpan / (nodes.length - 1)
+            nodes.forEach((n, i) => {
+                n.y = first.y + gap * i
+            })
+            updateNodes(nodes)
+        })
+    }
+    
+    updateAlignmentPopover() {
+        if (!this.alignmentPopover) return
+        
+        if (this.selectedNodes.size < 2) {
+            this.alignmentPopover.style.display = 'none'
+            return
+        }
+        
+        // 计算包围盒
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        let hasNode = false
+        
+        this.selectedNodes.forEach(id => {
+            const n = this.nodes.find(node => node.id === id)
+            if (n) {
+                hasNode = true
+                minX = Math.min(minX, n.x)
+                minY = Math.min(minY, n.y)
+                // 假设节点宽高
+                const el = this.canvasContent.querySelector(`.canvas-node[data-id="${id}"]`)
+                const w = el ? el.offsetWidth : 260
+                const h = el ? el.offsetHeight : 100
+                maxX = Math.max(maxX, n.x + w)
+                maxY = Math.max(maxY, n.y + h)
             }
         })
+        
+        if (!hasNode) {
+             this.alignmentPopover.style.display = 'none'
+             return
+        }
+        
+        // 转换坐标到屏幕空间
+        const rect = this.canvasContent.getBoundingClientRect()
+        const screenMinX = rect.left + minX * this.scale + this.panX
+        const screenMinY = rect.top + minY * this.scale + this.panY
+        const screenMaxX = rect.left + maxX * this.scale + this.panX
+        // const screenMaxY = rect.top + maxY * this.scale + this.panY
+        
+        const centerX = (screenMinX + screenMaxX) / 2
+        const topY = screenMinY
+        
+        this.alignmentPopover.style.display = 'flex'
+        this.alignmentPopover.style.left = centerX + 'px'
+        this.alignmentPopover.style.top = topY + 'px'
     }
 
     setupSplitter() {
@@ -357,6 +558,15 @@ class WorkflowEditor {
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
+            // 监听空格键用于平移
+            if (e.code === 'Space') {
+                if (!this.isPanning && !this.isDragging) {
+                     e.preventDefault() // 防止页面滚动
+                     this.isPanning = true
+                     this.canvas.style.cursor = 'grab'
+                }
+            }
+
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 this.deleteSelection()
             }
@@ -374,6 +584,12 @@ class WorkflowEditor {
                 }
             }
         })
+        document.addEventListener('keyup', e => {
+            if (e.code === 'Space') {
+                this.isPanning = false
+                this.canvas.style.cursor = ''
+            }
+        })
     }
 
     clearSelection() {
@@ -382,6 +598,7 @@ class WorkflowEditor {
             if (el) el.classList.remove('selected')
         })
         this.selectedNodes.clear()
+        this.updateAlignmentPopover()
     }
 
     selectAll() {
@@ -390,6 +607,7 @@ class WorkflowEditor {
             const el = this.canvasContent.querySelector(`.canvas-node[data-id="${n.id}"]`)
             if (el) el.classList.add('selected')
         })
+        this.updateAlignmentPopover()
     }
 
     copySelection() {
@@ -465,6 +683,15 @@ class WorkflowEditor {
 
     setupCanvasEvents() {
         this.canvas.addEventListener('mousedown', e => {
+            // 0. 平移逻辑 (最高优先级)
+            if (this.isPanning || e.button === 1) { // 空格按下或中键
+                e.preventDefault()
+                this.isPanning = true // 确保中键也能触发状态
+                this.panStart = { x: e.clientX, y: e.clientY }
+                this.canvas.style.cursor = 'grabbing'
+                return
+            }
+
             // 1. 连线逻辑 (优先)
             const out = e.target.closest('.connector.output')
             const inConn = e.target.closest('.connector.input')
@@ -513,6 +740,8 @@ class WorkflowEditor {
                         node.classList.add('selected')
                     }
                 }
+                
+                this.updateAlignmentPopover()
 
                 this.isDragging = true
                 this.draggedNode = node 
@@ -556,6 +785,17 @@ class WorkflowEditor {
         })
 
         document.addEventListener('mousemove', e => {
+            if (this.isPanning && (e.buttons === 1 || e.buttons === 4)) { // 左键或中键
+                e.preventDefault()
+                const dx = e.clientX - this.panStart.x
+                const dy = e.clientY - this.panStart.y
+                this.panX += dx
+                this.panY += dy
+                this.panStart = { x: e.clientX, y: e.clientY }
+                this.updateTransform()
+                return
+            }
+
             if (this.isConnecting) {
                 e.preventDefault()
                 const svg = this.connectionsLayer
@@ -620,6 +860,7 @@ class WorkflowEditor {
                         }
                     })
                     this.updateConnections()
+                    this.updateAlignmentPopover()
                 }
             }
 
@@ -661,10 +902,27 @@ class WorkflowEditor {
                         }
                     }
                 })
+                
+                this.updateAlignmentPopover()
             }
         })
 
         document.addEventListener('mouseup', e => {
+            if (this.isPanning) {
+                // 如果是空格松开，已经在 keyup 处理了 cursor，这里只需处理拖拽结束
+                // 如果是中键松开
+                if (e.button === 1) {
+                    this.isPanning = false
+                    this.canvas.style.cursor = ''
+                } else if (e.button === 0 && !document.body.dataset.spacePressed) { 
+                    // 左键松开，且没有按住空格（防止与keyup冲突，简化处理：恢复grab）
+                    if (this.canvas.style.cursor === 'grabbing') {
+                         this.canvas.style.cursor = 'grab'
+                    }
+                }
+                return
+            }
+
             if (this.isDragging) {
                 this.isDragging = false
                 this.draggedNode = null
@@ -1006,6 +1264,8 @@ class WorkflowEditor {
         if (this.selectedNodes.has(nodeId)) {
             this.selectedNodes.delete(nodeId)
         }
+        
+        this.updateAlignmentPopover()
     }
 
     createConnection(fromId, toId, type = 'default') {
