@@ -172,9 +172,18 @@ class WorkflowEditor {
         })
     }
     updatePanelLayout() {
+        // 检查所有可拖拽容器（包括服务器列表和事件列表）
         const containers = document.querySelectorAll('.draggable-items')
+        
+        // 统计服务器数量
+        const serverList = document.getElementById('server-list')
+        const serverCount = serverList ? serverList.children.length : 0
+        
+        // 如果服务器数量超过5，则所有列表（包括事件）都启用多列布局
+        const shouldBeMultiColumn = serverCount > 5
+        
         containers.forEach(container => {
-            if (container.children.length > 5) {
+            if (shouldBeMultiColumn) {
                 container.classList.add('multi-column')
             } else {
                 container.classList.remove('multi-column')
