@@ -317,15 +317,15 @@
 /* 移除重复定义，继承 style.css */
 /* .btn, .btn-primary, .btn-secondary, .modal... 已在 style.css 中定义 */
 
-/* ==================== 上传模态框特定优化 ==================== */
-#upload-modal .modal-body {
+/* ==================== 模态框通用优化 (执行命令 & 上传文件) ==================== */
+.modal-body {
     display: flex;
     flex-direction: column;
     gap: 16px;
     padding: 24px;
 }
 
-#upload-modal label {
+.modal-body label {
     font-weight: 600;
     color: var(--text-color);
     margin-bottom: 4px;
@@ -333,21 +333,23 @@
     font-size: 14px;
 }
 
-#upload-modal input[type="text"] {
+.modal-body input[type="text"] {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--btn-radius);
     transition: all 0.2s;
     font-size: 14px;
+    box-sizing: border-box; /* 确保 padding 不会撑大宽度 */
 }
 
-#upload-modal input[type="text"]:focus {
+.modal-body input[type="text"]:focus {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
     outline: none;
 }
 
+/* ==================== 上传模态框特定优化 ==================== */
 /* 美化文件上传控件 */
 #upload-modal input[type="file"] {
     width: 100%;
@@ -359,6 +361,7 @@
     color: var(--text-muted);
     font-size: 13px;
     transition: all 0.2s;
+    box-sizing: border-box;
 }
 
 #upload-modal input[type="file"]:hover {
