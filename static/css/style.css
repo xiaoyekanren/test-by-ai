@@ -304,7 +304,7 @@ body {
 .monitor-header {
     background: #f9fafb;
     color: var(--text-muted);
-    padding: 12px 24px;
+    padding: 8px 16px; /* 减小内边距 */
     display: flex;
     align-items: center;
     font-weight: 600;
@@ -325,17 +325,17 @@ body {
 }
 
 .header-cell.cpu {
-    width: 220px;
+    width: 180px; /* 减小宽度 */
     text-align: left;
 }
 
 .header-cell.memory {
-    width: 220px;
+    width: 180px; /* 减小宽度 */
     text-align: left;
 }
 
 .header-cell.stat {
-    width: 120px;
+    width: 100px; /* 减小宽度 */
     text-align: center;
 }
 
@@ -348,9 +348,10 @@ body {
 .host-row {
     display: flex;
     align-items: center;
-    padding: 16px 24px;
+    padding: 8px 16px; /* 减小内边距 */
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s ease;
+    font-size: 13px; /* 减小字体 */
 }
 
 .host-row:hover {
@@ -366,7 +367,7 @@ body {
     max-width: 170px !important;
     min-width: 170px !important;
     flex-shrink: 0 !important;
-    font-size: 14px;
+    font-size: 13px; /* 减小字体 */
     font-weight: 600;
     color: var(--text-color);
     overflow: hidden !important;
@@ -377,15 +378,15 @@ body {
 }
 
 .host-row > .host-item {
-    width: 220px;
+    width: 180px; /* 减小宽度 */
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px; /* 减小间距 */
 }
 
 /* 进度条样式 */
 .progress-bar {
-    width: 140px;
+    width: 110px; /* 减小宽度 */
     height: 6px;
     background: #e5e7eb;
     border-radius: 999px;
@@ -410,11 +411,11 @@ body {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-color);
-    min-width: 40px;
+    min-width: 36px; /* 减小宽度 */
 }
 
 .host-row > .host-stat-value {
-    width: 120px;
+    width: 100px; /* 减小宽度 */
     text-align: center;
     font-weight: 600;
     color: var(--text-color);
@@ -422,11 +423,11 @@ body {
 }
 
 .host-card-status {
-    width: 120px;
+    width: 100px; /* 减小宽度 */
     display: inline-block;
-    padding: 4px 10px;
+    padding: 2px 8px; /* 减小内边距 */
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 11px; /* 减小字体 */
     font-weight: 600;
     text-align: center;
 }
