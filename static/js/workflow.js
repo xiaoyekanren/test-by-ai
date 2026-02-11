@@ -413,13 +413,6 @@ class WorkflowEditor {
     setupButtons() {
         document.getElementById('clear-btn').addEventListener('click', () => this.clearCanvas())
         document.getElementById('run-btn').addEventListener('click', () => this.runWorkflow())
-        const toggle = document.getElementById('toggle-components')
-        if (toggle) {
-            toggle.addEventListener('click', () => {
-                const panel = document.querySelector('.component-panel')
-                panel.classList.toggle('collapsed')
-            })
-        }
     }
     createNode(type, x, y, data = {}) {
         const node = document.createElement('div')
