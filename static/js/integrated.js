@@ -119,6 +119,12 @@ async function loadServersList() {
 }
 
 function initializeMonitors() {
+    renderDashboard();
+    // 启动轮询
+    startAllPolling();
+}
+
+function renderDashboard() {
     const dashboard = document.getElementById('multi-host-dashboard');
     if (!dashboard) {
         console.error('未找到 multi-host-dashboard 元素');
@@ -131,36 +137,143 @@ function initializeMonitors() {
     const headerRow = createHeaderRow();
     dashboard.appendChild(headerRow);
 
-    // 添加主机列表容器
-    const hostList = document.createElement('div');
-    hostList.className = 'host-list';
-    hostList.id = 'host-list';
-    dashboard.appendChild(hostList);
-
-    // 本地主机
-    const localCard = createHostCard('local', '本地主机 (localhost)');
-    hostList.appendChild(localCard);
-    hostMonitors['local'] = {
-        hostName: '本地主机',
-        failures: 0,
-        intervals: []
+    // 分组逻辑
+    const groups = {
+        '本地环境': []
     };
-
-    // 远程服务器
-    serversList.forEach(server => {
-        const card = createHostCard(String(server.id), `${server.name} (${server.host})`);
-        hostList.appendChild(card);
-        hostMonitors[String(server.id)] = {
-            hostName: server.name,
+    
+    // 初始化本地主机
+    if (!hostMonitors['local']) {
+        hostMonitors['local'] = {
+            hostName: '本地主机',
             failures: 0,
             intervals: []
         };
+    }
+    groups['本地环境'].push({ key: 'local', name: '本地主机 (localhost)' });
+
+    // 处理远程服务器分组
+    const noTagServers = [];
+    
+    serversList.forEach(server => {
+        // 初始化监控对象（如果不存在）
+        const serverKey = String(server.id);
+        if (!hostMonitors[serverKey]) {
+            hostMonitors[serverKey] = {
+                hostName: server.name,
+                failures: 0,
+                intervals: []
+            };
+        }
+        
+        const serverObj = { key: serverKey, name: `${server.name} (${server.host})` };
+
+        if (server.tags && server.tags.trim()) {
+            // 只取第一个标签作为主分组，避免重复显示
+            const tags = server.tags.split(',').map(t => t.trim()).filter(t => t);
+            if (tags.length > 0) {
+                const primaryTag = tags[0];
+                if (!groups[primaryTag]) {
+                    groups[primaryTag] = [];
+                }
+                groups[primaryTag].push(serverObj);
+            } else {
+                noTagServers.push(serverObj);
+            }
+        } else {
+            noTagServers.push(serverObj);
+        }
     });
 
-    console.log(`已初始化 ${Object.keys(hostMonitors).length} 个主机的监控`);
+    // 渲染分组
+    // 1. 本地环境
+    if (groups['本地环境'].length > 0) {
+        dashboard.appendChild(createGroupContainer('本地环境', groups['本地环境']));
+        delete groups['本地环境'];
+    }
 
-    // 开始轮询
-    startAllPolling();
+    // 2. 按标签排序渲染
+    Object.keys(groups).sort().forEach(tag => {
+        dashboard.appendChild(createGroupContainer(tag, groups[tag]));
+    });
+
+    // 3. 未分类
+    if (noTagServers.length > 0) {
+        dashboard.appendChild(createGroupContainer('未分类', noTagServers));
+    }
+
+    console.log(`已渲染 ${Object.keys(hostMonitors).length} 个主机的监控面板`);
+}
+
+function createGroupContainer(title, servers) {
+    const container = document.createElement('div');
+    container.className = 'server-group'; // 复用 servers.js 的样式类
+    // 移除默认的边框和阴影，因为已经在 dashboard 容器里了，或者保留以区分组？
+    // 为了紧凑布局，我们可能希望去掉 .server-group 的部分样式，或者在 style.css 中调整
+    // 这里先直接用，看看效果
+    container.style.marginBottom = '0'; // 紧凑布局
+    container.style.borderBottom = '1px solid var(--border-color)';
+    container.style.borderRadius = '0';
+    container.style.boxShadow = 'none';
+    container.style.border = 'none';
+
+    const header = document.createElement('div');
+    header.className = 'group-header';
+    header.style.padding = '8px 16px'; // 紧凑
+    header.style.background = '#f3f4f6';
+    header.innerHTML = `
+        <div class="group-title" style="font-size: 13px;">🏷️ ${title}</div>
+        <div class="group-count">${servers.length}</div>
+    `;
+    container.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'host-list';
+    
+    servers.forEach(server => {
+        const card = createHostCard(server.key, server.name);
+        list.appendChild(card);
+    });
+    
+    container.appendChild(list);
+    return container;
+}
+
+function refreshMonitors() {
+    // 简单粗暴：重新渲染整个面板
+    // 因为数据更新是基于 ID 的，只要 ID 不变，DOM 重建后下一次轮询就能找到元素
+    // 不需要停止轮询，只需要更新 hostMonitors 中可能新增的主机
+    
+    // 确保所有 serversList 中的主机都在 hostMonitors 中
+    serversList.forEach(server => {
+        const serverKey = String(server.id);
+        if (!hostMonitors[serverKey]) {
+             hostMonitors[serverKey] = {
+                hostName: server.name,
+                failures: 0,
+                intervals: []
+            };
+            // 对新主机启动轮询
+            startPollingForHost(serverKey);
+        }
+    });
+
+    // 重新渲染 DOM
+    renderDashboard();
+    
+    // 注意：如果服务器被删除了，hostMonitors 里还有残留，但因为 serversList 里没了，
+    // renderDashboard 不会渲染它，所以 UI 上会消失。
+    // 它的轮询还在跑，但 updateDashboardForHost 找不到 DOM 元素，会静默失败 (需要加个检查)
+    
+    // 清理已删除主机的轮询任务
+    const activeKeys = new Set(['local', ...serversList.map(s => String(s.id))]);
+    for (const key in hostMonitors) {
+        if (!activeKeys.has(key)) {
+            console.log(`停止已删除主机的监控: ${key}`);
+            hostMonitors[key].intervals.forEach(id => clearInterval(id));
+            delete hostMonitors[key];
+        }
+    }
 }
 
 function createHeaderRow() {
