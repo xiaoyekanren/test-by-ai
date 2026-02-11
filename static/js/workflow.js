@@ -26,7 +26,7 @@ class WorkflowEditor {
         this.canvasContent = document.getElementById('canvas-content')
         this.connectionsLayer = document.getElementById('connections')
         this.serverList = document.getElementById('server-list')
-        this.consoleOutput = document.getElementById('console-output')
+        this.consoleOutput = null // 不再需要单独的控制台引用
         this.loadServers()
         this.updatePanelLayout() // 初始化时检查静态列表
         this.setupDragAndDrop()
@@ -558,7 +558,7 @@ class WorkflowEditor {
         this.nodes = []
         this.connections = []
         this.updateConnections()
-        this.consoleOutput.innerHTML = '<p class="info">画布已清空</p>'
+        this.addSystemMessage('画布已清空', 'info')
         this.nextNodeId = 1
     }
     findConnectedSteps(serverId) {
@@ -594,12 +594,17 @@ class WorkflowEditor {
     }
 
     async runWorkflow() {
-        this.consoleOutput.innerHTML = ''
+        // 清空之前的执行结果
+        const container = document.getElementById('output-container')
+        container.innerHTML = ''
+        
         const serverNodes = this.nodes.filter(n => n.type === 'server')
         if (serverNodes.length === 0) {
-            this.log('错误: 没有找到服务器节点', 'error')
+            this.addSystemMessage('错误: 没有找到服务器节点', 'error')
             return
         }
+        
+        this.addSystemMessage('🚀 开始执行工作流...', 'info')
         
         // 重置所有节点状态
         this.nodes.forEach(n => this.updateNodeStatus(n.id, 'pending'))
@@ -635,24 +640,27 @@ class WorkflowEditor {
                         if (res.status === 'success') {
                             // 显示实际上传路径
                             const finalPath = remotePath || `/tmp/${step.upload.file.name}`
-                            this.log(`[${sn.serverName}] 上传成功: ${finalPath}`, 'success')
+                            this.addSystemMessage(`[${sn.serverName}] 上传成功: ${finalPath}`, 'success')
                             stepSuccess = true
                         } else {
-                            this.log(`[${sn.serverName}] 上传失败: ${res.message || ''}`, 'error')
+                            this.addSystemMessage(`[${sn.serverName}] 上传失败: ${res.message || ''}`, 'error')
                         }
                     } catch (e) {
-                        this.log(`[${sn.serverName}] 上传出错: ${e.message}`, 'error')
+                        this.addSystemMessage(`[${sn.serverName}] 上传出错: ${e.message}`, 'error')
                     }
                 } else if (step.type === 'command') {
                     if (!step.command) {
-                        this.log('警告: 命令节点未设置命令', 'warning')
+                        this.addSystemMessage('警告: 命令节点未设置命令', 'warning')
                         this.updateNodeStatus(step.id, 'error')
                         continue
                     }
                     try {
                         const res = await ServerAPI.executeCommand(sn.serverId, step.command)
                         if (res.status === 'success') {
-                            this.log(`[${sn.serverName}] 命令成功: ${step.command}`, 'success')
+                            // 移除这里的 log，因为 addOutput 已经足够清晰了
+                            // 或者保留一个简短的 success 提示
+                            // this.log(`[${sn.serverName}] 命令成功: ${step.command}`, 'success')
+                            
                             const d = res.data || {}
                             const isSuccess = d.exit_status === 0
                             const hasOutput = d.output && d.output.trim().length > 0
@@ -691,10 +699,10 @@ class WorkflowEditor {
                             }
                             stepSuccess = isSuccess
                         } else {
-                            this.log(`[${sn.serverName}] 命令失败: ${res.message || ''}`, 'error')
+                            this.addSystemMessage(`[${sn.serverName}] 命令失败: ${res.message || ''}`, 'error')
                         }
                     } catch (e) {
-                        this.log(`[${sn.serverName}] 执行出错: ${e.message}`, 'error')
+                        this.addSystemMessage(`[${sn.serverName}] 执行出错: ${e.message}`, 'error')
                     }
                 }
                 
@@ -708,11 +716,30 @@ class WorkflowEditor {
             this.updateNodeStatus(sn.id, 'success')
         }
         if (!hasExecutedAny) {
-            this.log('未执行任何任务，请检查连线', 'warning')
+            this.addSystemMessage('⚠️ 未执行任何任务，请检查连线', 'warning')
         } else {
-            this.log('工作流执行完成', 'success')
+            this.addSystemMessage('✅ 工作流执行完成', 'success')
         }
     }
+    
+    // 添加系统消息卡片（替代原来的 log）
+    addSystemMessage(text, type = 'info') {
+        const container = document.getElementById('output-container')
+        const item = document.createElement('div')
+        item.className = `output-item system-message ${type}`
+        item.textContent = text
+        container.appendChild(item)
+        container.scrollTop = container.scrollHeight
+    }
+    
+    // 兼容旧的 log 方法，重定向到 addSystemMessage
+    log(text, level='info') {
+        // 如果是具体的命令执行日志，我们已经通过 addOutput 处理了
+        // 这里主要处理一些通用的提示信息
+        // 但为了避免重复，我们可以简单过滤，或者直接作为系统消息显示
+        this.addSystemMessage(text, level)
+    }
+
     addOutput(htmlContent) {
         const container = document.getElementById('output-container')
         const item = document.createElement('div')
