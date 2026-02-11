@@ -201,7 +201,7 @@ function createServerRow(server) {
 
     return `
         <div class="server-row">
-            <div class="server-name" title="${server.name}">${server.name}</div>
+            <div class="server-name">${server.name}</div>
             <div class="server-host">${server.host}</div>
             <div class="server-port">${server.port}</div>
             <div class="server-username">${server.username || '--'}</div>
