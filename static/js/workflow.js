@@ -661,15 +661,41 @@ class WorkflowEditor {
                         if (res.status === 'success') {
                             this.log(`[${sn.serverName}] 命令成功: ${step.command}`, 'success')
                             const d = res.data || {}
-                            this.addOutput(`[${sn.serverName}] 输出:\n${d.output || ''}\n错误:\n${d.error || ''}`)
+                            const isSuccess = d.exit_status === 0
+                            const hasOutput = d.output && d.output.trim().length > 0
+                            const hasError = d.error && d.error.trim().length > 0
+                            
+                            // 构建优化后的输出显示
+                            let outputHtml = ''
+                            if (hasOutput) {
+                                outputHtml += `<div class="cmd-output-section"><div class="section-title success-text">STDOUT</div><pre>${this.escapeHtml(d.output)}</pre></div>`
+                            }
+                            if (hasError) {
+                                outputHtml += `<div class="cmd-output-section"><div class="section-title error-text">STDERR</div><pre>${this.escapeHtml(d.error)}</pre></div>`
+                            }
+                            if (!hasOutput && !hasError) {
+                                outputHtml = '<div class="cmd-output-empty">（无输出）</div>'
+                            }
+                            
+                            this.addOutput(`
+                                <div class="cmd-result-header ${isSuccess ? 'success' : 'error'}">
+                                    <span class="server-badge">[${this.escapeHtml(sn.serverName)}]</span>
+                                    <span class="cmd-text">${this.escapeHtml(step.command)}</span>
+                                    <span class="status-tag">${isSuccess ? 'SUCCESS' : 'FAILED'}</span>
+                                </div>
+                                <div class="cmd-result-body">
+                                    ${outputHtml}
+                                </div>
+                            `)
+                            
                             // 更新连接的 Output 节点内容
                             const outNode = steps.find(s => s.type === 'output')
                             if (outNode) {
                                 const el = this.canvasContent.querySelector(`.canvas-node[data-id="${outNode.id}"] .node-content`)
                                 if (el) el.textContent = (d.output || '') + (d.error ? '\n错误:\n' + d.error : '')
-                                this.updateNodeStatus(outNode.id, d.exit_status === 0 ? 'success' : 'error')
+                                this.updateNodeStatus(outNode.id, isSuccess ? 'success' : 'error')
                             }
-                            stepSuccess = d.exit_status === 0
+                            stepSuccess = isSuccess
                         } else {
                             this.log(`[${sn.serverName}] 命令失败: ${res.message || ''}`, 'error')
                         }
@@ -693,13 +719,27 @@ class WorkflowEditor {
             this.log('工作流执行完成', 'success')
         }
     }
-    addOutput(text) {
+    addOutput(htmlContent) {
         const container = document.getElementById('output-container')
         const item = document.createElement('div')
         item.className = 'output-item'
-        item.innerHTML = `<div class="output-header"><span class="output-title">输出</span></div><div class="output-content">${text}</div>`
+        // 直接使用传入的 HTML，不再包裹多余的 header/content 结构
+        item.innerHTML = htmlContent
         container.appendChild(item)
+        // 自动滚动到底部
+        container.scrollTop = container.scrollHeight
     }
+    
+    escapeHtml(text) {
+        if (!text) return ''
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;")
+    }
+
     log(text, level='info') {
         const p = document.createElement('p')
         p.className = level
