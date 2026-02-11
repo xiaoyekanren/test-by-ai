@@ -81,14 +81,14 @@
 }
 
 .draggable-item { 
-    padding: 8px 10px; 
+    padding: 6px 8px; 
     background: #fff; 
     border: 1px solid var(--border-color); 
     border-radius: var(--btn-radius); 
     cursor: grab; 
     display: flex; 
     align-items: center; 
-    gap: 8px; 
+    gap: 6px; 
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
     user-select: none; 
     width: 100%; 
