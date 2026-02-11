@@ -16,7 +16,11 @@ let groupSortStates = {};
 let groupByTag = true; // 是否按标签分组
 
 function createServerHeaderRow(groupName = '_GLOBAL_') {
-    const currentSort = groupSortStates[groupName] || { field: 'created_at', direction: 'desc' };
+    // 确保 groupSortStates[groupName] 存在，如果不存在则初始化
+    if (!groupSortStates[groupName]) {
+        groupSortStates[groupName] = { field: 'created_at', direction: 'desc' };
+    }
+    const currentSort = groupSortStates[groupName];
 
     const fields = [
         { key: 'name', label: '服务器名称', class: 'server-name' },
@@ -30,7 +34,7 @@ function createServerHeaderRow(groupName = '_GLOBAL_') {
         const isSorted = currentSort.field === field.key;
         const sortClass = isSorted ? (currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc') : '';
         return `
-            <div class="header-cell ${field.class} ${sortClass}" onclick="sortGroup('${groupName}', '${field}')">
+            <div class="header-cell ${field.class} ${sortClass}" onclick="sortGroup('${groupName}', '${field.key}')">
                 ${field.label}<span class="sort-icon"></span>
             </div>
         `;
