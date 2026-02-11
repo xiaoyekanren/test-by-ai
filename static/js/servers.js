@@ -43,10 +43,10 @@ function createServerHeaderRow() {
             <div class="header-cell server-host">主机地址</div>
             <div class="header-cell server-port">端口</div>
             <div class="header-cell server-username">用户名</div>
-            <div class="header-cell server-description">描述</div>
             <div class="header-cell server-created">创建时间</div>
             <div class="header-cell server-status">状态</div>
             <div class="header-cell server-actions">操作</div>
+            <div class="header-cell server-description">描述</div>
         </div>
     `;
 }
@@ -58,7 +58,6 @@ function createServerRow(server) {
             <div class="server-host">${server.host}</div>
             <div class="server-port">${server.port}</div>
             <div class="server-username">${server.username || '--'}</div>
-            <div class="server-description">${server.description || '--'}</div>
             <div class="server-created">${formatDateTime(server.created_at)}</div>
             <div class="server-status">
                 <span class="status-badge status-${server.status}">${getStatusText(server.status)}</span>
@@ -74,6 +73,7 @@ function createServerRow(server) {
                     删除
                 </button>
             </div>
+            <div class="server-description" title="${server.description || ''}">${server.description || '--'}</div>
         </div>
     `;
 }

@@ -819,17 +819,19 @@ table tbody tr:hover {
 .server-controls {
     background: white;
     padding: 15px 20px;
-    border-radius: 12px;
+    border-radius: var(--card-radius);
     margin-bottom: 20px;
     display: flex;
     gap: 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
 }
 
 .server-list-container {
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
     overflow: hidden;
 }
 
@@ -837,17 +839,17 @@ table tbody tr:hover {
     position: fixed;
     right: 30px;
     bottom: 30px;
-    padding: 15px 30px;
-    font-size: 16px;
-    border-radius: 30px;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    padding: 12px 24px;
+    font-size: 14px;
+    border-radius: 999px;
+    box-shadow: var(--shadow-lg);
     z-index: 100;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-float:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
 }
 
 .server-list {
@@ -857,64 +859,49 @@ table tbody tr:hover {
 
 .server-header {
     display: flex;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 15px 20px;
+    background: #f9fafb;
+    color: var(--text-muted);
+    padding: 12px 20px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .header-cell {
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 0 8px;
 }
 
-.header-cell.server-name {
-    width: 170px;
-    max-width: 170px;
-}
-
-.header-cell.server-host {
-    width: 180px;
-}
-
-.header-cell.server-port {
-    width: 100px;
-}
-
-.header-cell.server-username {
-    width: 150px;
-}
-
-.header-cell.server-description {
-    flex: 1;
-    min-width: 200px;
-}
-
-.header-cell.server-created {
-    width: 180px;
-}
-
-.header-cell.server-status {
-    width: 100px;
-}
-
-.header-cell.server-actions {
-    width: 300px;
+/* 调整列宽以适应更紧凑的布局 */
+.header-cell.server-name { width: 160px; }
+.header-cell.server-host { width: 140px; }
+.header-cell.server-port { width: 70px; }
+.header-cell.server-username { width: 100px; }
+.header-cell.server-created { width: 140px; }
+.header-cell.server-status { width: 90px; }
+.header-cell.server-actions { width: 160px; justify-content: center; }
+.header-cell.server-description { 
+    flex: 1; 
+    min-width: 150px; 
+    max-width: 400px;
+    padding-left: 20px;
 }
 
 .server-row {
     display: flex;
-    padding: 15px 20px;
-    border-bottom: 1px solid var(--secondary-color);
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color);
     align-items: center;
     transition: background-color 0.2s ease;
 }
 
 .server-row:hover {
-    background-color: rgba(102, 126, 234, 0.05);
+    background-color: #f9fafb;
 }
 
 .server-row:last-child {
@@ -924,112 +911,125 @@ table tbody tr:hover {
 .server-row > div {
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
-    font-size: 14px;
+    font-size: 13px;
+    padding: 0 8px;
+    color: var(--text-color);
 }
 
 .server-row > div.server-name {
-    width: 170px !important;
-    max-width: 170px !important;
-    min-width: 170px !important;
-    flex-shrink: 0 !important;
+    width: 160px !important;
     font-weight: 600;
-    color: var(--primary-color);
-    overflow: hidden !important;
-    white-space: nowrap !important;
-    text-overflow: ellipsis !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    display: block !important;
+    color: var(--text-color);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .server-row .server-host {
-    width: 180px;
-    font-family: 'Courier New', monospace;
-    color: #555;
+    width: 140px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--text-muted);
+    font-size: 12px;
 }
 
 .server-row .server-port {
-    width: 100px;
+    width: 70px;
+    color: var(--text-muted);
 }
 
 .server-row .server-username {
-    width: 150px;
-    color: #666;
-}
-
-.server-row .server-description {
-    flex: 1;
-    min-width: 200px;
-    justify-content: flex-start;
-    padding-left: 10px;
-    color: #555;
+    width: 100px;
+    color: var(--text-muted);
 }
 
 .server-row .server-created {
-    width: 180px;
-    color: #666;
-    font-size: 13px;
+    width: 140px;
+    color: var(--text-muted);
+    font-size: 12px;
 }
 
 .server-row .server-status {
-    width: 100px;
+    width: 90px;
 }
 
 .status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
     font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.status-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
 }
 
 .status-badge.status-online {
-    background-color: var(--success-color);
-    color: white;
+    background-color: #d1fae5;
+    color: #065f46;
 }
 
 .status-badge.status-offline {
-    background-color: var(--danger-color);
-    color: white;
+    background-color: #fee2e2;
+    color: #991b1b;
 }
 
 .status-badge.status-error {
-    background-color: var(--warning-color);
-    color: white;
+    background-color: #fef3c7;
+    color: #92400e;
 }
 
 .server-row .server-actions {
-    width: 300px;
+    width: 160px;
     display: flex;
     gap: 8px;
     justify-content: center;
 }
 
 .server-actions .btn {
-    padding: 6px 12px;
-    font-size: 13px;
+    padding: 4px 10px;
+    font-size: 12px;
+    min-height: 28px;
+}
+
+.server-row .server-description {
+    flex: 1;
+    min-width: 150px;
+    max-width: 400px;
+    color: var(--text-muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding-left: 20px;
 }
 
 .empty-state {
     text-align: center;
     padding: 60px 20px;
-    color: #999;
+    color: var(--text-muted);
 }
 
 .empty-icon {
-    font-size: 64px;
-    margin-bottom: 20px;
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
 }
 
 .empty-state h3 {
-    font-size: 20px;
-    margin-bottom: 10px;
-    color: #666;
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--text-color);
+    font-weight: 600;
 }
 
 .empty-state p {
-    font-size: 14px;
+    font-size: 13px;
 }
 
 /* ==================== 模态框 ==================== */
