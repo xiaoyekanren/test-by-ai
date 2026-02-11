@@ -1,3 +1,69 @@
+.workflow-container { display: block; height: calc(100vh - 140px); overflow: hidden; position: relative; }
+.workflow-container.components-collapsed { }
+/* 去除 workflow 页面 content 的默认内边距 */
+.workflow-content { padding: 0 !important; }
+.workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; }
+.top-actions { display: flex; gap: 10px; }
+.component-panel { 
+    width: auto; 
+    min-width: 220px; 
+    max-width: 500px; 
+    background: rgba(255, 255, 255, 0.95); 
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color); 
+    border-radius: var(--card-radius);
+    padding: 16px; 
+    overflow-y: auto; 
+    position: absolute; 
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    box-shadow: var(--shadow-lg);
+    max-height: calc(100% - 40px);
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    cursor: move;
+    user-select: none;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.drag-handle {
+    cursor: move;
+    font-size: 16px;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.drag-handle:hover {
+    background: var(--secondary-color);
+    color: var(--text-color);
+}
+
+.component-section { margin-bottom: 24px; }
+.component-section h4 {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
 .draggable-items { 
     display: flex; 
     flex-direction: column; 
