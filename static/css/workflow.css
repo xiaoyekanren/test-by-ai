@@ -5,8 +5,8 @@
 .workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; }
 .top-actions { display: flex; gap: 10px; }
 .component-panel { 
-    width: 220px; 
-    min-width: 150px; 
+    width: auto; 
+    min-width: 220px; 
     max-width: 500px; 
     background: rgba(255, 255, 255, 0.95); 
     backdrop-filter: blur(10px);
@@ -71,6 +71,7 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     align-items: stretch;
+    width: 400px;
 }
 
 .draggable-item { 
@@ -85,7 +86,7 @@
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
     user-select: none; 
     width: 100%; 
-    max-width: 200px;
+    box-sizing: border-box;
     box-shadow: var(--shadow-sm);
     font-size: 13px;
     color: var(--text-color);
