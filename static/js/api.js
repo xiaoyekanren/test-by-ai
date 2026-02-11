@@ -175,3 +175,22 @@ if (!window.location.pathname.includes('/integrated')) {
     setInterval(updateCurrentTime, 1000);
     updateCurrentTime();
 }
+
+function showRefreshNotification(message) {
+    // 移除旧的通知（如果存在）
+    const existing = document.querySelector('.refresh-notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.className = 'refresh-notification';
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // 2秒后自动移除
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s';
+        setTimeout(() => notification.remove(), 300);
+    }, 2000);
+}
