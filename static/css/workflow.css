@@ -120,12 +120,12 @@
 .draggable-item .icon { font-size: 16px; flex-shrink: 0; }
 
 .draggable-item .server-name { 
-    flex: 1; 
+    flex: 0 1 auto; /* 允许根据内容收缩，但不强制占满剩余空间 */
     min-width: 0; 
     white-space: nowrap; 
     overflow: hidden; 
     text-overflow: ellipsis; 
-    font-family: 'JetBrains Mono', 'Fira Code', monospace; /* 使用等宽字体以优化 IP 显示 */
+    font-family: 'JetBrains Mono', 'Fira Code', monospace; 
 }
 
 .zoom-controls { display: flex; align-items: center; gap: 4px; margin-right: 16px; background: white; padding: 4px; border-radius: var(--btn-radius); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); }
