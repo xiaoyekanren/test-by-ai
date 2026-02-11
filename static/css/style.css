@@ -373,7 +373,21 @@ body {
     white-space: nowrap !important;
     text-overflow: ellipsis !important;
     text-align: left !important;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace; /* 添加等宽字体 */
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    cursor: default; /* 添加默认光标 */
+}
+
+.host-row > .host-name:hover {
+    overflow: visible !important; /* 悬停时显示完整内容 */
+    white-space: normal !important;
+    z-index: 100;
+    background: #fff;
+    box-shadow: var(--shadow-md);
+    padding: 4px;
+    border-radius: 4px;
+    position: relative; /* 配合 z-index */
+    width: auto !important; /* 允许宽度自适应 */
+    max-width: none !important; /* 移除最大宽度限制 */
 }
 
 .host-row > .host-item {
@@ -993,7 +1007,21 @@ table tbody tr:hover {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace; /* 添加等宽字体 */
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    position: relative;
+    cursor: default;
+}
+
+.server-row > div.server-name:hover {
+    overflow: visible;
+    white-space: normal;
+    z-index: 100;
+    background: #fff;
+    box-shadow: var(--shadow-md);
+    padding: 8px;
+    border-radius: 4px;
+    width: auto !important;
+    min-width: 160px;
 }
 
 .server-row .server-host {
