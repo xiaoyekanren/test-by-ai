@@ -28,6 +28,7 @@ class WorkflowEditor {
         this.serverList = document.getElementById('server-list')
         this.consoleOutput = document.getElementById('console-output')
         this.loadServers()
+        this.updatePanelLayout() // 初始化时检查静态列表
         this.setupDragAndDrop()
         this.setupCanvasEvents()
         this.setupModals()
@@ -170,9 +171,20 @@ class WorkflowEditor {
             panel.style.cursor = ''
         })
     }
+    updatePanelLayout() {
+        const containers = document.querySelectorAll('.draggable-items')
+        containers.forEach(container => {
+            if (container.children.length > 5) {
+                container.classList.add('multi-column')
+            } else {
+                container.classList.remove('multi-column')
+            }
+        })
+    }
     async loadServers() {
         const res = await ServerAPI.listServers()
         if (res.status === 'success' && Array.isArray(res.data)) {
+            this.serverList.innerHTML = '' // 清空列表以防重复加载
             res.data.forEach(s => {
                 const item = document.createElement('div')
                 item.className = 'draggable-item'
@@ -185,6 +197,7 @@ class WorkflowEditor {
                 item.innerHTML = `<span class="icon">🖥️</span><span class="server-name" title="${s.name}">${display}</span>`
                 this.serverList.appendChild(item)
             })
+            this.updatePanelLayout() // 加载完成后再次检查
         }
     }
     setupDragAndDrop() {
