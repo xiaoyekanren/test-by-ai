@@ -878,18 +878,49 @@ table tbody tr:hover {
 }
 
 /* 调整列宽以适应更紧凑的布局 */
-.header-cell.server-name { width: 160px; }
-.header-cell.server-host { width: 140px; }
-.header-cell.server-port { width: 70px; }
-.header-cell.server-username { width: 100px; }
-.header-cell.server-created { width: 140px; }
-.header-cell.server-status { width: 90px; }
-.header-cell.server-actions { width: 160px; justify-content: center; }
+.header-cell.server-name { width: 160px; cursor: pointer; user-select: none; }
+.header-cell.server-host { width: 140px; cursor: pointer; user-select: none; }
+.header-cell.server-port { width: 70px; cursor: pointer; user-select: none; }
+.header-cell.server-username { width: 100px; cursor: pointer; user-select: none; }
+.header-cell.server-created { width: 140px; cursor: pointer; user-select: none; }
+.header-cell.server-status { width: 90px; cursor: pointer; user-select: none; }
+.header-cell.server-actions { width: 200px; justify-content: center; }
 .header-cell.server-description { 
     flex: 1; 
     min-width: 150px; 
     max-width: 400px;
     padding-left: 20px;
+}
+
+.header-cell:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.header-cell.server-actions:hover,
+.header-cell.server-description:hover {
+    background-color: transparent;
+    cursor: default;
+}
+
+.sort-icon {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 5px;
+    vertical-align: middle;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    opacity: 0.3;
+}
+
+.sort-asc .sort-icon {
+    border-bottom: 4px solid currentColor;
+    opacity: 1;
+}
+
+.sort-desc .sort-icon {
+    border-top: 4px solid currentColor;
+    opacity: 1;
 }
 
 .server-row {
@@ -986,16 +1017,18 @@ table tbody tr:hover {
 }
 
 .server-row .server-actions {
-    width: 160px;
+    width: 200px;
     display: flex;
     gap: 8px;
     justify-content: center;
+    white-space: nowrap;
 }
 
 .server-actions .btn {
     padding: 4px 10px;
     font-size: 12px;
     min-height: 28px;
+    white-space: nowrap;
 }
 
 .server-row .server-description {
