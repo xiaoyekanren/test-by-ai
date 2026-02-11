@@ -672,6 +672,7 @@ class WorkflowEditor {
                             
                             this.addOutput(`
                                 <div class="cmd-result-header ${isSuccess ? 'success' : 'error'}">
+                                    <span class="toggle-icon">▶</span>
                                     <span class="server-badge">[${this.escapeHtml(sn.serverName)}]</span>
                                     <span class="cmd-text">${this.escapeHtml(step.command)}</span>
                                     <span class="status-tag">${isSuccess ? 'SUCCESS' : 'FAILED'}</span>
@@ -716,9 +717,19 @@ class WorkflowEditor {
         const container = document.getElementById('output-container')
         const item = document.createElement('div')
         item.className = 'output-item'
-        // 直接使用传入的 HTML，不再包裹多余的 header/content 结构
+        // 默认展开最新的（或者默认折叠，看需求。这里设为默认折叠，但最新的可以考虑自动展开）
+        // 为了紧凑，默认折叠。
         item.innerHTML = htmlContent
         container.appendChild(item)
+        
+        // 绑定折叠点击事件
+        const header = item.querySelector('.cmd-result-header')
+        if (header) {
+            header.addEventListener('click', () => {
+                item.classList.toggle('expanded')
+            })
+        }
+        
         // 自动滚动到底部
         container.scrollTop = container.scrollHeight
     }
