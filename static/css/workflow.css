@@ -90,7 +90,7 @@
     box-shadow: var(--shadow-sm);
     font-size: 13px;
     color: var(--text-color);
-    min-width: 180px; /* 确保能容纳 IP 地址 */
+    min-width: 160px; /* 稍微减小最小宽度，适应更紧凑布局 */
 }
 
 .draggable-item:hover { 
