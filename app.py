@@ -588,131 +588,85 @@ def ssh_run_command(server, command, timeout=5):
 
 
 def fetch_remote_api(server, path, params=None, method='GET', json_data=None, timeout=5):
-    """使用 SSH 从远程主机收集监控数据或执行操作；尽量通过 psutil（如果远端可用）收集，否则回退到简化文本输出。
+    """使用 SSH 从远程主机收集监控数据或执行操作；直接使用 shell 命令收集，不尝试远程 psutil。
     返回与原先 API 兼容的 JSON-like dict。"""
     app.logger.info(f"🔌 SSH proxy request to {server.get('host')} path={path} method={method}")
     app.logger.debug(f"   Server details: host={server.get('host')}, port={server.get('port')}, user={server.get('username')}")
 
-    # 使用远程 Python + psutil 尝试获取丰富数据
+    # 获取系统状态
     if path == '/api/server/status':
-        py = (
-            "import json,datetime,psutil;"
-            "obj={'timestamp':datetime.datetime.now().isoformat(),"
-            "'cpu':{'usage':psutil.cpu_percent(interval=1),'count':psutil.cpu_count()},"
-            "'memory':{'total':psutil.virtual_memory().total,'used':psutil.virtual_memory().used,'available':psutil.virtual_memory().available,'percent':psutil.virtual_memory().percent},"
-            "'disk':{'total':psutil.disk_usage('/').total,'used':psutil.disk_usage('/').used,'free':psutil.disk_usage('/').free,'percent':psutil.disk_usage('/').percent}};"
-            "print(json.dumps({'status':'success','data':obj}))"
+        # 使用一组 shell 命令来获取CPU、内存、磁盘信息
+        fallback_cmd = (
+            "(nproc || echo '1') && "
+            "(average=$(uptime | grep -oP 'average: \\K[0-9.]+' || echo '0'); echo $average) && "
+            "(free -b | awk '/^Mem:/ {print $2, $3}' || echo '0 0') && "
+            "(df -B1 / | tail -1 | awk '{print $2, $3, $(NF-1)}' || echo '0 0 0')"
         )
-        cmd = f"python3 -c \"{py}\""
-        app.logger.debug(f"  Trying psutil via Python: {cmd[:100]}...")
-        res = ssh_run_command(server, cmd, timeout=timeout)
-        if res.get('error') or res.get('exit_status', 1) != 0:
-            # 回退：使用 shell 命令组合收集尽可能多的结构化数据
-            error_msg = res.get('error') or res.get('stderr', 'Unknown error')
-            app.logger.warning(f"  ⚠️  psutil failed (exit_status={res.get('exit_status')}, error={error_msg[:80]}), falling back to shell commands")
+        res2 = ssh_run_command(server, fallback_cmd, timeout=timeout)
+        if res2.get('error') or res2.get('exit_status', 1) != 0:
+            app.logger.error(f"  ❌ Fallback failed: {res2.get('error')}")
+            return {'status': 'error', 'message': res2.get('error'), 'diagnosis': 'SSHFail'}
+        
+        # 解析 shell 输出
+        try:
+            lines = res2.get('stdout', '').strip().split('\n')
+            cpu_count = int(lines[0].strip()) if len(lines) > 0 else 1
+            cpu_usage = float(lines[1].strip()) if len(lines) > 1 else 0
             
-            # 使用一组 shell 命令来获取CPU、内存、磁盘信息
-            fallback_cmd = (
-                "(nproc || echo '1') && "
-                "(average=$(uptime | grep -oP 'average: \\K[0-9.]+' || echo '0'); echo $average) && "
-                "(free -b | awk '/^Mem:/ {print $2, $3}' || echo '0 0') && "
-                "(df -B1 / | tail -1 | awk '{print $2, $3, $(NF-1)}' || echo '0 0 0')"
-            )
-            res2 = ssh_run_command(server, fallback_cmd, timeout=timeout)
-            if res2.get('error') or res2.get('exit_status', 1) != 0:
-                app.logger.error(f"  ❌ Fallback also failed: {res2.get('error')}")
-                return {'status': 'error', 'message': res2.get('error'), 'diagnosis': 'SSHFail'}
+            mem_data = lines[2].strip().split() if len(lines) > 2 else ['0', '0']
+            mem_total = int(mem_data[0]) if len(mem_data) > 0 else 0
+            mem_used = int(mem_data[1]) if len(mem_data) > 1 else 0
+            mem_percent = (mem_used / mem_total * 100) if mem_total > 0 else 0
             
-            # 解析 shell 输出
-            try:
-                lines = res2.get('stdout', '').strip().split('\n')
-                cpu_count = int(lines[0].strip()) if len(lines) > 0 else 1
-                cpu_usage = float(lines[1].strip()) if len(lines) > 1 else 0
-                
-                mem_data = lines[2].strip().split() if len(lines) > 2 else ['0', '0']
-                mem_total = int(mem_data[0]) if len(mem_data) > 0 else 0
-                mem_used = int(mem_data[1]) if len(mem_data) > 1 else 0
-                mem_percent = (mem_used / mem_total * 100) if mem_total > 0 else 0
-                
-                disk_data = lines[3].strip().split() if len(lines) > 3 else ['0', '0', '0']
-                disk_total = int(disk_data[0]) if len(disk_data) > 0 else 0
-                disk_used = int(disk_data[1]) if len(disk_data) > 1 else 0
-                disk_percent_str = disk_data[2] if len(disk_data) > 2 else '0%'
-                disk_percent = float(disk_percent_str.rstrip('%')) if disk_percent_str.endswith('%') else 0
-                
-                app.logger.info(f"  ✓ Parsed shell fallback: cpu_count={cpu_count}, mem={mem_percent:.1f}%, disk={disk_percent:.1f}%")
-                
-                return {
-                    'status': 'success',
-                    'data': {
-                        'cpu': {'count': cpu_count, 'usage': cpu_usage},
-                        'memory': {'total': mem_total, 'used': mem_used, 'available': mem_total - mem_used, 'percent': mem_percent},
-                        'disk': {'total': disk_total, 'used': disk_used, 'free': disk_total - disk_used, 'percent': disk_percent}
-                    },
-                    'diagnosis': 'Limited'
-                }
-            except Exception as e:
-                app.logger.warning(f"  ⚠️  Failed to parse shell fallback: {str(e)[:80]}, returning raw output")
-                return {'status': 'success', 'data': {'raw': res2.get('stdout', '')}, 'diagnosis': 'Limited'}
-        else:
-            try:
-                parsed = json.loads(res.get('stdout') or '{}')
-                app.logger.debug(f"  ✓ Parsed psutil JSON successfully")
-                return parsed
-            except Exception as e:
-                app.logger.error(f"  ❌ Failed to parse psutil JSON: {str(e)[:80]}")
-                return {'status': 'error', 'message': 'Invalid JSON from remote', 'diagnosis': 'ParseError'}
+            disk_data = lines[3].strip().split() if len(lines) > 3 else ['0', '0', '0']
+            disk_total = int(disk_data[0]) if len(disk_data) > 0 else 0
+            disk_used = int(disk_data[1]) if len(disk_data) > 1 else 0
+            disk_percent_str = disk_data[2] if len(disk_data) > 2 else '0%'
+            disk_percent = float(disk_percent_str.rstrip('%')) if disk_percent_str.endswith('%') else 0
+            
+            app.logger.info(f"  ✓ Parsed shell fallback: cpu_count={cpu_count}, mem={mem_percent:.1f}%, disk={disk_percent:.1f}%")
+            
+            return {
+                'status': 'success',
+                'data': {
+                    'cpu': {'count': cpu_count, 'usage': cpu_usage},
+                    'memory': {'total': mem_total, 'used': mem_used, 'available': mem_total - mem_used, 'percent': mem_percent},
+                    'disk': {'total': disk_total, 'used': disk_used, 'free': disk_total - disk_used, 'percent': disk_percent}
+                },
+                'diagnosis': 'Limited'
+            }
+        except Exception as e:
+            app.logger.warning(f"  ⚠️  Failed to parse shell fallback: {str(e)[:80]}, returning raw output")
+            return {'status': 'success', 'data': {'raw': res2.get('stdout', '')}, 'diagnosis': 'Limited'}
 
     # 列表进程
     if path.startswith('/api/server/processes'):
-        # 优先尝试 psutil
-        py = (
-            "import json,psutil;"
-            "procs=[];"
-            "for p in psutil.process_iter(['pid','name','cpu_percent','memory_percent']):"
-            "  try:procs.append({'pid':p.info['pid'],'name':p.info['name'],'cpu':p.info['cpu_percent'],'memory':p.info['memory_percent']});"
-            "  except:pass;"
-            "print(json.dumps({'status':'success','data':procs}))"
-        )
-        cmd = f"python3 -c \"{py}\""
         limit = int(params.get('limit', 20)) if params else 20
-        app.logger.debug(f"  Trying psutil list processes (limit={limit})")
-        res = ssh_run_command(server, cmd, timeout=timeout)
-        if res.get('error') or res.get('exit_status', 1) != 0:
-            # 回退：ps 命令
-            error_msg = res.get('error') or res.get('stderr', 'Unknown error')
-            app.logger.warning(f"  ⚠️  psutil processes failed (exit_status={res.get('exit_status')}, error={error_msg[:80]}), falling back to ps")
-            cmd2 = f"ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n {limit+1}"
-            res2 = ssh_run_command(server, cmd2, timeout=timeout)
-            if res2.get('error') or res2.get('exit_status', 1) != 0:
-                app.logger.error(f"  ❌ ps command failed: {res2.get('error')}")
-                return {'status': 'error', 'message': res2.get('error'), 'diagnosis': 'SSHFail'}
-            lines = res2.get('stdout','').strip().splitlines()
-            procs = []
-            for line in lines[1:]:
-                parts = line.split()
-                if len(parts) >= 4:
-                    pid = parts[0]
-                    name = parts[1]
-                    cpu = parts[2]
-                    mem = parts[3]
-                    try:
-                        procs.append({'pid': int(pid), 'name': name, 'cpu': float(cpu), 'memory': float(mem)})
-                    except Exception:
-                        continue
-            app.logger.info(f"  ✓ Parsed {len(procs)} processes from ps output")
-            return {'status':'success','data':procs}
-        else:
-            try:
-                parsed = json.loads(res.get('stdout') or '{}')
-                app.logger.debug(f"  ✓ Parsed psutil JSON for processes")
-                return parsed
-            except Exception as e:
-                app.logger.error(f"  ❌ Failed to parse processes JSON: {str(e)}")
-                return {'status':'error','message':'ParseError','diagnosis':'ParseError'}
+        # 直接使用 ps 命令
+        cmd2 = f"ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n {limit+1}"
+        res2 = ssh_run_command(server, cmd2, timeout=timeout)
+        if res2.get('error') or res2.get('exit_status', 1) != 0:
+            app.logger.error(f"  ❌ ps command failed: {res2.get('error')}")
+            return {'status': 'error', 'message': res2.get('error'), 'diagnosis': 'SSHFail'}
+        lines = res2.get('stdout','').strip().splitlines()
+        procs = []
+        for line in lines[1:]:
+            parts = line.split()
+            if len(parts) >= 4:
+                pid = parts[0]
+                name = parts[1]
+                cpu = parts[2]
+                mem = parts[3]
+                try:
+                    procs.append({'pid': int(pid), 'name': name, 'cpu': float(cpu), 'memory': float(mem)})
+                except Exception:
+                    continue
+        app.logger.info(f"  ✓ Parsed {len(procs)} processes from ps output")
+        return {'status':'success','data':procs}
 
     # 强制 kill
     if path.startswith('/api/process/') and path.endswith('/kill'):
+
         # path format: /api/process/{pid}/kill
         try:
             pid = int(path.split('/')[3])
