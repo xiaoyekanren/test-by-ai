@@ -187,10 +187,16 @@ function createHostCard(hostKey, hostName) {
     card.id = `host-card-${hostKey}`;
 
     // 提取主机名（去除IP地址部分）
-    const displayName = hostName.split(' (')[0];
+    let displayName = hostName.split(' (')[0];
+    
+    // 截断逻辑：最大15个字符，保留12个 + "..."
+    const MAX_LENGTH = 15;
+    if (displayName.length > MAX_LENGTH) {
+        displayName = displayName.substring(0, MAX_LENGTH - 3) + '...';
+    }
 
     card.innerHTML = `
-        <div class="host-name">${displayName}</div>
+        <div class="host-name" title="${hostName}">${displayName}</div>
         <div class="host-item">
             <div class="progress-bar">
                 <div class="progress-fill cpu" id="cpu-progress-${hostKey}" style="width: 0%"></div>
