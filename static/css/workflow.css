@@ -838,3 +838,60 @@
     pointer-events: none;
     z-index: 1000;
 }
+
+/* 浮动工具栏样式 */
+.floating-toolbar {
+    position: fixed; /* 使用 fixed 定位，相对于视口 */
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 1000;
+    transform: translate(-50%, -100%); /* 居中并向上偏移 */
+    margin-top: -10px; /* 与选区的距离 */
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -90%); }
+    to { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+.floating-toolbar .toolbar-group {
+    display: flex;
+    gap: 2px;
+}
+
+.floating-toolbar .toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+}
+
+.floating-toolbar button {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-color);
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.floating-toolbar button:hover {
+    background: var(--secondary-color);
+    color: var(--primary-color);
+}
+
+.floating-toolbar button:active {
+    background: #e0e7ff;
+}
