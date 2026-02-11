@@ -12,6 +12,11 @@ async function loadServers() {
     }
 }
 
+let currentSort = {
+    field: 'created_at',
+    direction: 'desc'
+};
+
 function displayServers(servers) {
     const container = document.getElementById('server-list-container');
 
@@ -28,27 +33,75 @@ function displayServers(servers) {
         return;
     }
 
+    // 排序逻辑
+    const sortedServers = [...servers].sort((a, b) => {
+        let valA = a[currentSort.field];
+        let valB = b[currentSort.field];
+
+        // 处理空值
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        // 端口转数字比较
+        if (currentSort.field === 'port') {
+            valA = parseInt(valA) || 0;
+            valB = parseInt(valB) || 0;
+        } else {
+            // 字符串转小写比较
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+        }
+
+        if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
     container.innerHTML = `
         <div class="server-list">
             ${createServerHeaderRow()}
-            ${servers.map(server => createServerRow(server)).join('')}
+            ${sortedServers.map(server => createServerRow(server)).join('')}
         </div>
     `;
 }
 
 function createServerHeaderRow() {
+    const fields = [
+        { key: 'name', label: '服务器名称', class: 'server-name' },
+        { key: 'host', label: '主机地址', class: 'server-host' },
+        { key: 'port', label: '端口', class: 'server-port' },
+        { key: 'username', label: '用户名', class: 'server-username' },
+        { key: 'created_at', label: '创建时间', class: 'server-created' },
+        { key: 'status', label: '状态', class: 'server-status' }
+    ];
+
+    const headerCells = fields.map(field => {
+        const isSorted = currentSort.field === field.key;
+        const sortClass = isSorted ? (currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+        return `
+            <div class="header-cell ${field.class} ${sortClass}" onclick="sortServers('${field.key}')">
+                ${field.label}<span class="sort-icon"></span>
+            </div>
+        `;
+    }).join('');
+
     return `
         <div class="server-header">
-            <div class="header-cell server-name">服务器名称</div>
-            <div class="header-cell server-host">主机地址</div>
-            <div class="header-cell server-port">端口</div>
-            <div class="header-cell server-username">用户名</div>
-            <div class="header-cell server-created">创建时间</div>
-            <div class="header-cell server-status">状态</div>
+            ${headerCells}
             <div class="header-cell server-actions">操作</div>
             <div class="header-cell server-description">描述</div>
         </div>
     `;
+}
+
+function sortServers(field) {
+    if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+    }
+    loadServers();
 }
 
 function createServerRow(server) {
