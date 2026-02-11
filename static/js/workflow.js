@@ -540,9 +540,23 @@ class WorkflowEditor {
             path.setAttribute('stroke', '#667eea')
             path.setAttribute('fill', 'transparent')
             path.setAttribute('stroke-width', '2')
-            // 插入到第一个位置，确保在节点下方（虽然 svg 在 div 下层，但为了逻辑清晰）
+            path.setAttribute('class', 'connection-path') // 添加类名方便样式控制
+            
+            // 双击删除连线
+            path.addEventListener('dblclick', (e) => {
+                e.stopPropagation() // 防止触发其他事件
+                if (confirm('确定要删除这条连线吗？')) {
+                    this.deleteConnection(conn.from, conn.to)
+                }
+            })
+            
+            // 插入到第一个位置
             svg.insertBefore(path, svg.firstChild)
         })
+    }
+    deleteConnection(fromId, toId) {
+        this.connections = this.connections.filter(c => !(c.from === fromId && c.to === toId))
+        this.updateConnections()
     }
     clearCanvas() {
         const nodes = this.canvasContent.querySelectorAll('.canvas-node')
