@@ -519,8 +519,39 @@
     padding: 4px 0;
 }
 
-/* 移除重复定义，继承 style.css */
-/* .btn, .btn-primary, .btn-secondary, .modal... 已在 style.css 中定义 */
+/* 系统消息卡片 */
+.output-item.system-message {
+    padding: 8px 12px;
+    font-size: 13px;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    margin-bottom: 4px;
+    border-radius: 6px;
+}
+
+.output-item.system-message.info {
+    color: var(--text-color);
+    background: #f3f4f6;
+}
+
+.output-item.system-message.success {
+    color: #065f46;
+    background: #d1fae5;
+    border-left: 3px solid var(--success-color);
+}
+
+.output-item.system-message.warning {
+    color: #92400e;
+    background: #fef3c7;
+    border-left: 3px solid var(--warning-color);
+}
+
+.output-item.system-message.error {
+    color: #991b1b;
+    background: #fee2e2;
+    border-left: 3px solid var(--danger-color);
+}
 
 /* ==================== 模态框通用优化 (执行命令 & 上传文件) ==================== */
 .modal-body {
