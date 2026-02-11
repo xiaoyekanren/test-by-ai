@@ -199,9 +199,19 @@ function createServerRow(server) {
             .join('');
     }
 
+    // 截断服务器名称逻辑
+    // IP "999.999.999.999" 长度约为 15 个字符
+    // 在 135px 宽度的 JetBrains Mono 字体下，大约能容纳 15-16 个字符
+    // 我们保留 12 个字符 + "..."
+    let displayName = server.name;
+    const MAX_LENGTH = 15;
+    if (displayName.length > MAX_LENGTH) {
+        displayName = displayName.substring(0, MAX_LENGTH - 3) + '...';
+    }
+
     return `
         <div class="server-row">
-            <div class="server-name">${server.name}</div>
+            <div class="server-name" title="${server.name}">${displayName}</div>
             <div class="server-host">${server.host}</div>
             <div class="server-port">${server.port}</div>
             <div class="server-username">${server.username || '--'}</div>
