@@ -133,14 +133,16 @@ function renderDashboard() {
         return;
     }
 
-    // 保存当前的滚动位置
-    const scrollPos = dashboard.scrollTop;
-
-    dashboard.innerHTML = '';
-
-    // 添加标题行
-    const headerRow = createHeaderRow();
-    dashboard.appendChild(headerRow);
+    // 确保标题行存在
+    let headerRow = dashboard.querySelector('.monitor-header');
+    if (!headerRow) {
+        headerRow = createHeaderRow();
+        dashboard.insertBefore(headerRow, dashboard.firstChild);
+    } else {
+        // 更新标题行（排序图标可能变化）
+        const newHeader = createHeaderRow();
+        dashboard.replaceChild(newHeader, headerRow);
+    }
 
     // 分组逻辑
     const groups = {
@@ -190,35 +192,54 @@ function renderDashboard() {
         }
     });
 
-    // 渲染分组
-    // 1. 本地环境
-    if (groups['本地环境'].length > 0) {
-        dashboard.appendChild(createGroupContainer('本地环境', groups['本地环境']));
-        delete groups['本地环境'];
+    // 收集所有需要显示的分组键，按顺序排列
+    const groupKeys = [];
+    if (groups['本地环境'].length > 0) groupKeys.push('本地环境');
+    
+    Object.keys(groups).sort().forEach(tag => {
+        if (tag !== '本地环境') groupKeys.push(tag);
+    });
+    
+    if (noTagServers.length > 0) {
+        groups['未分类'] = noTagServers;
+        groupKeys.push('未分类');
     }
 
-    // 2. 按标签排序渲染
-    Object.keys(groups).sort().forEach(tag => {
-        dashboard.appendChild(createGroupContainer(tag, groups[tag]));
+    // 增量更新分组容器
+    const existingGroups = Array.from(dashboard.querySelectorAll('.server-group'));
+    const processedGroupIds = new Set();
+
+    groupKeys.forEach(title => {
+        const groupId = `group-${title}`; // 简单 ID，假设 title 不含特殊字符
+        let groupContainer = document.getElementById(groupId);
+        
+        if (!groupContainer) {
+            groupContainer = createGroupContainerElement(title, groupId);
+            dashboard.appendChild(groupContainer);
+        } else {
+            // 确保顺序：将现有容器移动到末尾（即当前处理位置）
+            dashboard.appendChild(groupContainer);
+        }
+        
+        updateGroupContent(groupContainer, groups[title]);
+        processedGroupIds.add(groupId);
     });
 
-    // 3. 未分类
-    if (noTagServers.length > 0) {
-        dashboard.appendChild(createGroupContainer('未分类', noTagServers));
-    }
+    // 移除不再存在的分组
+    existingGroups.forEach(group => {
+        if (!processedGroupIds.has(group.id)) {
+            group.remove();
+        }
+    });
 
-    // 恢复滚动位置
-    if (dashboard.scrollTop !== undefined) {
-        dashboard.scrollTop = scrollPos;
-    }
-
-    console.log(`已渲染 ${Object.keys(hostMonitors).length} 个主机的监控面板`);
+    console.log(`已更新监控面板布局`);
 }
 
-function createGroupContainer(title, servers) {
+function createGroupContainerElement(title, id) {
     const container = document.createElement('div');
-    container.className = 'server-group'; // 复用 servers.js 的样式类
-    container.style.marginBottom = '0'; // 紧凑布局
+    container.className = 'server-group';
+    container.id = id;
+    container.style.marginBottom = '0';
     container.style.borderBottom = '1px solid var(--border-color)';
     container.style.borderRadius = '0';
     container.style.boxShadow = 'none';
@@ -226,16 +247,27 @@ function createGroupContainer(title, servers) {
 
     const header = document.createElement('div');
     header.className = 'group-header';
-    header.style.padding = '8px 16px'; // 紧凑
+    header.style.padding = '8px 16px';
     header.style.background = '#f3f4f6';
     header.innerHTML = `
         <div class="group-title" style="font-size: 13px;">🏷️ ${title}</div>
-        <div class="group-count">${servers.length}</div>
+        <div class="group-count">0</div>
     `;
     container.appendChild(header);
 
     const list = document.createElement('div');
     list.className = 'host-list';
+    container.appendChild(list);
+
+    return container;
+}
+
+function updateGroupContent(container, servers) {
+    // 更新计数
+    const countDiv = container.querySelector('.group-count');
+    if (countDiv) countDiv.textContent = servers.length;
+
+    const list = container.querySelector('.host-list');
     
     // 对组内服务器进行排序
     const sortedServers = [...servers].sort((a, b) => {
@@ -247,20 +279,46 @@ function createGroupContainer(title, servers) {
         return 0;
     });
 
+    const processedServerKeys = new Set();
+
     sortedServers.forEach(server => {
-        const card = createHostCard(server.key, server.name);
-        list.appendChild(card);
-        // 如果有缓存数据，尝试立即填充一次，避免闪烁
-        const host = hostMonitors[server.key];
-        if (host && host.lastData) {
-            // 使用 setTimeout 确保 DOM 已插入
-            setTimeout(() => fillHostCardData(server.key, host.lastData), 0);
+        const cardId = `host-card-${server.key}`;
+        let card = document.getElementById(cardId);
+
+        if (!card) {
+            // 创建新卡片
+            card = createHostCard(server.key, server.name);
+            list.appendChild(card);
+            // 尝试填充初始数据
+            const host = hostMonitors[server.key];
+            if (host && host.lastData) {
+                fillHostCardData(server.key, host.lastData);
+            }
+        } else {
+            // 移动现有卡片到当前位置（自动处理排序）
+            list.appendChild(card);
+        }
+        processedServerKeys.add(server.key);
+    });
+
+    // 移除该组中不再需要的卡片（例如服务器被移动到别的组，或被删除）
+    // 注意：这里只移除当前组内的多余卡片。
+    // 如果卡片被移动到了另一个组，上面的循环中它已经被 appendChild 走了，
+    // 所以这里剩下的 children 都是不再属于任何组（或属于本组但应该被删除）的。
+    // 但因为 getElementById 是全局的，如果卡片还在其他组，这里其实访问不到（除非它还在这个 list 的 children 里）。
+    
+    // 更安全的做法：遍历 list 的所有直接子元素
+    Array.from(list.children).forEach(child => {
+        // 从 id 提取 key: host-card-local -> local
+        const key = child.id.replace('host-card-', '');
+        if (!processedServerKeys.has(key)) {
+            child.remove();
         }
     });
-    
-    container.appendChild(list);
-    return container;
 }
+
+// 移除不再使用的函数
+// function createGroupContainer(...) {} 已经被拆分和重构
 
 function getSortValue(hostKey, field) {
     const host = hostMonitors[hostKey];
