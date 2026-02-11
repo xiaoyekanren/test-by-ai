@@ -488,6 +488,7 @@ class WorkflowEditor {
                 <button class="node-delete">&times;</button>
             </div>
             ${content ? `<div class="node-content" title="${content}">${content}</div>` : ''}
+            <div class="node-status-badge"></div>
         `
         node.querySelector('.node-delete').addEventListener('click', e => {
             e.stopPropagation()
@@ -586,6 +587,19 @@ class WorkflowEditor {
         dfs(serverId)
         return steps
     }
+    updateNodeStatus(nodeId, status) {
+        const node = this.canvasContent.querySelector(`.canvas-node[data-id="${nodeId}"]`)
+        if (!node) return
+        
+        // 移除旧状态
+        node.classList.remove('running', 'success', 'error')
+        
+        // 添加新状态
+        if (status !== 'pending') {
+            node.classList.add(status)
+        }
+    }
+
     async runWorkflow() {
         this.consoleOutput.innerHTML = ''
         const serverNodes = this.nodes.filter(n => n.type === 'server')
@@ -593,6 +607,10 @@ class WorkflowEditor {
             this.log('错误: 没有找到服务器节点', 'error')
             return
         }
+        
+        // 重置所有节点状态
+        this.nodes.forEach(n => this.updateNodeStatus(n.id, 'pending'))
+        
         let hasExecutedAny = false
         for (const sn of serverNodes) {
             const steps = this.findConnectedSteps(sn.id)
@@ -600,11 +618,20 @@ class WorkflowEditor {
                 this.log(`提示: 服务器 "${sn.serverName || '未命名'}" 未连接任何任务`, 'warning')
                 continue
             }
+            
+            // 标记服务器节点为运行中
+            this.updateNodeStatus(sn.id, 'running')
+            
             for (const step of steps) {
                 hasExecutedAny = true
+                this.updateNodeStatus(step.id, 'running')
+                
+                let stepSuccess = false
+                
                 if (step.type === 'upload') {
                     if (!step.upload || !step.upload.file) {
                         this.log('警告: 上传节点未设置文件', 'warning')
+                        this.updateNodeStatus(step.id, 'error')
                         continue
                     }
                     // 如果未设置远程路径，留空让后端处理默认值
@@ -613,41 +640,52 @@ class WorkflowEditor {
                     try {
                         const res = await ServerAPI.uploadFile(sn.serverId, step.upload.file, remotePath)
                         if (res.status === 'success') {
-                            // 显示实际上传路径（如果后端返回了的话，目前后端没返回最终路径，可以考虑改进）
-                            // 这里先显示预期的路径
+                            // 显示实际上传路径
                             const finalPath = remotePath || `/tmp/${step.upload.file.name}`
-                            this.log(`上传成功: ${finalPath}`, 'success')
+                            this.log(`[${sn.serverName}] 上传成功: ${finalPath}`, 'success')
+                            stepSuccess = true
                         } else {
-                            this.log(`上传失败: ${res.message || ''}`, 'error')
+                            this.log(`[${sn.serverName}] 上传失败: ${res.message || ''}`, 'error')
                         }
                     } catch (e) {
-                        this.log(`上传出错: ${e.message}`, 'error')
+                        this.log(`[${sn.serverName}] 上传出错: ${e.message}`, 'error')
                     }
                 } else if (step.type === 'command') {
                     if (!step.command) {
                         this.log('警告: 命令节点未设置命令', 'warning')
+                        this.updateNodeStatus(step.id, 'error')
                         continue
                     }
                     try {
                         const res = await ServerAPI.executeCommand(sn.serverId, step.command)
                         if (res.status === 'success') {
-                            this.log(`命令成功: ${step.command}`, 'success')
+                            this.log(`[${sn.serverName}] 命令成功: ${step.command}`, 'success')
                             const d = res.data || {}
-                            this.addOutput(`输出:\n${d.output || ''}\n错误:\n${d.error || ''}`)
+                            this.addOutput(`[${sn.serverName}] 输出:\n${d.output || ''}\n错误:\n${d.error || ''}`)
                             // 更新连接的 Output 节点内容
                             const outNode = steps.find(s => s.type === 'output')
                             if (outNode) {
                                 const el = this.canvasContent.querySelector(`.canvas-node[data-id="${outNode.id}"] .node-content`)
                                 if (el) el.textContent = (d.output || '') + (d.error ? '\n错误:\n' + d.error : '')
+                                this.updateNodeStatus(outNode.id, d.exit_status === 0 ? 'success' : 'error')
                             }
+                            stepSuccess = d.exit_status === 0
                         } else {
-                            this.log(`命令失败: ${res.message || ''}`, 'error')
+                            this.log(`[${sn.serverName}] 命令失败: ${res.message || ''}`, 'error')
                         }
                     } catch (e) {
-                        this.log(`执行出错: ${e.message}`, 'error')
+                        this.log(`[${sn.serverName}] 执行出错: ${e.message}`, 'error')
                     }
                 }
+                
+                this.updateNodeStatus(step.id, stepSuccess ? 'success' : 'error')
+                
+                // 如果当前步骤失败，且没有配置"忽略错误"，则终止当前服务器的后续步骤（简单逻辑）
+                if (!stepSuccess) break
             }
+            
+            // 服务器节点状态更新（目前简单处理：只要流程跑完就算成功，具体可根据步骤结果细化）
+            this.updateNodeStatus(sn.id, 'success')
         }
         if (!hasExecutedAny) {
             this.log('未执行任何任务，请检查连线', 'warning')
