@@ -230,7 +230,7 @@ function startAllPolling() {
         updateDashboardForHost(hostKey);
         
         // 设置定时器
-        const interval = hostKey === 'local' ? 2000 : 5000; // 本地 2s，远程 5s
+        const interval = hostKey === 'local' ? 5000 : 5000; // 本地 5s，远程 5s
         console.log(`[${hostKey}] 设置轮询间隔: ${interval}ms`);
         
         const intervalId = setInterval(() => {
@@ -415,7 +415,7 @@ function startPollingForHost(hostKey) {
     updateDashboardForHost(hostKey);
 
     // 设置定时器
-    const interval = hostKey === 'local' ? 2000 : 5000; // 本地 2s，远程 5s
+    const interval = hostKey === 'local' ? 5000 : 5000; // 本地 5s，远程 5s
     console.log(`[${hostKey}] 设置轮询间隔: ${interval}ms`);
 
     const intervalId = setInterval(() => {
