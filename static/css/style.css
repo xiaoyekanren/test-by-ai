@@ -60,7 +60,14 @@ body {
     margin-bottom: 40px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+}
+
+.logo-img {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: contain;
 }
 
 .sidebar .logo h2 {
