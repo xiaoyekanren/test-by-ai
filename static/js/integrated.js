@@ -133,6 +133,12 @@ function renderDashboard() {
         return;
     }
 
+    // 移除初始加载提示（如果存在）
+    const loadingEl = dashboard.querySelector('.loading');
+    if (loadingEl) {
+        loadingEl.remove();
+    }
+
     // 确保标题行存在
     let headerRow = dashboard.querySelector('.monitor-header');
     if (!headerRow) {
