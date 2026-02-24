@@ -2,14 +2,10 @@
 
 async function updateStats() {
     try {
-        // 并行获取所有数据，减少等待时间
-        const [statusResponse, processResponse] = await Promise.all([
-            ServerAPI.getServerStatus(),
-            ServerAPI.getProcesses(100) // 只获取前 100 个进程，足够计算进程数
-        ]);
+        const response = await ServerAPI.getServerStatus();
         
-        if (statusResponse.status === 'success') {
-            const data = statusResponse.data;
+        if (response.status === 'success') {
+            const data = response.data;
             
             // 更新 CPU 统计
             const cpuStat = document.getElementById('cpu-stat');
@@ -28,17 +24,19 @@ async function updateStats() {
             if (diskStat) {
                 diskStat.querySelector('.stat-value').textContent = formatPercent(data.disk.percent);
             }
-        }
-        
-        // 更新进程数
-        if (processResponse.status === 'success') {
-            // 由于我们只需要进程数，而不需要具体的进程信息，
-            // 我们可以通过获取前 100 个进程来快速获取进程数
-            // 这样可以避免获取所有进程导致的服务器响应缓慢
-            const processCount = processResponse.data?.length || 0;
-            const processStat = document.getElementById('process-stat');
-            if (processStat) {
-                processStat.querySelector('.stat-value').textContent = processCount;
+            
+            // 获取进程数
+            const processResponse = await ServerAPI.getProcesses(1);
+            if (processResponse.status === 'success') {
+                // 获取真实进程数
+                const allProcesses = await fetch('http://localhost:5001/api/server/processes?limit=10000')
+                    .then(r => r.json())
+                    .catch(() => ({ data: [] }));
+                
+                const processStat = document.getElementById('process-stat');
+                if (processStat) {
+                    processStat.querySelector('.stat-value').textContent = allProcesses.data?.length || '--';
+                }
             }
         }
     } catch (error) {
