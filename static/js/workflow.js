@@ -1973,21 +1973,22 @@ class WorkflowEditor {
                         <div class="wf-info">
                             <h4>${this.escapeHtml(wf.name)}</h4>
                             <p>${this.escapeHtml(wf.description || '无描述')}</p>
-                            <div class="wf-meta">更新于: ${wf.updated_at}</div>
+                            <div class="wf-meta">更新于: ${wf.updated_at} | 双击加载</div>
                         </div>
                         <div class="wf-actions">
-                            <button class="btn btn-sm btn-primary load-btn" data-id="${wf.id}">加载</button>
                             <button class="btn btn-sm btn-danger delete-btn" data-id="${wf.id}">删除</button>
                         </div>
                     `
                     list.appendChild(div)
                     
-                    div.querySelector('.load-btn').addEventListener('click', () => {
+                    // 双击加载工作流
+                    div.addEventListener('dblclick', () => {
                         this.loadWorkflow(wf.id)
                         modal.style.display = 'none'
                     })
                     
                     div.querySelector('.delete-btn').addEventListener('click', async (e) => {
+                        e.stopPropagation() // 阻止事件冒泡，避免触发双击事件
                         if (confirm('确定要删除该工作流吗？')) {
                             await ServerAPI.request(`/workflows/${wf.id}`, { method: 'DELETE' })
                             div.remove()
