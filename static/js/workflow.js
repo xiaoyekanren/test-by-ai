@@ -24,6 +24,9 @@ class WorkflowEditor {
         this.selectionStart = null
         this.clipboard = null
         
+        // 编辑状态管理
+        this.currentEditingNode = null
+        
         // 画布平移
         this.panX = 0
         this.panY = 0
@@ -73,6 +76,313 @@ class WorkflowEditor {
         document.getElementById('save-workflow-btn').addEventListener('click', () => this.handleSave())
         document.getElementById('save-as-workflow-btn').addEventListener('click', () => this.openSaveModal())
         document.getElementById('load-workflow-btn').addEventListener('click', () => this.openLoadModal())
+        
+        // 添加点击外部区域退出编辑状态的事件
+        document.addEventListener('click', (e) => {
+            if (this.currentEditingNode) {
+                const editForm = this.currentEditingNode.querySelector('.node-edit-form')
+                if (!this.currentEditingNode.contains(e.target) && !editForm?.contains(e.target)) {
+                    this.exitEditState(true)
+                }
+            }
+        })
+        
+        // 添加按ESC键退出编辑状态的事件
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.currentEditingNode) {
+                this.exitEditState(false)
+            }
+        })
+    }
+    
+    // 退出编辑状态
+    exitEditState(save) {
+        if (!this.currentEditingNode) return
+        
+        const node = this.currentEditingNode
+        const id = parseInt(node.dataset.id)
+        const nodeData = this.nodes.find(n => n.id === id)
+        
+        if (save) {
+            // 保存当前编辑状态
+            if (nodeData.type === 'upload') {
+                const remotePathInput = node.querySelector('#inline-remote-path')
+                const refNameInput = node.querySelector('#inline-upload-ref-name')
+                const fileInput = node.querySelector('#inline-upload-file')
+                const titleInput = node.querySelector('.node-title-input')
+                
+                // 确保 upload 对象存在
+                if (!nodeData.upload) nodeData.upload = {}
+                
+                if (remotePathInput) nodeData.upload.remote = remotePathInput.value
+                if (refNameInput) nodeData.refName = refNameInput.value
+                if (fileInput && fileInput.files.length > 0) nodeData.upload.file = fileInput.files[0]
+                if (titleInput) nodeData.title = titleInput.value.trim() || '上传文件'
+            } else if (nodeData.type === 'command') {
+                const commandInput = node.querySelector('#inline-command')
+                const descInput = node.querySelector('#inline-command-desc')
+                const refNameInput = node.querySelector('#inline-command-ref-name')
+                const titleInput = node.querySelector('.node-title-input')
+                
+                if (commandInput) nodeData.command = commandInput.value
+                if (descInput) nodeData.description = descInput.value
+                if (refNameInput) nodeData.refName = refNameInput.value
+                if (titleInput) nodeData.title = titleInput.value.trim() || '执行命令'
+            }
+        }
+        
+        // 重新渲染节点
+        this.renderNode(node, nodeData)
+        
+        // 清除编辑状态
+        this.currentEditingNode = null
+    }
+    
+    // 重新渲染节点
+    renderNode(node, nodeData) {
+        let title = nodeData.title || ''
+        let content = ''
+        let typeLabel = ''
+        
+        switch (nodeData.type) {
+            case 'server':
+                typeLabel = '服务器'
+                title = nodeData.serverName || '服务器'
+                content = ''
+                break
+            case 'upload':
+                typeLabel = '上传文件'
+                title = nodeData.title || '上传文件'
+                if (nodeData.upload) {
+                    if (nodeData.upload.file && nodeData.upload.remote) {
+                        content = `${nodeData.upload.file.name} → ${nodeData.upload.remote}`
+                    } else if (nodeData.upload.file) {
+                        content = nodeData.upload.file.name
+                    } else if (nodeData.upload.remote) {
+                        content = nodeData.upload.remote
+                    } else {
+                        content = '双击设置文件与路径'
+                    }
+                } else {
+                    content = '双击设置文件与路径'
+                }
+                break
+            case 'command':
+                typeLabel = '执行命令'
+                title = nodeData.title || '执行命令'
+                content = nodeData.command ? nodeData.command : '双击编辑命令'
+                break
+        }
+        
+        // 重新渲染节点
+        node.innerHTML = `
+            <div class="node-type-row">
+                <span class="node-type">${typeLabel}</span>
+                <button class="node-delete">&times;</button>
+            </div>
+            <div class="connector output"></div>
+            <div class="connector input"></div>
+            <div class="node-header">
+                <span class="node-title" title="${title}">${title}</span>
+            </div>
+            <div class="node-content" title="${content}">${content}</div>
+            <div class="node-status-badge"></div>
+        `
+        
+        // 重新添加删除按钮事件
+        node.querySelector('.node-delete').addEventListener('click', e => {
+            e.stopPropagation()
+            this.deleteNode(parseInt(node.dataset.id))
+        })
+        
+        // 重新添加双击事件
+        if (nodeData.type === 'upload') {
+            node.addEventListener('dblclick', (e) => {
+                // 检查点击的是否是输入框或其他编辑相关元素
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.node-edit-form')) {
+                    return
+                }
+                if (this.currentEditingNode && this.currentEditingNode !== node) {
+                    this.exitEditState(true)
+                }
+                this.handleUploadDoubleClick(node)
+            })
+        } else if (nodeData.type === 'command') {
+            node.addEventListener('dblclick', (e) => {
+                // 检查点击的是否是输入框或其他编辑相关元素
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.node-edit-form')) {
+                    return
+                }
+                if (this.currentEditingNode && this.currentEditingNode !== node) {
+                    this.exitEditState(true)
+                }
+                this.handleCommandDoubleClick(node)
+            })
+        }
+    }
+    
+    // 处理上传文件节点的双击事件
+    handleUploadDoubleClick(node) {
+        this.currentEditingNode = node
+        const id = parseInt(node.dataset.id)
+        const nodeData = this.nodes.find(n => n.id === id)
+        
+        // 创建内联编辑表单
+        const editForm = document.createElement('div')
+        editForm.className = 'node-edit-form'
+        editForm.innerHTML = `
+            <div class="form-group">
+                <label for="inline-upload-file">选择文件</label>
+                <input type="file" id="inline-upload-file" class="form-input">
+                <div id="inline-file-info" style="margin-bottom: 10px; font-size: 12px; color: #666;">${nodeData.upload?.file ? `当前文件: ${nodeData.upload.file.name}` : '当前未选择文件'}</div>
+            </div>
+            <div class="form-group">
+                <label for="inline-remote-path">远程路径</label>
+                <input type="text" id="inline-remote-path" class="form-input" placeholder="/tmp/upload.bin" value="${nodeData.upload?.remote || ''}">
+            </div>
+            <div class="form-group">
+                <label for="inline-upload-ref-name">引用名称 (变量名)</label>
+                <input type="text" id="inline-upload-ref-name" class="form-input" placeholder="例如: upload1" value="${nodeData.refName || ''}">
+            </div>
+            <div class="form-actions">
+                <button id="inline-cancel-upload" class="btn btn-secondary">取消</button>
+            </div>
+        `
+        
+        // 替换为编辑表单
+        node.innerHTML = `
+            <div class="node-type-row">
+                <span class="node-type">上传文件</span>
+                <button class="node-delete">&times;</button>
+            </div>
+            <div class="connector output"></div>
+            <div class="connector input"></div>
+            <div class="node-header">
+                <input type="text" class="node-title-input" value="${nodeData.title || '上传文件'}" placeholder="事件名称">
+            </div>
+            ${editForm.outerHTML}
+            <div class="node-status-badge"></div>
+        `
+        
+        // 添加事件监听器
+        const fileInput = node.querySelector('#inline-upload-file')
+        const fileInfo = node.querySelector('#inline-file-info')
+        const remotePathInput = node.querySelector('#inline-remote-path')
+        const refNameInput = node.querySelector('#inline-upload-ref-name')
+        const cancelBtn = node.querySelector('#inline-cancel-upload')
+        const deleteBtn = node.querySelector('.node-delete')
+        const titleInput = node.querySelector('.node-title-input')
+        
+        // 处理文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                fileInfo.textContent = `当前文件: ${e.target.files[0].name}`
+            } else {
+                fileInfo.textContent = '当前未选择文件'
+            }
+        })
+        
+        // 处理取消
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            this.exitEditState(false)
+        })
+        
+        // 处理按Enter键保存
+        const handleEnterKey = (e) => {
+            if (e.key === 'Enter') {
+                e.stopPropagation()
+                this.exitEditState(true)
+            }
+        }
+        
+        remotePathInput.addEventListener('keydown', handleEnterKey)
+        refNameInput.addEventListener('keydown', handleEnterKey)
+        titleInput.addEventListener('keydown', handleEnterKey)
+        
+        // 处理删除按钮
+        deleteBtn.addEventListener('click', e => {
+            e.stopPropagation()
+            this.deleteNode(parseInt(node.dataset.id))
+            this.currentEditingNode = null
+        })
+    }
+    
+    // 处理执行命令节点的双击事件
+    handleCommandDoubleClick(node) {
+        this.currentEditingNode = node
+        const id = parseInt(node.dataset.id)
+        const nodeData = this.nodes.find(n => n.id === id)
+        
+        // 创建内联编辑表单
+        const editForm = document.createElement('div')
+        editForm.className = 'node-edit-form'
+        editForm.innerHTML = `
+            <div class="form-group">
+                <label for="inline-command">命令</label>
+                <input type="text" id="inline-command" class="form-input" placeholder="例如: ls -la" value="${nodeData.command || ''}">
+            </div>
+            <div class="form-group">
+                <label for="inline-command-desc">描述</label>
+                <input type="text" id="inline-command-desc" class="form-input" placeholder="命令描述" value="${nodeData.description || ''}">
+            </div>
+            <div class="form-group">
+                <label for="inline-command-ref-name">引用名称 (变量名)</label>
+                <input type="text" id="inline-command-ref-name" class="form-input" placeholder="例如: cmd1" value="${nodeData.refName || ''}">
+            </div>
+            <div class="form-actions">
+                <button id="inline-cancel-command" class="btn btn-secondary">取消</button>
+            </div>
+        `
+        
+        // 替换为编辑表单
+        node.innerHTML = `
+            <div class="node-type-row">
+                <span class="node-type">执行命令</span>
+                <button class="node-delete">&times;</button>
+            </div>
+            <div class="connector output"></div>
+            <div class="connector input"></div>
+            <div class="node-header">
+                <input type="text" class="node-title-input" value="${nodeData.title || '执行命令'}" placeholder="事件名称">
+            </div>
+            ${editForm.outerHTML}
+            <div class="node-status-badge"></div>
+        `
+        
+        // 添加事件监听器
+        const commandInput = node.querySelector('#inline-command')
+        const descInput = node.querySelector('#inline-command-desc')
+        const refNameInput = node.querySelector('#inline-command-ref-name')
+        const cancelBtn = node.querySelector('#inline-cancel-command')
+        const deleteBtn = node.querySelector('.node-delete')
+        const titleInput = node.querySelector('.node-title-input')
+        
+        // 处理取消
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            this.exitEditState(false)
+        })
+        
+        // 处理按Enter键保存
+        const handleEnterKey = (e) => {
+            if (e.key === 'Enter') {
+                e.stopPropagation()
+                this.exitEditState(true)
+            }
+        }
+        
+        commandInput.addEventListener('keydown', handleEnterKey)
+        descInput.addEventListener('keydown', handleEnterKey)
+        refNameInput.addEventListener('keydown', handleEnterKey)
+        titleInput.addEventListener('keydown', handleEnterKey)
+        
+        // 处理删除按钮
+        deleteBtn.addEventListener('click', e => {
+            e.stopPropagation()
+            this.deleteNode(parseInt(node.dataset.id))
+            this.currentEditingNode = null
+        })
     }
 
     setupZoom() {
@@ -118,6 +428,13 @@ class WorkflowEditor {
         
         // 支持滚轮缩放与平移
         this.canvas.addEventListener('wheel', e => {
+            // 检查鼠标是否在组件库面板上
+            const componentPanel = document.querySelector('.component-panel')
+            if (componentPanel && componentPanel.contains(e.target)) {
+                // 如果鼠标在组件库面板上，不阻止默认滚动行为
+                return
+            }
+            
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault()
                 const delta = e.deltaY > 0 ? -0.1 : 0.1
@@ -556,6 +873,15 @@ class WorkflowEditor {
     
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', e => {
+            // 检查是否是编辑相关的快捷键
+            const isEditingShortcut = (e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x' || e.key === 'a' || e.key === 'z')
+            
+            // 如果是编辑相关的快捷键，并且焦点在输入框中，允许默认行为
+            if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && isEditingShortcut) {
+                return
+            }
+            
+            // 如果焦点在输入框中，不处理其他快捷键
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
             // 监听空格键用于平移
@@ -581,6 +907,9 @@ class WorkflowEditor {
                 } else if (e.key === 'a') {
                     e.preventDefault()
                     this.selectAll()
+                } else if (e.key === 'z') {
+                    e.preventDefault()
+                    this.addSystemMessage('撤销功能暂未实现', 'info')
                 }
             }
         })
@@ -683,6 +1012,12 @@ class WorkflowEditor {
 
     setupCanvasEvents() {
         this.canvas.addEventListener('mousedown', e => {
+            // 检查是否点击了输入框或其他编辑相关元素
+            const isEditingElement = e.target.closest('input') || e.target.closest('button') || e.target.closest('.node-edit-form')
+            if (isEditingElement) {
+                return
+            }
+            
             // 0. 平移逻辑 (最高优先级)
             if (this.isPanning || e.button === 1) { // 空格按下或中键
                 e.preventDefault()
@@ -1189,23 +1524,16 @@ class WorkflowEditor {
                 if (data.refName) nodeData.refName = data.refName
                 if (nodeData.upload && nodeData.upload.remote) content = nodeData.upload.remote
                 
-                node.addEventListener('dblclick', () => {
-                    this.currentUploadNode = node
-                    const id = parseInt(node.dataset.id)
-                    const nodeData = this.nodes.find(n => n.id === id)
-                    
-                    this.uploadFileInput.value = ''
-                    this.remotePathInput.value = nodeData.upload?.remote || ''
-                    this.uploadRefInput.value = nodeData.refName || ''
-                    
-                    const fileInfo = document.getElementById('current-file-info')
-                    if (nodeData.upload?.file) {
-                        fileInfo.textContent = `当前已选文件: ${nodeData.upload.file.name}`
-                    } else {
-                        fileInfo.textContent = '当前未选择文件'
+                // 添加双击事件监听器
+                node.addEventListener('dblclick', (e) => {
+                    // 检查点击的是否是输入框或其他编辑相关元素
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.node-edit-form')) {
+                        return
                     }
-                    
-                    document.getElementById('upload-modal').style.display = 'block'
+                    if (this.currentEditingNode && this.currentEditingNode !== node) {
+                        this.exitEditState(true)
+                    }
+                    this.handleUploadDoubleClick(node)
                 })
                 break
             case 'command':
@@ -1219,27 +1547,28 @@ class WorkflowEditor {
                 if (data.refName) nodeData.refName = data.refName
                 if (nodeData.command) content = nodeData.command
                 
-                node.addEventListener('dblclick', () => {
-                    this.currentCommandNode = node
-                    this.commandInput.value = ''
-                    this.commandDescInput.value = ''
-                    this.commandRefInput.value = ''
-                    document.getElementById('command-modal').style.display = 'block'
+                // 添加双击事件监听器
+                node.addEventListener('dblclick', (e) => {
+                    // 检查点击的是否是输入框或其他编辑相关元素
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.node-edit-form')) {
+                        return
+                    }
+                    if (this.currentEditingNode && this.currentEditingNode !== node) {
+                        this.exitEditState(true)
+                    }
+                    this.handleCommandDoubleClick(node)
                 })
-                break
-            case 'output':
-                typeLabel = '结果显示'
-                title = '结果显示'
-                content = '等待执行'
                 break
         }
         node.innerHTML = `
-            <span class="node-type">${typeLabel}</span>
+            <div class="node-type-row">
+                <span class="node-type">${typeLabel}</span>
+                <button class="node-delete">&times;</button>
+            </div>
             <div class="connector output"></div>
             <div class="connector input"></div>
             <div class="node-header">
                 <span class="node-title" title="${title}">${title}</span>
-                <button class="node-delete">&times;</button>
             </div>
             ${content ? `<div class="node-content" title="${content}">${content}</div>` : ''}
             <div class="node-status-badge"></div>
@@ -1412,7 +1741,7 @@ class WorkflowEditor {
             for (const c of outs) {
                 const node = this.nodes.find(n => n.id === c.to)
                 if (!node) continue
-                if (node.type === 'upload' || node.type === 'command' || node.type === 'output') {
+                if (node.type === 'upload' || node.type === 'command') {
                     steps.push(node)
                 }
                 dfs(c.to)
@@ -1503,20 +1832,17 @@ class WorkflowEditor {
                         document.getElementById('command-modal').style.display = 'block'
                     })
                     break
-                case 'output':
-                    typeLabel = '结果显示'
-                    title = '结果显示'
-                    content = '等待执行'
-                    break
             }
             
             node.innerHTML = `
-                <span class="node-type">${typeLabel}</span>
+                <div class="node-type-row">
+                    <span class="node-type">${typeLabel}</span>
+                    <button class="node-delete">&times;</button>
+                </div>
                 <div class="connector output"></div>
                 <div class="connector input"></div>
                 <div class="node-header">
                     <span class="node-title" title="${title}">${title}</span>
-                    <button class="node-delete">&times;</button>
                 </div>
                 ${content ? `<div class="node-content" title="${content}">${content}</div>` : ''}
                 <div class="node-status-badge"></div>
@@ -1857,18 +2183,7 @@ class WorkflowEditor {
                         <div class="cmd-result-body">${outputHtml}</div>
                     `)
                     
-                    // 如果有输出节点连接到此节点，更新它
-                    // 注意：这里的逻辑稍微复杂，因为输出节点可能不是直接连接的下一级
-                    // 简化处理：查找当前节点直接连接的 output 类型节点
-                    const outConns = this.connections.filter(c => c.from === node.id)
-                    outConns.forEach(c => {
-                        const nextNode = this.nodes.find(n => n.id === c.to)
-                        if (nextNode && nextNode.type === 'output') {
-                            const el = this.canvasContent.querySelector(`.canvas-node[data-id="${nextNode.id}"] .node-content`)
-                            if (el) el.textContent = (d.output || '') + (d.error ? '\n错误:\n' + d.error : '')
-                            this.updateNodeStatus(nextNode.id, success ? 'success' : 'error')
-                        }
-                    })
+
                 } else {
                     throw new Error(res.message || '请求失败')
                 }
@@ -1893,7 +2208,7 @@ class WorkflowEditor {
         
         for (const conn of nextConns) {
             const nextNode = this.nodes.find(n => n.id === conn.to)
-            if (!nextNode || nextNode.type === 'output') continue // 输出节点已处理，不作为执行节点
+            if (!nextNode) continue
             
             const type = conn.type || 'default'
             if (type === 'default') {
