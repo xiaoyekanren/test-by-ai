@@ -349,6 +349,131 @@
     border: 1px solid var(--secondary-color);
 }
 
+/* 节点类型行样式 */
+.node-type-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.node-type-row .node-type {
+    margin-bottom: 0;
+}
+
+/* 事件名称输入框样式 */
+.node-title-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    background: white;
+    box-sizing: border-box;
+}
+
+.node-title-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* 内联编辑表单样式 */
+.node-edit-form {
+    margin-top: 12px;
+}
+
+.node-edit-form .form-group {
+    margin-bottom: 12px;
+}
+
+.node-edit-form .form-row {
+    margin-bottom: 12px;
+}
+
+.node-edit-form .form-group-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.node-edit-form .form-group-inline label {
+    flex-shrink: 0;
+    min-width: 100px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 0;
+}
+
+.node-edit-form .form-group-inline .form-input {
+    flex: 1;
+    width: auto;
+}
+
+.node-edit-form label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 4px;
+}
+
+.node-edit-form .form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.node-edit-form .form-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.node-edit-form .form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    justify-content: flex-end;
+}
+
+.node-edit-form .btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.node-edit-form .btn-secondary {
+    background: white;
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.node-edit-form .btn-secondary:hover {
+    background: var(--secondary-color);
+    border-color: #d1d5db;
+}
+
+.node-edit-form .btn-primary {
+    background: var(--primary-color);
+    color: white;
+    border: 1px solid var(--primary-color);
+}
+
+.node-edit-form .btn-primary:hover {
+    background: #6366f1;
+    border-color: #6366f1;
+}
+
 .node-type { 
     display: inline-block; 
     font-size: 11px; 
@@ -894,4 +1019,62 @@
 
 .floating-toolbar button:active {
     background: #e0e7ff;
+}
+
+/* 工作流列表项样式 - 内容尽量放到一行展示 */
+.workflow-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.workflow-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.wf-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wf-info h4 {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wf-info p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wf-meta {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wf-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
 }
