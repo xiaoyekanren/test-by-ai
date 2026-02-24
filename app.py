@@ -83,7 +83,7 @@ init_db()
 def get_server_status():
     """获取服务器基本状态信息"""
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent = psutil.cpu_percent(interval=0)  # 设置 interval=0，避免等待
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         
