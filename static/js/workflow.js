@@ -812,14 +812,14 @@ class WorkflowEditor {
                 e.dataTransfer.setData('serverHost', item.dataset.serverHost || '')
             }
         })
-        this.canvas.addEventListener('dragover', e => {
+        this.canvasContent.addEventListener('dragover', e => {
             e.preventDefault()
             this.canvas.classList.add('drag-over')
         })
-        this.canvas.addEventListener('dragleave', () => {
+        this.canvasContent.addEventListener('dragleave', () => {
             this.canvas.classList.remove('drag-over')
         })
-        this.canvas.addEventListener('drop', e => {
+        this.canvasContent.addEventListener('drop', e => {
             e.preventDefault()
             this.canvas.classList.remove('drag-over')
             const type = e.dataTransfer.getData('type')
