@@ -1755,7 +1755,24 @@ class WorkflowEditor {
         const node = this.canvasContent.querySelector(`.canvas-node[data-id="${nodeId}"]`)
         if (!node) return
         
-        node.classList.remove('running', 'success', 'error')
+        node.classList.remove('running', 'success', 'error', 'partial', 'server-not-found')
+        
+        // 清除标记
+        const partialMarker = node.querySelector('.partial-marker')
+        if (partialMarker) {
+            partialMarker.remove()
+        }
+        
+        const errorMarker = node.querySelector('.error-marker')
+        if (errorMarker) {
+            errorMarker.remove()
+        }
+        
+        // 清除样式
+        node.style.borderColor = ''
+        node.style.backgroundColor = ''
+        
+
         
         if (status !== 'pending') {
             node.classList.add(status)
@@ -2012,9 +2029,53 @@ class WorkflowEditor {
                 this.currentWorkflowId = id
                 this.currentWorkflowName = res.data.name
                 this.updateWorkflowDisplay()
+                // 检查工作流中的服务器是否存在
+                this.checkWorkflowServers()
             }
         } catch (e) {
             this.addSystemMessage('加载工作流失败: ' + e.message, 'error')
+        }
+    }
+
+    async checkWorkflowServers() {
+        try {
+            // 获取所有当前可用的服务器
+            const res = await ServerAPI.listServers()
+            if (res.status === 'success' && res.data) {
+                const availableServers = res.data
+                
+                // 检查工作流中的服务器节点
+                this.nodes.forEach(node => {
+                    if (node.type === 'server') {
+                        // 检查服务器是否存在
+                        const serverExists = availableServers.some(s => 
+                            s.id === node.serverId || 
+                            s.name === node.serverName || 
+                            s.host === node.serverHost
+                        )
+                        
+                        // 更新节点状态
+                        const nodeElement = this.canvasContent.querySelector(`.canvas-node[data-id="${node.id}"]`)
+                        if (nodeElement) {
+                            if (!serverExists) {
+                                // 服务器不存在，标红提示
+                                nodeElement.classList.add('server-not-found')
+                                nodeElement.style.borderColor = '#ef4444'
+                                nodeElement.style.backgroundColor = ''
+                                
+                                // 更新节点标题，不需要添加错误标志
+                                const titleElement = nodeElement.querySelector('.node-title')
+                                if (titleElement) {
+                                    titleElement.textContent = node.serverName || '服务器'
+                                    titleElement.title = `服务器不存在: ${node.serverName || node.serverHost}`
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+        } catch (e) {
+            console.error('检查服务器失败:', e)
         }
     }
 
@@ -2031,23 +2092,78 @@ class WorkflowEditor {
         
         this.addSystemMessage('🚀 开始并发执行工作流...', 'info')
         
-        this.nodes.forEach(n => this.updateNodeStatus(n.id, 'pending'))
+        // 为每个命令节点创建执行状态记录
+        const commandNodeStatus = new Map()
+        
+        // 初始化命令节点状态
+        this.nodes.forEach(n => {
+            if (n.type === 'command' || n.type === 'upload') {
+                commandNodeStatus.set(n.id, {
+                    success: 0,
+                    error: 0,
+                    total: 0
+                })
+            }
+            this.updateNodeStatus(n.id, 'pending')
+        })
         
         const promises = []
         
         // 执行单个服务器节点
         serverNodes.forEach(sn => {
-            promises.push(this.runServerWorkflow(sn))
+            promises.push(this.runServerWorkflow(sn, null, commandNodeStatus))
         })
         
         await Promise.all(promises)
         
-        this.addSystemMessage('✅ 所有任务执行完成', 'success')
+        // 更新命令节点的状态
+        commandNodeStatus.forEach((status, nodeId) => {
+            if (status.total > 0) {
+                if (status.success === status.total) {
+                    // 所有服务器都执行成功
+                    this.updateNodeStatus(nodeId, 'success')
+                } else if (status.error === status.total) {
+                    // 所有服务器都执行失败
+                    this.updateNodeStatus(nodeId, 'error')
+                } else {
+                    // 部分成功，部分失败
+                    this.updateNodeStatus(nodeId, 'partial')
+                }
+            }
+        })
+        
+        // 检查是否有服务器节点执行失败
+        let hasError = false
+        let hasSuccess = false
+        
+        serverNodes.forEach(sn => {
+            const nodeElement = this.canvasContent.querySelector(`.canvas-node[data-id="${sn.id}"]`)
+            if (nodeElement) {
+                if (nodeElement.classList.contains('error')) {
+                    hasError = true
+                } else if (nodeElement.classList.contains('success')) {
+                    hasSuccess = true
+                }
+            }
+        })
+        
+        // 根据执行结果添加相应的消息
+        if (hasError && hasSuccess) {
+            // 部分成功，部分失败
+            this.addSystemMessage('⚠️ 部分任务执行完成', 'warning')
+        } else if (hasError) {
+            // 全部失败
+            this.addSystemMessage('❌ 所有任务执行失败', 'error')
+        } else {
+            // 全部成功
+            this.addSystemMessage('✅ 所有任务执行完成', 'success')
+        }
     }
 
-    async runServerWorkflow(startNode, serverContext = null) {
+    async runServerWorkflow(startNode, serverContext = null, commandNodeStatus = null) {
         // startNode: 画布上的起始节点 (server)
         // serverContext: 实际执行的服务器信息 {id, name, host...}
+        // commandNodeStatus: 命令节点执行状态记录
         // 如果 startNode 是 server 类型，serverContext 默认为 null，我们会从 startNode 提取
         
         let sn = startNode
@@ -2063,6 +2179,46 @@ class WorkflowEditor {
         
         if (!realServer) {
             console.error('Missing server context')
+            return
+        }
+        
+        // 检查服务器是否存在
+        let serverExists = false
+        try {
+            const res = await ServerAPI.listServers()
+            if (res.status === 'success' && res.data) {
+                serverExists = res.data.some(s => 
+                    s.id === realServer.serverId || 
+                    s.name === realServer.serverName || 
+                    s.host === realServer.serverHost
+                )
+            }
+        } catch (e) {
+            console.error('Error checking server existence:', e)
+        }
+        
+        // 如果服务器不存在，设置错误状态并返回
+        if (!serverExists) {
+            if (startNode.type === 'server') {
+                this.updateNodeStatus(sn.id, 'error')
+                this.addSystemMessage(`[${realServer.serverName}] 服务器不存在，无法执行工作流`, 'error')
+            }
+            
+            // 更新连接到该服务器的命令节点的状态记录
+            if (commandNodeStatus) {
+                const initialConnections = this.connections.filter(c => c.from === sn.id)
+                const initialNodes = initialConnections.map(c => this.nodes.find(n => n.id === c.to)).filter(n => n)
+                
+                initialNodes.forEach(node => {
+                    if (node.type === 'command' || node.type === 'upload') {
+                        const status = commandNodeStatus.get(node.id) || { success: 0, error: 0, total: 0 }
+                        status.total++
+                        status.error++
+                        commandNodeStatus.set(node.id, status)
+                    }
+                })
+            }
+            
             return
         }
 
@@ -2087,7 +2243,7 @@ class WorkflowEditor {
         
         try {
             // 并发执行所有起始分支
-            await Promise.all(initialNodes.map(node => this.executeNode(node, context, realServer)))
+            await Promise.all(initialNodes.map(node => this.executeNode(node, context, realServer, commandNodeStatus)))
             
             if (startNode.type === 'server') {
                 this.updateNodeStatus(sn.id, 'success')
@@ -2101,7 +2257,7 @@ class WorkflowEditor {
         }
     }
 
-    async executeNode(node, context, sn) {
+    async executeNode(node, context, sn, commandNodeStatus = null) {
         this.updateNodeStatus(node.id, 'running')
         
         let success = false
@@ -2200,7 +2356,20 @@ class WorkflowEditor {
             context[node.refName] = outputData
         }
         
-        this.updateNodeStatus(node.id, success ? 'success' : 'error')
+        // 更新命令节点的执行状态记录
+        if (commandNodeStatus && (node.type === 'command' || node.type === 'upload')) {
+            const status = commandNodeStatus.get(node.id) || { success: 0, error: 0, total: 0 }
+            status.total++
+            if (success) {
+                status.success++
+            } else {
+                status.error++
+            }
+            commandNodeStatus.set(node.id, status)
+        }
+        
+        // 暂时不更新节点状态，等待所有服务器执行完成后统一更新
+        // this.updateNodeStatus(node.id, success ? 'success' : 'error')
         
         // 决定下一步
         // 查找所有从当前节点出发的连接

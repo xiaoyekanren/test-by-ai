@@ -282,6 +282,11 @@
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2), var(--shadow-md);
 }
 
+.canvas-node.partial {
+    border-color: var(--warning-color);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2), var(--shadow-md);
+}
+
 /* 状态角标 */
 .node-status-badge {
     position: absolute;
@@ -304,7 +309,8 @@
 
 .canvas-node.running .node-status-badge,
 .canvas-node.success .node-status-badge,
-.canvas-node.error .node-status-badge {
+.canvas-node.error .node-status-badge,
+.canvas-node.partial .node-status-badge {
     opacity: 1;
     transform: scale(1);
 }
@@ -322,9 +328,14 @@
     background-color: var(--danger-color);
 }
 
+.canvas-node.partial .node-status-badge {
+    background-color: var(--warning-color);
+}
+
 .canvas-node.running .node-status-badge::before { content: '⟳'; }
 .canvas-node.success .node-status-badge::before { content: '✓'; }
 .canvas-node.error .node-status-badge::before { content: '✕'; }
+.canvas-node.partial .node-status-badge::before { content: '⚠'; }
 
 /* 旋转动画 */
 @keyframes spin {
