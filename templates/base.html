@@ -19,9 +19,21 @@
                 <li><a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="nav-label" title="首页">首页</span></a></li>
                 <li><a href="/integrated" class="{% if request.path == '/integrated' %}active{% endif %}"><span class="nav-label" title="集成监控">集成监控</span></a></li>
                 <li><a href="/servers" class="{% if request.path == '/servers' %}active{% endif %}"><span class="nav-label" title="服务器管理">服务器管理</span></a></li>
-                <li><a href="/workflow" class="{% if request.path == '/workflow' %}active{% endif %}"><span class="nav-label" title="工作流">工作流</span></a></li>
+                <li class="nav-item has-submenu">
+                    <a href="#" class="submenu-toggle"><span class="nav-label" title="工作流">工作流</span></a>
+                    <ul class="submenu">
+                        <li><a href="/workflow" class="{% if request.path == '/workflow' %}active{% endif %}"><span class="nav-label" title="系统">系统</span></a></li>
+                        <li><a href="/sql" class="{% if request.path == '/sql' %}active{% endif %}"><span class="nav-label" title="SQL">SQL</span></a></li>
+                        <li><a href="/api-page" class="{% if request.path == '/api-page' %}active{% endif %}"><span class="nav-label" title="接口">接口</span></a></li>
+                    </ul>
+                </li>
                 <li><a href="#" class="coming-soon"><span class="nav-label" title="服务部署">服务部署</span></a></li>
             </ul>
+            <div class="menu-toggle-container">
+                <button id="menu-toggle" class="menu-toggle-btn">
+                    <span class="menu-toggle-icon">←</span>
+                </button>
+            </div>
         </nav>
         
         <main class="main-content">
@@ -61,6 +73,30 @@
         }
         setInterval(updateTime, 1000);
         updateTime();
+        
+        // 菜单展开/收回逻辑
+        document.addEventListener('DOMContentLoaded', function() {
+            const submenuToggles = document.querySelectorAll('.submenu-toggle');
+            
+            submenuToggles.forEach(toggle => {
+                toggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const parentLi = this.closest('.has-submenu');
+                    parentLi.classList.toggle('collapsed');
+                    parentLi.classList.toggle('active');
+                });
+            });
+            
+            // 菜单隐藏/显示逻辑
+            const menuToggle = document.getElementById('menu-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (menuToggle && sidebar) {
+                menuToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                });
+            }
+        });
     </script>
 </body>
 </html>

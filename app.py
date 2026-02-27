@@ -54,6 +54,17 @@ def workflow():
     return render_template('workflow.html')
 
 
+@app.route('/sql')
+def sql():
+    """SQL 工具页面"""
+    return render_template('sql.html')
+
+
+@app.route('/api-page')
+def api_page():
+    """API 接口管理页面"""
+    return render_template('api.html')
+
 
 # ==================== 错误处理 ====================
 
