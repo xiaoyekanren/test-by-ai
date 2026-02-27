@@ -4,3 +4,5 @@ __pycache__
 venv
 .kiro
 .claude
+.trae
+.DS_Store
