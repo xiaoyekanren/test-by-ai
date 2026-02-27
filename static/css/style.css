@@ -265,45 +265,10 @@ body {
     z-index: 40;
 }
 
-.top-bar-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
 .top-bar h1 {
     font-size: 20px;
     font-weight: 600;
     color: var(--text-color);
-}
-
-.theme-toggle-btn {
-    background: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: var(--btn-radius);
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.theme-toggle-btn:hover {
-    background: var(--primary-hover);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-
-.theme-toggle-icon {
-    font-size: 16px;
-}
-
-.theme-toggle-text {
-    font-size: 14px;
 }
 
 .user-info {
