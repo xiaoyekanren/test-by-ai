@@ -39,7 +39,11 @@
         <main class="main-content">
             <header class="top-bar">
                 {% block header_content %}
-                <div>
+                <div class="top-bar-left">
+                    <button id="theme-toggle" class="theme-toggle-btn">
+                        <span class="theme-toggle-icon">🌙</span>
+                        <span class="theme-toggle-text">切换前端</span>
+                    </button>
                     <h1>{% block page_title %}服务器管理系统{% endblock %}</h1>
                 </div>
                 <div class="user-info">
@@ -95,6 +99,39 @@
                 menuToggle.addEventListener('click', function() {
                     sidebar.classList.toggle('collapsed');
                 });
+            }
+            
+            // 前端切换逻辑
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeIcon = document.querySelector('.theme-toggle-icon');
+            const themeText = document.querySelector('.theme-toggle-text');
+            
+            if (themeToggle) {
+                // 检查本地存储中的前端版本
+                const currentTheme = localStorage.getItem('frontendVersion') || 'new';
+                updateThemeUI(currentTheme);
+                
+                themeToggle.addEventListener('click', function() {
+                    const currentTheme = localStorage.getItem('frontendVersion') || 'new';
+                    const newTheme = currentTheme === 'new' ? 'old' : 'new';
+                    localStorage.setItem('frontendVersion', newTheme);
+                    updateThemeUI(newTheme);
+                    
+                    // 这里可以添加实际的前端切换逻辑
+                    alert(`已切换到${newTheme === 'new' ? '新' : '旧'}前端版本`);
+                });
+            }
+            
+            function updateThemeUI(theme) {
+                if (themeIcon && themeText) {
+                    if (theme === 'new') {
+                        themeIcon.textContent = '🌙';
+                        themeText.textContent = '切换到旧前端';
+                    } else {
+                        themeIcon.textContent = '☀️';
+                        themeText.textContent = '切换到新前端';
+                    }
+                }
             }
         });
     </script>
