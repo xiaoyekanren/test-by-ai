@@ -40,7 +40,7 @@ const handleEdit = (id: string) => {
 
 <style scoped>
 .workflows-view {
-  padding: 20px;
+  padding: 0;
 }
 
 .card-header {
