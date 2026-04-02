@@ -1,11 +1,17 @@
 # backend/app/schemas/workflow.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+
+# Node type literal for validation
+NODE_TYPE = Literal[
+    "shell", "upload", "download", "iotdb_deploy", "iotdb_start", "iotdb_stop",
+    "iotdb_cli", "condition", "loop", "wait", "parallel", "assert", "report", "summary", "notify"
+]
 
 class NodeDefinition(BaseModel):
     id: str
-    type: str  # shell, upload, download, iotdb_deploy, condition, loop, etc.
+    type: NODE_TYPE  # shell, upload, download, iotdb_deploy, condition, loop, etc.
     config: Dict[str, Any] = {}
     position: Optional[Dict[str, float]] = None  # {"x": 100, "y": 200}
 

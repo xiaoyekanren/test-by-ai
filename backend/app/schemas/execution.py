@@ -1,26 +1,31 @@
 # backend/app/schemas/execution.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 from datetime import datetime
+
+# Status literals for execution
+EXECUTION_STATUS = Literal["pending", "running", "paused", "completed", "failed"]
+TRIGGER_TYPE = Literal["manual", "scheduled", "api"]
+EXECUTION_RESULT = Literal["passed", "failed", "partial"]
 
 class ExecutionCreate(BaseModel):
     workflow_id: int
-    trigger_type: str = Field(default="manual")
+    trigger_type: TRIGGER_TYPE = Field(default="manual")
     triggered_by: Optional[str] = None
 
 class ExecutionUpdate(BaseModel):
-    status: Optional[str] = None
+    status: Optional[EXECUTION_STATUS] = None
 
 class ExecutionResponse(BaseModel):
     id: int
     workflow_id: int
-    status: str
-    trigger_type: str
+    status: EXECUTION_STATUS
+    trigger_type: TRIGGER_TYPE
     triggered_by: Optional[str]
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     duration: Optional[int]
-    result: Optional[str]
+    result: Optional[EXECUTION_RESULT]
     summary: Optional[Dict[str, Any]]
     created_at: datetime
 
