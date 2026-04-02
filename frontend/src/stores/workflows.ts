@@ -240,6 +240,15 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
   }
 
+  // Update node label
+  function updateNodeLabel(nodeId: string, label: string) {
+    const node = editorNodes.value.find(n => n.id === nodeId)
+    if (node) {
+      node.data.label = label
+      saveHistory()
+    }
+  }
+
   // Delete node
   function deleteNode(nodeId: string) {
     editorNodes.value = editorNodes.value.filter(n => n.id !== nodeId)
@@ -385,6 +394,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     addNode,
     updateNodePosition,
     updateNodeConfig,
+    updateNodeLabel,
     deleteNode,
     addEdge,
     deleteEdge,

@@ -15,8 +15,10 @@ import {
 import NodePalette from '@/components/workflow/NodePalette.vue'
 import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
+import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
+import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
 import { useWorkflowsStore } from '@/stores/workflows'
-import type { NodeType } from '@/types'
+import type { Execution, NodeType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +29,7 @@ const {
   onConnect,
   onNodeDragStop,
   onPaneReady,
+  onPaneClick,
   fitView,
   zoomIn,
   zoomOut,
@@ -47,6 +50,9 @@ const isNewWorkflow = computed(() => !workflowId.value)
 // Drag state
 const isDragging = ref(false)
 const draggedType = ref<NodeType | null>(null)
+
+// Execution panel state
+const showExecutionPanel = ref(false)
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -125,6 +131,11 @@ onNodeDragStop((event) => {
 // Handle pane ready (fit view on init)
 onPaneReady(() => {
   fitView({ padding: 0.2 })
+})
+
+// Handle pane click (deselect node)
+onPaneClick(() => {
+  workflowsStore.selectNode(null)
 })
 
 // Handle node click (selection)
@@ -226,21 +237,42 @@ const handleFitView = () => {
 // Handle run workflow
 const handleRun = async () => {
   if (workflowId.value) {
-    try {
-      await ElMessageBox.confirm(
-        'Are you sure you want to run this workflow?',
-        'Run Workflow',
-        {
-          confirmButtonText: 'Run',
-          cancelButtonText: 'Cancel',
-          type: 'info'
-        }
-      )
-      // TODO: Implement workflow execution (Phase2-9)
-      ElMessage.info('Workflow execution will be implemented in Phase2-9')
-    } catch {
-      // User cancelled
+    // Check if workflow has unsaved changes
+    if (workflowsStore.isDirty) {
+      try {
+        await ElMessageBox.confirm(
+          'The workflow has unsaved changes. Please save before running.',
+          'Unsaved Changes',
+          {
+            confirmButtonText: 'Save & Run',
+            cancelButtonText: 'Cancel',
+            type: 'warning'
+          }
+        )
+        // Save first then run
+        await handleSave(false)
+      } catch {
+        return
+      }
     }
+    // Show execution panel
+    showExecutionPanel.value = true
+  }
+}
+
+// Handle execution started
+const handleExecutionStarted = (execution: Execution) => {
+  ElMessage.success(`Execution #${execution.id} started`)
+}
+
+// Handle execution completed
+const handleExecutionCompleted = (execution: Execution) => {
+  if (execution.result === 'passed') {
+    ElMessage.success('Workflow execution completed successfully')
+  } else if (execution.result === 'failed') {
+    ElMessage.error('Workflow execution failed')
+  } else {
+    ElMessage.info('Workflow execution completed with partial results')
   }
 }
 </script>
@@ -308,6 +340,17 @@ const handleRun = async () => {
           </div>
         </div>
       </div>
+
+      <!-- Node Configuration Panel -->
+      <NodeConfigPanel />
+
+      <!-- Execution Panel (right side, toggleable) -->
+      <ExecutionPanel
+        v-if="showExecutionPanel"
+        :workflow-id="workflowId"
+        @execution-started="handleExecutionStarted"
+        @execution-completed="handleExecutionCompleted"
+      />
     </div>
   </div>
 </template>
