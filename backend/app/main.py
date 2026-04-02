@@ -25,5 +25,7 @@ async def health_check():
 # API routes
 from app.api.servers import router as servers_router
 from app.api.workflows import router as workflows_router
+from app.api.executions import router as executions_router
 app.include_router(servers_router, prefix="/api/servers", tags=["servers"])
 app.include_router(workflows_router, prefix="/api/workflows", tags=["workflows"])
+app.include_router(executions_router, prefix="/api/executions", tags=["executions"])
