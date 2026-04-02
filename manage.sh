@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # IoTDB Test Automation Platform - Service Management Script
-# Usage: ./manage.sh {start|stop|restart|status}
+# Usage: ./manage.sh {start|stop|restart|status|--help}
 
 set -e
 
@@ -38,6 +38,43 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+show_help() {
+    echo "IoTDB Test Automation Platform - Service Management"
+    echo ""
+    echo "Usage: $0 {start|stop|restart|status}"
+    echo ""
+    echo "Commands:"
+    echo "  start           Start all services (backend + frontend)"
+    echo "  stop            Stop all services"
+    echo "  restart         Restart all services"
+    echo "  status          Show service status"
+    echo ""
+    echo "  start-backend   Start only backend server"
+    echo "  stop-backend    Stop only backend server"
+    echo "  start-frontend  Start only frontend server"
+    echo "  stop-frontend   Stop only frontend server"
+    echo ""
+    echo "  logs            Follow backend logs (Ctrl+C to exit)"
+    echo "  logs-frontend   Follow frontend logs (Ctrl+C to exit)"
+    echo ""
+    echo "Configuration:"
+    echo "  Backend Port:   $BACKEND_PORT"
+    echo "  Frontend Port:  $FRONTEND_PORT"
+    echo "  PID Directory:  $PID_DIR"
+    echo "  Log Directory:  $LOG_DIR"
+    echo ""
+    echo "Examples:"
+    echo "  $0 start              # Start the platform"
+    echo "  $0 status             # Check if services are running"
+    echo "  $0 restart            # Restart all services"
+    echo "  $0 logs               # View backend logs in real-time"
+    echo ""
+    echo "Access URLs:"
+    echo "  Frontend:  http://localhost:$FRONTEND_PORT"
+    echo "  Backend:   http://localhost:$BACKEND_PORT"
+    echo "  API Docs:  http://localhost:$BACKEND_PORT/docs"
 }
 
 check_process() {
@@ -200,7 +237,8 @@ stop_all() {
     print_status "All services stopped"
 }
 
-case "$1" in
+# Main command dispatch
+case "${1:-}" in
     start)
         start_all
         ;;
@@ -236,24 +274,12 @@ case "$1" in
         echo "Frontend logs (Ctrl+C to exit):"
         tail -f "$FRONTEND_LOG"
         ;;
+    --help|-h|help)
+        show_help
+        exit 0
+        ;;
     *)
-        echo "IoTDB Test Automation Platform - Service Management"
-        echo ""
-        echo "Usage: $0 {start|stop|restart|status}"
-        echo ""
-        echo "Commands:"
-        echo "  start          Start all services (backend + frontend)"
-        echo "  stop           Stop all services"
-        echo "  restart        Restart all services"
-        echo "  status         Show service status"
-        echo ""
-        echo "  start-backend  Start only backend server"
-        echo "  stop-backend   Stop only backend server"
-        echo "  start-frontend Start only frontend server"
-        echo "  stop-frontend  Stop only frontend server"
-        echo ""
-        echo "  logs           Follow backend logs"
-        echo "  logs-frontend  Follow frontend logs"
+        show_help
         exit 1
         ;;
 esac
