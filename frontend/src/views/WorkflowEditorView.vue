@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
+import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import '@vue-flow/core/dist/style.css'

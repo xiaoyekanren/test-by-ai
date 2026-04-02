@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElCard, ElRow, ElCol, ElProgress } from 'element-plus'
+import { ElCard, ElRow, ElCol } from 'element-plus'
 
 const stats = {
   totalWorkflows: 10,
@@ -59,7 +59,7 @@ const stats = {
 
 <style scoped>
 .monitor-view {
-  padding: 20px;
+  padding: 0;
 }
 
 .stat-card {

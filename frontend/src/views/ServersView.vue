@@ -1,8 +1,5 @@
 <script setup lang="ts">
 import { ElCard, ElButton } from 'element-plus'
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
 
 const servers = [
   { id: '1', name: 'Server 1', host: '192.168.1.1', port: 22, status: 'online' },
@@ -36,7 +33,7 @@ const servers = [
 
 <style scoped>
 .servers-view {
-  padding: 20px;
+  padding: 0;
 }
 
 .card-header {
