@@ -22,9 +22,8 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "ok"}
 
-# API routes will be registered here in later tasks
-# from app.api import servers, workflows, executions, monitoring
-# app.include_router(servers.router, prefix="/api/servers", tags=["servers"])
-# app.include_router(workflows.router, prefix="/api/workflows", tags=["workflows"])
-# app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
-# app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
+# API routes
+from app.api.servers import router as servers_router
+from app.api.workflows import router as workflows_router
+app.include_router(servers_router, prefix="/api/servers", tags=["servers"])
+app.include_router(workflows_router, prefix="/api/workflows", tags=["workflows"])
