@@ -171,7 +171,7 @@ class MonitoringService:
                           server_name: Optional[str] = None) -> Dict[str, Any]:
         """Get remote server status via SSH.
 
-        Uses shell commands to gather CPU, memory, and disk info from remote server.
+        Uses a single combined shell command to gather CPU, memory, and disk info.
 
         Args:
             host: Remote server hostname or IP.
@@ -186,11 +186,6 @@ class MonitoringService:
         """
         logger.info(f"Getting remote status for server {server_name} (ID: {server_id}) at {host}")
 
-        # Commands to get system info (Linux/Unix)
-        cpu_cmd = "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1"
-        memory_cmd = "free -b | grep Mem"
-        disk_cmd = "df -B1 / | tail -1"
-
         result = {
             "server_id": server_id,
             "server_name": server_name,
@@ -200,62 +195,72 @@ class MonitoringService:
             "disk": {"total": 0, "used": 0, "free": 0, "percent": 0.0}
         }
 
-        # Get CPU usage
-        try:
-            cpu_result = self.ssh_service.run_command(host, username, password, cpu_cmd, port)
-            if cpu_result.exit_status == 0 and cpu_result.stdout.strip():
-                # Parse CPU usage
-                cpu_val = float(cpu_result.stdout.strip())
-                result["cpu_percent"] = cpu_val
-                logger.debug(f"Remote CPU percent: {cpu_val}%")
-        except Exception as e:
-            logger.warning(f"Failed to get remote CPU: {e}")
+        # Combined command to get all info in one SSH call
+        # Output format: CPU|MEM_TOTAL MEM_USED MEM_FREE MEM_AVAIL|DISK_TOTAL DISK_USED DISK_FREE DISK_PERCENT
+        combined_cmd = """
+echo "===CPU==="
+top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1 || echo "0"
+echo "===MEM==="
+free -b | grep Mem | awk '{print $2,$3,$4,$7}'
+echo "===DISK==="
+df -B1 / | tail -1 | awk '{print $2,$3,$4,$5}'
+"""
 
-        # Get memory info
         try:
-            mem_result = self.ssh_service.run_command(host, username, password, memory_cmd, port)
-            if mem_result.exit_status == 0 and mem_result.stdout.strip():
-                # Parse: Mem:   total    used    free    shared  buff/cache   available
-                parts = mem_result.stdout.split()
-                if len(parts) >= 7:
-                    total = int(parts[1])
-                    used = int(parts[2])
-                    free = int(parts[3])
-                    available = int(parts[6])
-                    percent = (used / total * 100) if total > 0 else 0
-                    result["memory"] = {
-                        "total": total,
-                        "available": available,
-                        "percent": round(percent, 1),
-                        "used": used,
-                        "free": free
-                    }
-                    logger.debug(f"Remote memory: {result['memory']}")
-        except Exception as e:
-            logger.warning(f"Failed to get remote memory: {e}")
+            cmd_result = self.ssh_service.run_command(host, username, password, combined_cmd, port)
+            if cmd_result.exit_status == 0 and cmd_result.stdout.strip():
+                output = cmd_result.stdout.strip()
 
-        # Get disk info
-        try:
-            disk_result = self.ssh_service.run_command(host, username, password, disk_cmd, port)
-            if disk_result.exit_status == 0 and disk_result.stdout.strip():
-                # Parse: filesystem size used available use% mounted
-                parts = disk_result.stdout.split()
-                if len(parts) >= 5:
-                    total = int(parts[1])
-                    used = int(parts[2])
-                    free = int(parts[3])
-                    percent = float(parts[4].rstrip('%'))
-                    result["disk"] = {
-                        "total": total,
-                        "used": used,
-                        "free": free,
-                        "percent": percent
-                    }
-                    logger.debug(f"Remote disk: {result['disk']}")
-        except Exception as e:
-            logger.warning(f"Failed to get remote disk: {e}")
+                # Parse CPU
+                try:
+                    cpu_section = output.split("===CPU===")[1].split("===MEM===")[0].strip()
+                    result["cpu_percent"] = float(cpu_section.split()[0])
+                except (ValueError, IndexError, KeyError):
+                    result["cpu_percent"] = 0.0
 
-        logger.info(f"Retrieved remote status for {server_name}: CPU={result['cpu_percent']}%, Memory={result['memory']['percent']}%, Disk={result['disk']['percent']}%")
+                # Parse Memory
+                try:
+                    mem_section = output.split("===MEM===")[1].split("===DISK===")[0].strip()
+                    parts = mem_section.split()
+                    if len(parts) >= 4:
+                        total = int(parts[0])
+                        used = int(parts[1])
+                        free = int(parts[2])
+                        available = int(parts[3])
+                        percent = (used / total * 100) if total > 0 else 0
+                        result["memory"] = {
+                            "total": total,
+                            "available": available,
+                            "percent": round(percent, 1),
+                            "used": used,
+                            "free": free
+                        }
+                except (ValueError, IndexError, KeyError):
+                    pass
+
+                # Parse Disk
+                try:
+                    disk_section = output.split("===DISK===")[1].strip()
+                    parts = disk_section.split()
+                    if len(parts) >= 4:
+                        total = int(parts[0])
+                        used = int(parts[1])
+                        free = int(parts[2])
+                        percent = float(parts[3].rstrip('%'))
+                        result["disk"] = {
+                            "total": total,
+                            "used": used,
+                            "free": free,
+                            "percent": percent
+                        }
+                except (ValueError, IndexError, KeyError):
+                    pass
+
+                logger.info(f"Retrieved remote status for {server_name}: CPU={result['cpu_percent']}%, "
+                           f"Memory={result['memory']['percent']}%, Disk={result['disk']['percent']}%")
+        except Exception as e:
+            logger.warning(f"Failed to get remote status for {server_name}: {e}")
+
         return result
 
     def get_remote_processes(self, host: str, username: Optional[str], password: Optional[str],

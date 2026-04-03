@@ -15,14 +15,21 @@ import {
   ElMessageBox,
   ElMessage,
   ElTooltip,
+  ElCollapse,
+  ElCollapseItem,
+  ElRadioGroup,
+  ElRadioButton,
   type FormInstance,
   type FormRules
 } from 'element-plus'
-import { Refresh, Plus, Edit, Delete, Connection, Promotion } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete, Connection, Promotion, CollectionTag, List } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import type { Server, ServerCreate, ServerUpdate } from '@/types'
 
 const serversStore = useServersStore()
+
+// View mode: 'group' for tags grouping, 'list' for flat list
+const viewMode = ref<'group' | 'list'>('list')
 
 // Form related
 const formRef = ref<FormInstance>()
@@ -68,22 +75,67 @@ const commandServerName = ref('')
 const commandResult = ref('')
 const commandLoading = ref(false)
 
-// Table sorting
-const sortProp = ref('name')
+// Table sorting - default to host:port ascending
+const sortProp = ref('host')
 const sortOrder = ref('ascending')
 
+// Sort servers by host:port
 const sortedServers = computed(() => {
   const servers = [...serversStore.servers]
   if (sortProp.value && sortOrder.value) {
     servers.sort((a, b) => {
-      const aVal = a[sortProp.value as keyof Server]
-      const bVal = b[sortProp.value as keyof Server]
+      let aVal: string | number
+      let bVal: string | number
+      if (sortProp.value === 'host') {
+        // Sort by host:port combination
+        aVal = `${a.host}:${a.port}`
+        bVal = `${b.host}:${b.port}`
+      } else {
+        aVal = a[sortProp.value as keyof Server] as string | number
+        bVal = b[sortProp.value as keyof Server] as string | number
+      }
       if (aVal === bVal) return 0
-      const comparison = aVal! < bVal! ? -1 : 1
+      const comparison = aVal < bVal ? -1 : 1
       return sortOrder.value === 'ascending' ? comparison : -comparison
     })
   }
   return servers
+})
+
+// Group servers by tags
+const groupedServers = computed(() => {
+  const groups: Record<string, Server[]> = {}
+  const untagged: Server[] = []
+
+  sortedServers.value.forEach(server => {
+    const tags = parseTags(server.tags)
+    if (tags.length === 0) {
+      untagged.push(server)
+    } else {
+      tags.forEach(tag => {
+        if (!groups[tag]) {
+          groups[tag] = []
+        }
+        groups[tag].push(server)
+      })
+    }
+  })
+
+  // Sort groups by tag name
+  const sortedGroups = Object.keys(groups).sort().map(tag => ({
+    tag,
+    servers: groups[tag]
+  }))
+
+  // Add untagged group at the end if there are any
+  if (untagged.length > 0) {
+    sortedGroups.push({
+      tag: 'Untagged',
+      servers: untagged
+    })
+  }
+
+  return sortedGroups
 })
 
 // Load servers on mount
@@ -100,8 +152,13 @@ async function loadServers() {
 }
 
 function handleSortChange({ prop, order }: { prop: string; order: string | null }) {
-  sortProp.value = prop
+  sortProp.value = prop || 'host'
   sortOrder.value = order || 'ascending'
+}
+
+// Switch view mode
+function handleViewModeChange() {
+  // View mode changed, no additional action needed
 }
 
 // Open create dialog
@@ -153,7 +210,7 @@ async function submitForm() {
 
     try {
       if (dialogMode.value === 'create') {
-        await serversStore.addServer({
+        const newServer = await serversStore.addServer({
           name: formData.name,
           host: formData.host,
           port: formData.port,
@@ -163,7 +220,9 @@ async function submitForm() {
           tags: formData.tags || null,
           role: formData.role
         })
-        ElMessage.success('Server created successfully')
+        dialogVisible.value = false
+        // Auto test connection after creating server
+        testConnection(newServer)
       } else if (currentServerId.value) {
         const updateData: ServerUpdate = {
           name: formData.name,
@@ -287,6 +346,10 @@ function parseTags(tags: string | null): string[] {
         <span class="server-count">{{ serversStore.servers.length }} servers</span>
       </div>
       <div class="toolbar-actions">
+        <ElRadioGroup v-model="viewMode" size="small" @change="handleViewModeChange">
+          <ElRadioButton value="list" :icon="List">List</ElRadioButton>
+          <ElRadioButton value="group" :icon="CollectionTag">By Tags</ElRadioButton>
+        </ElRadioGroup>
         <ElButton @click="loadServers" :icon="Refresh" :loading="serversStore.loading">
           Refresh
         </ElButton>
@@ -296,14 +359,15 @@ function parseTags(tags: string | null): string[] {
       </div>
     </div>
 
-    <!-- Server Table -->
+    <!-- List View -->
     <ElTable
+      v-if="viewMode === 'list'"
       :data="sortedServers"
       v-loading="serversStore.loading"
       stripe
       style="width: 100%"
       @sort-change="handleSortChange"
-      :default-sort="{ prop: 'name', order: 'ascending' }"
+      :default-sort="{ prop: 'host', order: 'ascending' }"
     >
       <ElTableColumn prop="name" label="Name" sortable="custom" min-width="150">
         <template #default="{ row }">
@@ -314,7 +378,7 @@ function parseTags(tags: string | null): string[] {
         </template>
       </ElTableColumn>
 
-      <ElTableColumn label="Host:Port" min-width="180">
+      <ElTableColumn label="Host:Port" prop="host" sortable="custom" min-width="180">
         <template #default="{ row }">
           <code class="host-port">{{ row.host }}:{{ row.port }}</code>
         </template>
@@ -391,6 +455,95 @@ function parseTags(tags: string | null): string[] {
         </template>
       </ElTableColumn>
     </ElTable>
+
+    <!-- Grouped View by Tags -->
+    <div v-else class="grouped-view">
+      <ElCollapse v-if="groupedServers.length > 0" accordion>
+        <ElCollapseItem
+          v-for="group in groupedServers"
+          :key="group.tag"
+          :name="group.tag"
+        >
+          <template #title>
+            <div class="group-header">
+              <ElTag size="small" type="info">{{ group.tag }}</ElTag>
+              <span class="group-count">{{ group.servers.length }} servers</span>
+            </div>
+          </template>
+          <ElTable
+            :data="group.servers"
+            stripe
+            style="width: 100%"
+            size="small"
+          >
+            <ElTableColumn prop="name" label="Name" min-width="150">
+              <template #default="{ row }">
+                <div class="server-name">
+                  <span class="name-text">{{ row.name }}</span>
+                  <span v-if="row.description" class="description">{{ row.description }}</span>
+                </div>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn label="Host:Port" min-width="180">
+              <template #default="{ row }">
+                <code class="host-port">{{ row.host }}:{{ row.port }}</code>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn prop="status" label="Status" width="100">
+              <template #default="{ row }">
+                <ElTag :type="getStatusType(row.status)" size="small">
+                  {{ row.status }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn prop="role" label="Role" width="80">
+              <template #default="{ row }">
+                <ElTag size="small" :type="row.role === 'master' ? 'warning' : 'info'">
+                  {{ row.role }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn label="Actions" width="200" fixed="right">
+              <template #default="{ row }">
+                <div class="action-buttons">
+                  <ElTooltip content="Test Connection" placement="top">
+                    <ElButton
+                      size="small"
+                      :icon="Connection"
+                      @click="testConnection(row)"
+                      :loading="serversStore.loading"
+                    />
+                  </ElTooltip>
+                  <ElTooltip content="Edit" placement="top">
+                    <ElButton
+                      size="small"
+                      type="primary"
+                      :icon="Edit"
+                      @click="openEditDialog(row)"
+                    />
+                  </ElTooltip>
+                  <ElTooltip content="Delete" placement="top">
+                    <ElButton
+                      size="small"
+                      type="danger"
+                      :icon="Delete"
+                      @click="deleteServer(row)"
+                    />
+                  </ElTooltip>
+                </div>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+        </ElCollapseItem>
+      </ElCollapse>
+      <div v-else class="empty-groups">
+        <span>No servers found</span>
+      </div>
+    </div>
 
     <!-- Add/Edit Server Dialog -->
     <ElDialog
@@ -618,5 +771,26 @@ function parseTags(tags: string | null): string[] {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
+}
+
+.grouped-view {
+  margin-top: 20px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.group-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.empty-groups {
+  text-align: center;
+  padding: 40px;
+  color: #909399;
 }
 </style>

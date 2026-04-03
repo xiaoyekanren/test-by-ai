@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { Refresh, User } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Refresh, User, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 
 const pageTitle = computed(() => {
   const routeMap: Record<string, string> = {
     '/': '首页',
     '/servers': '服务器管理',
     '/workflows': '工作流管理',
-    '/monitor': '系统监控'
+    '/monitor': '系统监控',
+    '/settings': '系统设置'
   }
   if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
     return '工作流编辑'
@@ -24,7 +26,8 @@ const breadcrumbs = computed(() => {
     const routeMap: Record<string, string> = {
       '/servers': '服务器管理',
       '/workflows': '工作流管理',
-      '/monitor': '系统监控'
+      '/monitor': '系统监控',
+      '/settings': '系统设置'
     }
     if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
       crumbs.push({ title: '工作流管理', path: '/workflows' })
@@ -42,6 +45,10 @@ const emit = defineEmits<{
 
 const handleRefresh = () => {
   emit('refresh')
+}
+
+const goToSettings = () => {
+  router.push('/settings')
 }
 </script>
 
@@ -73,7 +80,10 @@ const handleRefresh = () => {
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item>个人中心</el-dropdown-item>
-            <el-dropdown-item>系统设置</el-dropdown-item>
+            <el-dropdown-item @click="goToSettings">
+              <el-icon><Setting /></el-icon>
+              系统设置
+            </el-dropdown-item>
             <el-dropdown-item divided>退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
