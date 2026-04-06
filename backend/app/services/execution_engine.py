@@ -196,6 +196,14 @@ class ExecutionEngine:
             return self._execute_iotdb_cli_node(merged)
         if node_type == "iotdb_stop":
             return self._execute_iotdb_stop_node(merged)
+        if node_type == "iotdb_cluster_deploy":
+            return self._execute_iotdb_cluster_deploy_node(merged)
+        if node_type == "iotdb_cluster_start":
+            return self._execute_iotdb_cluster_start_node(merged)
+        if node_type == "iotdb_cluster_check":
+            return self._execute_iotdb_cluster_check_node(merged)
+        if node_type == "iotdb_cluster_stop":
+            return self._execute_iotdb_cluster_stop_node(merged)
 
         return {
             "exit_status": 0,
@@ -313,81 +321,37 @@ class ExecutionEngine:
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
         server = self._require_server(config)
+        role = self._normalize_node_role(config.get("node_role"))
+
         if node_type == "iotdb_config":
             iotdb_home = self._required_str(config, "iotdb_home")
-            file_path = config.get("file_path") or f"{iotdb_home.rstrip('/')}/conf/iotdb-system.properties"
+            file_path = config.get("file_path") or self._default_config_path(iotdb_home)
             replacements = config.get("config_items") or {}
         else:
             file_path = self._required_str(config, "file_path")
             replacements = config.get("config_items") or config.get("replacements") or {}
+            iotdb_home = config.get("iotdb_home")
 
         if not isinstance(replacements, dict) or not replacements:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "config_items/replacements must be a non-empty object"}
-
-        read_result = self.ssh_service.read_file(
-            host=server.host,
-            username=server.username,
-            password=server.password,
-            remote_path=file_path,
-            port=server.port,
-            timeout=int(config.get("timeout", 60))
-        )
-        if read_result["status"] != "success":
             return {
                 "exit_status": -1,
                 "stdout": "",
-                "stderr": read_result.get("message", ""),
-                "error": read_result.get("message", "Failed to read config file")
+                "stderr": "",
+                "error": "config_items/replacements must be a non-empty object"
             }
 
-        original = read_result["content"]
-        updated = self._replace_properties(original, replacements)
-        backup_path = None
-
-        if bool(config.get("backup_before_write", False)):
-            backup_path = f"{file_path}.bak.{int(time.time())}"
-            backup_result = self.ssh_service.run_command(
-                host=server.host,
-                username=server.username,
-                password=server.password,
-                command=f"cp {self._quote(file_path)} {self._quote(backup_path)}",
-                port=server.port,
-                timeout=int(config.get("timeout", 60))
-            )
-            if backup_result.exit_status != 0:
-                return self._ssh_result_to_dict(backup_result)
-
-        write_result = self.ssh_service.write_file(
-            host=server.host,
-            username=server.username,
-            password=server.password,
-            remote_path=file_path,
-            content=updated,
-            port=server.port,
-            timeout=int(config.get("timeout", 60))
+        result = self._apply_config_file_to_server(
+            server=server,
+            file_path=file_path,
+            replacements=replacements,
+            timeout=int(config.get("timeout", 60)),
+            backup_before_write=bool(config.get("backup_before_write", False))
         )
-        if write_result["status"] != "success":
-            return {
-                "exit_status": -1,
-                "stdout": "",
-                "stderr": write_result.get("message", ""),
-                "error": write_result.get("message", "Failed to write config file")
-            }
-
-        result: Dict[str, Any] = {
-            "exit_status": 0,
-            "stdout": f"Updated configuration file {file_path}",
-            "stderr": "",
-            "file_path": file_path,
-            "conf_path": file_path,
-            "updated_keys": sorted(replacements.keys())
-        }
-        if backup_path:
-            result["backup_path"] = backup_path
-        if "iotdb_home" in config:
-            result["iotdb_home"] = config["iotdb_home"]
-        if "rpc_port" in context:
-            result["rpc_port"] = context["rpc_port"]
+        if result.get("exit_status") == 0 and iotdb_home:
+            result["iotdb_home"] = iotdb_home
+            result["node_role"] = role
+            if "rpc_port" in context:
+                result["rpc_port"] = context["rpc_port"]
         return result
 
     def _execute_log_view_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -409,89 +373,48 @@ class ExecutionEngine:
 
     def _execute_iotdb_deploy_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
         server = self._require_server(config)
+        role = self._normalize_node_role(config.get("node_role"))
         install_dir = self._required_str(config, "install_dir", "install_path")
-        overwrite = bool(config.get("overwrite", False))
-        package_type = str(config.get("package_type", "auto"))
-        artifact_local_path = config.get("artifact_local_path") or config.get("local_path")
         remote_package_path = config.get("remote_package_path") or config.get("remote_path")
-        extract_subdir = str(config.get("extract_subdir", "") or "").strip("/")
+        if not remote_package_path and config.get("artifact_local_path"):
+            remote_package_path = f"/tmp/{os.path.basename(str(config['artifact_local_path']))}"
 
-        if artifact_local_path and not remote_package_path:
-            remote_package_path = f"/tmp/{os.path.basename(str(artifact_local_path))}"
-        if not remote_package_path:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "remote_package_path is required"}
-
-        if artifact_local_path:
-            upload_result = self._execute_upload_node({
-                **config,
-                "local_path": artifact_local_path,
-                "remote_path": remote_package_path,
-                "server_id": server.id
-            })
-            if upload_result.get("exit_status") != 0:
-                return upload_result
-
-        detected_type = self._detect_package_type(str(remote_package_path), package_type)
-        if detected_type is None:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Unsupported package_type"}
-
-        tmp_dir = f"{install_dir}.extracting"
-        commands = [
-            "set -e",
-            f"mkdir -p {self._quote(os.path.dirname(install_dir) or '/')}",
-        ]
-        if overwrite:
-            commands.append(f"rm -rf {self._quote(install_dir)}")
-        commands.extend([
-            f"rm -rf {self._quote(tmp_dir)}",
-            f"mkdir -p {self._quote(tmp_dir)}"
-        ])
-
-        if detected_type == "tar.gz":
-            commands.append(f"tar -xzf {self._quote(str(remote_package_path))} -C {self._quote(tmp_dir)}")
-        else:
-            commands.append(f"unzip -q {self._quote(str(remote_package_path))} -d {self._quote(tmp_dir)}")
-
-        if extract_subdir:
-            source_dir_expr = f"{tmp_dir.rstrip('/')}/{extract_subdir}"
-        else:
-            source_dir_expr = '$(find ' + self._quote(tmp_dir) + " -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-
-        commands.extend([
-            f"source_dir={source_dir_expr}",
-            'if [ -z "$source_dir" ]; then source_dir=' + self._quote(tmp_dir) + "; fi",
-            f"mkdir -p {self._quote(install_dir)}",
-            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/",
-            f"test -f {self._quote(f'{install_dir.rstrip('/')}/sbin/start-standalone.sh')}",
-            f"rm -rf {self._quote(tmp_dir)}"
-        ])
-
-        result = self.ssh_service.run_command(
-            host=server.host,
-            username=server.username,
-            password=server.password,
-            command="bash -lc " + self._quote("\n".join(commands)),
-            port=server.port,
-            timeout=int(config.get("timeout", 600))
+        deploy_result = self._deploy_package_to_server(
+            server=server,
+            artifact_local_path=config.get("artifact_local_path") or config.get("local_path"),
+            remote_package_path=str(remote_package_path or ""),
+            install_dir=install_dir,
+            package_type=str(config.get("package_type", "auto")),
+            extract_subdir=str(config.get("extract_subdir", "") or "").strip("/"),
+            overwrite=bool(config.get("overwrite", False)),
+            timeout=int(config.get("timeout", 600)),
+            node_role=role
         )
-        payload = self._ssh_result_to_dict(result)
-        payload.update({
-            "remote_package_path": remote_package_path,
-            "iotdb_home": install_dir,
-            "conf_path": f"{install_dir.rstrip('/')}/conf/iotdb-system.properties",
-            "rpc_port": int(config.get("rpc_port", 6667))
+        if deploy_result.get("exit_status") != 0:
+            return deploy_result
+
+        rpc_port = int(config.get("rpc_port", 6667))
+        deploy_result.update({
+            "node_role": role,
+            "server_id": server.id,
+            "host": server.host,
+            "rpc_port": rpc_port,
+            "wait_port": int(config.get("wait_port", rpc_port))
         })
-        return payload
+        return deploy_result
 
     def _execute_iotdb_start_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
         server = self._require_server(config)
+        role = self._normalize_node_role(config.get("node_role"))
         iotdb_home = self._required_str(config, "iotdb_home")
         host = str(config.get("host") or server.host or "127.0.0.1")
         rpc_port = int(config.get("rpc_port", config.get("wait_port", 6667)))
+        wait_port = int(config.get("wait_port", self._default_wait_port(role, config)))
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
         wait_strategy = str(config.get("wait_strategy", "port"))
 
-        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/start-standalone.sh"
+        script_name = self._start_script_for_role(role)
+        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name}"
         start_result = self.ssh_service.run_command(
             host=server.host,
             username=server.username,
@@ -502,16 +425,27 @@ class ExecutionEngine:
         )
         if start_result.exit_status != 0:
             payload = self._ssh_result_to_dict(start_result)
-            payload.update({"iotdb_home": iotdb_home, "rpc_port": rpc_port})
+            payload.update({"iotdb_home": iotdb_home, "rpc_port": rpc_port, "wait_port": wait_port, "node_role": role})
             return payload
 
         deadline = time.time() + timeout_seconds
         last_result = None
         while time.time() < deadline:
-            if wait_strategy == "cli":
-                last_result = self._run_iotdb_sql(server, iotdb_home, host, rpc_port, "root", "root", "show databases", "tree", 20)
+            effective_cli_check = wait_strategy == "cli" and role in {"standalone", "datanode"}
+            if effective_cli_check:
+                last_result = self._run_iotdb_sql(
+                    server,
+                    iotdb_home,
+                    host,
+                    rpc_port,
+                    str(config.get("username") or "root"),
+                    str(config.get("password") or "root"),
+                    "show databases",
+                    str(config.get("sql_dialect") or "tree"),
+                    20
+                )
             else:
-                wait_cmd = f"bash -lc 'echo >/dev/tcp/{host}/{rpc_port}'"
+                wait_cmd = "bash -lc " + self._quote(f"echo >/dev/tcp/{host}/{wait_port}")
                 last_result = self.ssh_service.run_command(
                     host=server.host,
                     username=server.username,
@@ -528,7 +462,10 @@ class ExecutionEngine:
                     "stderr": start_result.stderr + (last_result.stderr or ""),
                     "iotdb_home": iotdb_home,
                     "rpc_port": rpc_port,
-                    "host": host
+                    "wait_port": wait_port,
+                    "host": host,
+                    "node_role": role,
+                    "start_script": script_name
                 }
             time.sleep(2)
 
@@ -539,7 +476,10 @@ class ExecutionEngine:
             "error": f"IoTDB did not become ready within {timeout_seconds} seconds",
             "iotdb_home": iotdb_home,
             "rpc_port": rpc_port,
-            "host": host
+            "wait_port": wait_port,
+            "host": host,
+            "node_role": role,
+            "start_script": script_name
         }
 
     def _execute_iotdb_cli_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -551,16 +491,247 @@ class ExecutionEngine:
         password = str(config.get("password") or "root")
         sql_dialect = str(config.get("sql_dialect") or "tree")
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 300)))
-        sqls = config.get("sqls") or config.get("commands") or []
-
-        if isinstance(sqls, str):
-            sql_list = [line.strip() for line in sqls.splitlines() if line.strip()]
-        else:
-            sql_list = [str(item).strip() for item in sqls if str(item).strip()]
-
+        sql_list = self._normalize_line_list(config.get("sqls") or config.get("commands") or [])
         if not sql_list:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "At least one SQL statement is required"}
 
+        return self._run_sql_batch(
+            server=server,
+            iotdb_home=iotdb_home,
+            host=host,
+            rpc_port=rpc_port,
+            username=username,
+            password=password,
+            sql_dialect=sql_dialect,
+            sql_list=sql_list,
+            timeout_seconds=timeout_seconds
+        )
+
+    def _execute_iotdb_stop_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        server = self._require_server(config)
+        role = self._normalize_node_role(config.get("node_role"))
+        iotdb_home = self._required_str(config, "iotdb_home")
+        graceful = bool(config.get("graceful", True))
+        timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
+        script_name = self._stop_script_for_role(role)
+        script = f"bash sbin/{script_name}"
+        if not graceful:
+            script += " -f"
+
+        stop_script = f"cd {self._quote(iotdb_home)} && {script}"
+        result = self.ssh_service.run_command(
+            host=server.host,
+            username=server.username,
+            password=server.password,
+            command="bash -lc " + self._quote(stop_script),
+            port=server.port,
+            timeout=timeout_seconds
+        )
+        payload = self._ssh_result_to_dict(result)
+        payload["iotdb_home"] = iotdb_home
+        payload["node_role"] = role
+        payload["stop_script"] = script_name
+        return payload
+
+    def _execute_iotdb_cluster_deploy_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        cluster_name = str(config.get("cluster_name") or "defaultCluster")
+        config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
+        data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
+        if not config_nodes:
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "At least one ConfigNode is required"}
+        if not data_nodes:
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "At least one DataNode is required"}
+
+        common_config = config.get("common_config") or {}
+        if not isinstance(common_config, dict):
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "common_config must be an object"}
+
+        results: List[Dict[str, Any]] = []
+        stdout_parts: List[str] = []
+        seed_cn = config_nodes[0]
+        seed = f"{seed_cn['host']}:{seed_cn['cn_internal_port']}"
+
+        for entry in config_nodes + data_nodes:
+            server = self._require_server(entry)
+            deploy_result = self._deploy_package_to_server(
+                server=server,
+                artifact_local_path=config.get("artifact_local_path"),
+                remote_package_path=self._required_str(config, "remote_package_path"),
+                install_dir=str(entry["install_dir"]),
+                package_type=str(config.get("package_type", "auto")),
+                extract_subdir=str(config.get("extract_subdir", "") or "").strip("/"),
+                overwrite=bool(config.get("overwrite", False)),
+                timeout=int(config.get("timeout", 900)),
+                node_role=str(entry["node_role"])
+            )
+            results.append({"step": "deploy", "node": entry, "result": deploy_result})
+            stdout_parts.append(deploy_result.get("stdout", ""))
+            if deploy_result.get("exit_status") != 0:
+                return self._cluster_failure("Cluster deploy failed during package deployment", results, cluster_name, config_nodes, data_nodes)
+
+            replacements = self._build_cluster_replacements(
+                entry=entry,
+                cluster_name=cluster_name,
+                seed_config_node=seed,
+                common_config=common_config
+            )
+            config_result = self._apply_config_file_to_server(
+                server=server,
+                file_path=self._default_config_path(str(entry["install_dir"])),
+                replacements=replacements,
+                timeout=int(config.get("timeout", 900)),
+                backup_before_write=bool(config.get("backup_before_write", True))
+            )
+            results.append({"step": "config", "node": entry, "result": config_result})
+            stdout_parts.append(config_result.get("stdout", ""))
+            if config_result.get("exit_status") != 0:
+                return self._cluster_failure("Cluster deploy failed during config write", results, cluster_name, config_nodes, data_nodes)
+
+        return {
+            "exit_status": 0,
+            "stdout": "\n".join(part for part in stdout_parts if part).strip(),
+            "stderr": "",
+            "cluster_name": cluster_name,
+            "config_nodes": config_nodes,
+            "data_nodes": data_nodes,
+            "results": results
+        }
+
+    def _execute_iotdb_cluster_start_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        cluster_name = str(config.get("cluster_name") or "defaultCluster")
+        config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
+        data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
+        wait_strategy = str(config.get("wait_strategy") or "port")
+        timeout_seconds = int(config.get("timeout_seconds", 180))
+        results: List[Dict[str, Any]] = []
+
+        for entry in config_nodes + data_nodes:
+            start_result = self._execute_iotdb_start_node({
+                "server_id": entry["server_id"],
+                "node_role": entry["node_role"],
+                "iotdb_home": entry["install_dir"],
+                "host": entry["host"],
+                "rpc_port": entry.get("dn_rpc_port", entry.get("rpc_port", 6667)),
+                "wait_port": self._cluster_wait_port(entry),
+                "wait_strategy": wait_strategy,
+                "timeout_seconds": timeout_seconds
+            })
+            results.append({"node": entry, "result": start_result})
+            if start_result.get("exit_status") != 0:
+                return self._cluster_failure("Cluster start failed", results, cluster_name, config_nodes, data_nodes)
+
+        return {
+            "exit_status": 0,
+            "stdout": "\n".join(item["result"].get("stdout", "") for item in results if item["result"].get("stdout")).strip(),
+            "stderr": "",
+            "cluster_name": cluster_name,
+            "config_nodes": config_nodes,
+            "data_nodes": data_nodes,
+            "started_nodes": results
+        }
+
+    def _execute_iotdb_cluster_check_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        cluster_name = str(config.get("cluster_name") or "defaultCluster")
+        config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
+        data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
+        if not data_nodes:
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "At least one DataNode is required for cluster check"}
+
+        primary = data_nodes[0]
+        server = self._require_server({"server_id": primary["server_id"]})
+        username = str(config.get("username") or "root")
+        password = str(config.get("password") or "root")
+        sql_dialect = str(config.get("sql_dialect") or "tree")
+        timeout_seconds = int(config.get("timeout_seconds", 300))
+        validation_sqls = self._normalize_line_list(config.get("validation_sqls") or [])
+
+        cluster_check = self._run_iotdb_sql(
+            server=server,
+            iotdb_home=str(primary["install_dir"]),
+            host=str(primary["host"]),
+            rpc_port=int(primary.get("dn_rpc_port", primary.get("rpc_port", 6667))),
+            username=username,
+            password=password,
+            sql="show cluster",
+            sql_dialect=sql_dialect,
+            timeout=timeout_seconds
+        )
+        if cluster_check.exit_status != 0:
+            payload = self._ssh_result_to_dict(cluster_check)
+            payload.update({"cluster_name": cluster_name, "config_nodes": config_nodes, "data_nodes": data_nodes})
+            return payload
+
+        result: Dict[str, Any] = {
+            "exit_status": 0,
+            "stdout": cluster_check.stdout,
+            "stderr": cluster_check.stderr,
+            "results": [self._ssh_result_to_dict(cluster_check) | {"sql": "show cluster"}],
+            "cluster_name": cluster_name,
+            "config_nodes": config_nodes,
+            "data_nodes": data_nodes
+        }
+        if validation_sqls:
+            batch_result = self._run_sql_batch(
+                server=server,
+                iotdb_home=str(primary["install_dir"]),
+                host=str(primary["host"]),
+                rpc_port=int(primary.get("dn_rpc_port", primary.get("rpc_port", 6667))),
+                username=username,
+                password=password,
+                sql_dialect=sql_dialect,
+                sql_list=validation_sqls,
+                timeout_seconds=timeout_seconds
+            )
+            if batch_result.get("exit_status") != 0:
+                batch_result.update({"cluster_name": cluster_name, "config_nodes": config_nodes, "data_nodes": data_nodes})
+                return batch_result
+            result["stdout"] = "\n".join(part for part in [cluster_check.stdout, batch_result.get("stdout", "")] if part).strip()
+            result["results"].extend(batch_result.get("results", []))
+
+        return result
+
+    def _execute_iotdb_cluster_stop_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        cluster_name = str(config.get("cluster_name") or "defaultCluster")
+        config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
+        data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
+        graceful = bool(config.get("graceful", True))
+        timeout_seconds = int(config.get("timeout_seconds", 180))
+        results: List[Dict[str, Any]] = []
+
+        for entry in list(reversed(data_nodes)) + list(reversed(config_nodes)):
+            stop_result = self._execute_iotdb_stop_node({
+                "server_id": entry["server_id"],
+                "node_role": entry["node_role"],
+                "iotdb_home": entry["install_dir"],
+                "graceful": graceful,
+                "timeout_seconds": timeout_seconds
+            })
+            results.append({"node": entry, "result": stop_result})
+            if stop_result.get("exit_status") != 0:
+                return self._cluster_failure("Cluster stop failed", results, cluster_name, config_nodes, data_nodes)
+
+        return {
+            "exit_status": 0,
+            "stdout": "\n".join(item["result"].get("stdout", "") for item in results if item["result"].get("stdout")).strip(),
+            "stderr": "",
+            "cluster_name": cluster_name,
+            "config_nodes": config_nodes,
+            "data_nodes": data_nodes,
+            "stopped_nodes": results
+        }
+
+    def _run_sql_batch(
+        self,
+        server: Server,
+        iotdb_home: str,
+        host: str,
+        rpc_port: int,
+        username: str,
+        password: str,
+        sql_dialect: str,
+        sql_list: List[str],
+        timeout_seconds: int
+    ) -> Dict[str, Any]:
         results: List[Dict[str, Any]] = []
         stdout_parts: List[str] = []
         stderr_parts: List[str] = []
@@ -605,28 +776,6 @@ class ExecutionEngine:
             "host": host
         }
 
-    def _execute_iotdb_stop_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
-        iotdb_home = self._required_str(config, "iotdb_home")
-        graceful = bool(config.get("graceful", True))
-        timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
-        script = "bash sbin/stop-standalone.sh"
-        if not graceful:
-            script += " -f"
-
-        stop_script = f"cd {self._quote(iotdb_home)} && {script}"
-        result = self.ssh_service.run_command(
-            host=server.host,
-            username=server.username,
-            password=server.password,
-            command="bash -lc " + self._quote(stop_script),
-            port=server.port,
-            timeout=timeout_seconds
-        )
-        payload = self._ssh_result_to_dict(result)
-        payload["iotdb_home"] = iotdb_home
-        return payload
-
     def _run_iotdb_sql(
         self,
         server: Server,
@@ -654,15 +803,275 @@ class ExecutionEngine:
             timeout=timeout
         )
 
+    def _apply_config_file_to_server(
+        self,
+        server: Server,
+        file_path: str,
+        replacements: Dict[str, Any],
+        timeout: int,
+        backup_before_write: bool
+    ) -> Dict[str, Any]:
+        read_result = self.ssh_service.read_file(
+            host=server.host,
+            username=server.username,
+            password=server.password,
+            remote_path=file_path,
+            port=server.port,
+            timeout=timeout
+        )
+        if read_result["status"] != "success":
+            return {
+                "exit_status": -1,
+                "stdout": "",
+                "stderr": read_result.get("message", ""),
+                "error": read_result.get("message", "Failed to read config file")
+            }
+
+        updated = self._replace_properties(read_result["content"], replacements)
+        backup_path = None
+        if backup_before_write:
+            backup_path = f"{file_path}.bak.{int(time.time())}"
+            backup_result = self.ssh_service.run_command(
+                host=server.host,
+                username=server.username,
+                password=server.password,
+                command=f"cp {self._quote(file_path)} {self._quote(backup_path)}",
+                port=server.port,
+                timeout=timeout
+            )
+            if backup_result.exit_status != 0:
+                return self._ssh_result_to_dict(backup_result)
+
+        write_result = self.ssh_service.write_file(
+            host=server.host,
+            username=server.username,
+            password=server.password,
+            remote_path=file_path,
+            content=updated,
+            port=server.port,
+            timeout=timeout
+        )
+        if write_result["status"] != "success":
+            return {
+                "exit_status": -1,
+                "stdout": "",
+                "stderr": write_result.get("message", ""),
+                "error": write_result.get("message", "Failed to write config file")
+            }
+
+        result: Dict[str, Any] = {
+            "exit_status": 0,
+            "stdout": f"Updated configuration file {file_path}",
+            "stderr": "",
+            "file_path": file_path,
+            "conf_path": file_path,
+            "updated_keys": sorted(replacements.keys())
+        }
+        if backup_path:
+            result["backup_path"] = backup_path
+        return result
+
+    def _deploy_package_to_server(
+        self,
+        server: Server,
+        artifact_local_path: Any,
+        remote_package_path: str,
+        install_dir: str,
+        package_type: str,
+        extract_subdir: str,
+        overwrite: bool,
+        timeout: int,
+        node_role: str
+    ) -> Dict[str, Any]:
+        if not remote_package_path:
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "remote_package_path is required"}
+
+        if artifact_local_path:
+            upload_result = self._execute_upload_node({
+                "server_id": server.id,
+                "local_path": artifact_local_path,
+                "remote_path": remote_package_path,
+                "timeout": timeout
+            })
+            if upload_result.get("exit_status") != 0:
+                return upload_result
+
+        detected_type = self._detect_package_type(remote_package_path, package_type)
+        if detected_type is None:
+            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Unsupported package_type"}
+
+        expected_script = self._start_script_for_role(node_role)
+        tmp_dir = f"{install_dir}.extracting"
+        commands = [
+            "set -e",
+            f"mkdir -p {self._quote(os.path.dirname(install_dir) or '/')}",
+        ]
+        if overwrite:
+            commands.append(f"rm -rf {self._quote(install_dir)}")
+        commands.extend([
+            f"rm -rf {self._quote(tmp_dir)}",
+            f"mkdir -p {self._quote(tmp_dir)}"
+        ])
+
+        if detected_type == "tar.gz":
+            commands.append(f"tar -xzf {self._quote(remote_package_path)} -C {self._quote(tmp_dir)}")
+        else:
+            commands.append(f"unzip -q {self._quote(remote_package_path)} -d {self._quote(tmp_dir)}")
+
+        if extract_subdir:
+            source_dir_expr = f"{tmp_dir.rstrip('/')}/{extract_subdir}"
+        else:
+            source_dir_expr = '$(find ' + self._quote(tmp_dir) + " -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+
+        commands.extend([
+            f"source_dir={source_dir_expr}",
+            'if [ -z "$source_dir" ]; then source_dir=' + self._quote(tmp_dir) + "; fi",
+            f"mkdir -p {self._quote(install_dir)}",
+            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/",
+            f"test -f {self._quote(f'{install_dir.rstrip('/')}/sbin/{expected_script}')}",
+            f"rm -rf {self._quote(tmp_dir)}"
+        ])
+
+        result = self.ssh_service.run_command(
+            host=server.host,
+            username=server.username,
+            password=server.password,
+            command="bash -lc " + self._quote("\n".join(commands)),
+            port=server.port,
+            timeout=timeout
+        )
+        payload = self._ssh_result_to_dict(result)
+        payload.update({
+            "remote_package_path": remote_package_path,
+            "iotdb_home": install_dir,
+            "conf_path": self._default_config_path(install_dir),
+            "expected_start_script": expected_script
+        })
+        return payload
+
+    def _normalize_cluster_nodes(self, raw_nodes: Any, role: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not isinstance(raw_nodes, list):
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+        base_install_dir = str(config.get("install_dir") or "/opt/iotdb-cluster")
+        for index, item in enumerate(raw_nodes):
+            if not isinstance(item, dict):
+                continue
+            server_id = item.get("server_id")
+            if server_id is None:
+                continue
+            server = self.db.query(Server).filter(Server.id == int(server_id)).first()
+            if not server:
+                continue
+
+            node_role = self._normalize_node_role(item.get("node_role") or role)
+            host = str(item.get("host") or server.host)
+            install_dir = str(item.get("install_dir") or f"{base_install_dir.rstrip('/')}/{node_role}-{index + 1}")
+            normalized_item: Dict[str, Any] = {
+                "server_id": int(server_id),
+                "node_role": node_role,
+                "host": host,
+                "install_dir": install_dir,
+                "cluster_name": str(config.get("cluster_name") or "defaultCluster")
+            }
+
+            if node_role == "confignode":
+                normalized_item["cn_internal_port"] = int(item.get("cn_internal_port", 10710 + index * 20))
+                normalized_item["cn_consensus_port"] = int(item.get("cn_consensus_port", 10720 + index * 20))
+            elif node_role == "datanode":
+                normalized_item["dn_rpc_port"] = int(item.get("dn_rpc_port", 6667 + index * 10))
+                normalized_item["dn_internal_port"] = int(item.get("dn_internal_port", 10730 + index * 10))
+                normalized_item["dn_mpp_data_exchange_port"] = int(item.get("dn_mpp_data_exchange_port", 10740 + index * 10))
+                normalized_item["dn_data_region_consensus_port"] = int(item.get("dn_data_region_consensus_port", 10750 + index * 10))
+                normalized_item["dn_schema_region_consensus_port"] = int(item.get("dn_schema_region_consensus_port", 10760 + index * 10))
+
+            for key, value in item.items():
+                if key not in normalized_item:
+                    normalized_item[key] = value
+
+            normalized.append(normalized_item)
+
+        return normalized
+
+    def _build_cluster_replacements(
+        self,
+        entry: Dict[str, Any],
+        cluster_name: str,
+        seed_config_node: str,
+        common_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        replacements = {str(key): str(value) for key, value in common_config.items()}
+        replacements["cluster_name"] = cluster_name
+
+        if entry["node_role"] == "confignode":
+            replacements.update({
+                "cn_internal_address": str(entry["host"]),
+                "cn_internal_port": str(entry["cn_internal_port"]),
+                "cn_consensus_port": str(entry["cn_consensus_port"]),
+                "cn_seed_config_node": seed_config_node
+            })
+        elif entry["node_role"] == "datanode":
+            replacements.update({
+                "dn_rpc_address": str(entry["host"]),
+                "dn_rpc_port": str(entry["dn_rpc_port"]),
+                "dn_internal_address": str(entry["host"]),
+                "dn_internal_port": str(entry["dn_internal_port"]),
+                "dn_mpp_data_exchange_port": str(entry["dn_mpp_data_exchange_port"]),
+                "dn_data_region_consensus_port": str(entry["dn_data_region_consensus_port"]),
+                "dn_schema_region_consensus_port": str(entry["dn_schema_region_consensus_port"]),
+                "dn_seed_config_node": seed_config_node
+            })
+
+        if isinstance(entry.get("config_items"), dict):
+            for key, value in entry["config_items"].items():
+                replacements[str(key)] = str(value)
+
+        return replacements
+
+    def _cluster_wait_port(self, entry: Dict[str, Any]) -> int:
+        if entry["node_role"] == "confignode":
+            return int(entry["cn_internal_port"])
+        if entry["node_role"] == "datanode":
+            return int(entry["dn_rpc_port"])
+        return int(entry.get("rpc_port", 6667))
+
+    def _cluster_failure(
+        self,
+        message: str,
+        results: List[Dict[str, Any]],
+        cluster_name: str,
+        config_nodes: List[Dict[str, Any]],
+        data_nodes: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        last_result = results[-1]["result"] if results else {}
+        return {
+            "exit_status": -1,
+            "stdout": "\n".join(item["result"].get("stdout", "") for item in results if item["result"].get("stdout")).strip(),
+            "stderr": "\n".join(item["result"].get("stderr", "") for item in results if item["result"].get("stderr")).strip(),
+            "error": message,
+            "cluster_name": cluster_name,
+            "config_nodes": config_nodes,
+            "data_nodes": data_nodes,
+            "results": results,
+            "failed_node": results[-1]["node"] if results else None,
+            "failed_step_error": last_result.get("error") or last_result.get("stderr")
+        }
+
     def _merge_config_with_context(self, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         merged = dict(config)
         fallback_keys = [
             "server_id",
+            "node_role",
             "iotdb_home",
             "conf_path",
             "rpc_port",
+            "wait_port",
             "host",
             "remote_package_path",
+            "cluster_name",
+            "config_nodes",
+            "data_nodes",
         ]
         for key in fallback_keys:
             if merged.get(key) in (None, "", []):
@@ -680,11 +1089,14 @@ class ExecutionEngine:
         server_id = config.get("server_id")
         if server_id is not None:
             updates["server_id"] = server_id
-            server = self.db.query(Server).filter(Server.id == server_id).first()
+            server = self.db.query(Server).filter(Server.id == int(server_id)).first()
             if server:
                 updates["host"] = server.host
 
-        for key in ["iotdb_home", "conf_path", "rpc_port", "remote_package_path", "backup_path"]:
+        for key in [
+            "node_role", "iotdb_home", "conf_path", "rpc_port", "wait_port",
+            "remote_package_path", "backup_path", "cluster_name", "config_nodes", "data_nodes"
+        ]:
             if key in result and result[key] not in (None, ""):
                 updates[key] = result[key]
 
@@ -710,6 +1122,45 @@ class ExecutionEngine:
             if value is not None and str(value).strip():
                 return str(value).strip()
         raise ValueError(f"Missing required config field: {'/'.join(keys)}")
+
+    def _normalize_line_list(self, value: Any) -> List[str]:
+        if isinstance(value, str):
+            return [line.strip() for line in value.splitlines() if line.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return []
+
+    def _normalize_node_role(self, role: Any) -> str:
+        value = str(role or "standalone").strip().lower()
+        if value in {"confignode", "config_node", "config-node"}:
+            return "confignode"
+        if value in {"datanode", "data_node", "data-node"}:
+            return "datanode"
+        return "standalone"
+
+    def _default_config_path(self, iotdb_home: str) -> str:
+        return f"{iotdb_home.rstrip('/')}/conf/iotdb-system.properties"
+
+    def _default_wait_port(self, role: str, config: Dict[str, Any]) -> int:
+        if role == "confignode":
+            return int(config.get("cn_internal_port", 10710))
+        if role == "datanode":
+            return int(config.get("rpc_port", config.get("dn_rpc_port", 6667)))
+        return int(config.get("rpc_port", 6667))
+
+    def _start_script_for_role(self, role: str) -> str:
+        if role == "confignode":
+            return "start-confignode.sh"
+        if role == "datanode":
+            return "start-datanode.sh"
+        return "start-standalone.sh"
+
+    def _stop_script_for_role(self, role: str) -> str:
+        if role == "confignode":
+            return "stop-confignode.sh"
+        if role == "datanode":
+            return "stop-datanode.sh"
+        return "stop-standalone.sh"
 
     def _detect_package_type(self, remote_path: str, package_type: str) -> Optional[str]:
         if package_type != "auto":

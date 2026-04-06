@@ -17,10 +17,13 @@ const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
   config: ['server_id', 'file_path'],
   log_view: ['server_id', 'file_path'],
   iotdb_deploy: ['server_id', 'remote_package_path', 'rpc_port'],
-  iotdb_start: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_stop: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_cli: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_config: ['server_id', 'iotdb_home', 'rpc_port', 'file_path']
+  iotdb_start: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port', 'wait_port'],
+  iotdb_stop: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_cli: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_config: ['server_id', 'node_role', 'iotdb_home', 'rpc_port', 'file_path'],
+  iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
+  iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
+  iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes']
 }
 
 const cloneValue = <T>(value: T): T => JSON.parse(JSON.stringify(value))
@@ -32,6 +35,22 @@ const isEmptyInheritedValue = (value: unknown) => {
 }
 
 const isSameValue = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
+
+const normalizeClusterNodeListForEditor = (
+  value: unknown,
+  baseInstallDir: string,
+  role: 'confignode' | 'datanode'
+) => {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item, index) => ({
+      ...item,
+      node_role: item.node_role || role,
+      install_dir: item.install_dir || `${baseInstallDir.replace(/\/+$/, '')}/${role}-${index + 1}`
+    }))
+}
 
 export const useWorkflowsStore = defineStore('workflows', () => {
   // Workflow list state
@@ -157,7 +176,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const config = node.data.config
     const output: Record<string, unknown> = {}
 
-    for (const field of ['server_id', 'host', 'rpc_port', 'iotdb_home', 'remote_package_path', 'file_path']) {
+    for (const field of ['server_id', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
       const value = config[field]
       if (!isEmptyInheritedValue(value)) {
         output[field] = cloneValue(value)
@@ -170,6 +189,21 @@ export const useWorkflowsStore = defineStore('workflows', () => {
         const iotdbHome = String(installDir).replace(/\/+$/, '')
         output.iotdb_home = iotdbHome
         output.conf_path = `${iotdbHome}/conf/iotdb-system.properties`
+      }
+    }
+
+    if (node.data.nodeType === 'iotdb_cluster_deploy') {
+      const baseInstallDir = String(config.install_dir || '/opt/iotdb-cluster')
+      if (!isEmptyInheritedValue(config.cluster_name)) {
+        output.cluster_name = cloneValue(config.cluster_name)
+      }
+      const normalizedConfigNodes = normalizeClusterNodeListForEditor(config.config_nodes, baseInstallDir, 'confignode')
+      if (normalizedConfigNodes.length > 0) {
+        output.config_nodes = normalizedConfigNodes
+      }
+      const normalizedDataNodes = normalizeClusterNodeListForEditor(config.data_nodes, baseInstallDir, 'datanode')
+      if (normalizedDataNodes.length > 0) {
+        output.data_nodes = normalizedDataNodes
       }
     }
 
