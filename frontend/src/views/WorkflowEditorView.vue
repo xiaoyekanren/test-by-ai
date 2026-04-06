@@ -27,6 +27,7 @@ const workflowsStore = useWorkflowsStore()
 // Vue Flow instance
 const {
   onConnect,
+  onEdgeClick,
   onNodeDragStop,
   onPaneReady,
   onPaneClick,
@@ -57,8 +58,40 @@ const showExecutionPanel = ref(false)
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 
+const isEditableElement = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false
+  const tagName = target.tagName.toLowerCase()
+  return (
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    target.isContentEditable ||
+    Boolean(target.closest('.el-input')) ||
+    Boolean(target.closest('.el-textarea'))
+  )
+}
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if ((event.key !== 'Delete' && event.key !== 'Backspace') || isEditableElement(event.target)) {
+    return
+  }
+
+  if (workflowsStore.selectedEdgeId) {
+    event.preventDefault()
+    workflowsStore.deleteEdge(workflowsStore.selectedEdgeId)
+    ElMessage.success('Connection deleted')
+    return
+  }
+
+  if (workflowsStore.selectedNodeId) {
+    event.preventDefault()
+    workflowsStore.deleteNode(workflowsStore.selectedNodeId)
+    ElMessage.success('Node deleted')
+  }
+}
+
 // Load workflow on mount
 onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
   if (workflowId.value) {
     try {
       const workflow = await workflowsStore.fetchWorkflow(workflowId.value)
@@ -81,6 +114,7 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
   if (autoSaveTimer) {
     clearInterval(autoSaveTimer)
   }
@@ -136,12 +170,20 @@ onPaneReady(() => {
 // Handle pane click (deselect node)
 onPaneClick(() => {
   workflowsStore.selectNode(null)
+  workflowsStore.selectEdge(null)
 })
 
 // Handle node click (selection)
 const handleNodeClick = (nodeId: string) => {
   workflowsStore.selectNode(nodeId)
 }
+
+// Handle edge click (selection)
+onEdgeClick(({ event, edge }) => {
+  event.preventDefault()
+  event.stopPropagation()
+  workflowsStore.selectEdge(edge.id)
+})
 
 // Handle drag start from palette
 const handleDragStart = (nodeType: NodeType) => {
@@ -312,6 +354,7 @@ const handleExecutionCompleted = (execution: Execution) => {
         <VueFlow
           v-model:nodes="workflowsStore.editorNodes"
           v-model:edges="workflowsStore.editorEdges"
+          :edges-selectable="true"
           fit-view-on-init
           :min-zoom="0.2"
           :max-zoom="4"

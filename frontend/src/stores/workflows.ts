@@ -10,6 +10,29 @@ interface HistoryState {
   edges: FlowEdge[]
 }
 
+const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
+  shell: ['server_id'],
+  upload: ['server_id'],
+  download: ['server_id'],
+  config: ['server_id', 'file_path'],
+  log_view: ['server_id', 'file_path'],
+  iotdb_deploy: ['server_id', 'remote_package_path', 'rpc_port'],
+  iotdb_start: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_stop: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_cli: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_config: ['server_id', 'iotdb_home', 'rpc_port', 'file_path']
+}
+
+const cloneValue = <T>(value: T): T => JSON.parse(JSON.stringify(value))
+
+const isEmptyInheritedValue = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return true
+  if (Array.isArray(value)) return value.length === 0
+  return false
+}
+
+const isSameValue = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
+
 export const useWorkflowsStore = defineStore('workflows', () => {
   // Workflow list state
   const workflows = ref<Workflow[]>([])
@@ -21,6 +44,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const editorNodes = ref<FlowNode[]>([])
   const editorEdges = ref<FlowEdge[]>([])
   const selectedNodeId = ref<string | null>(null)
+  const selectedEdgeId = ref<string | null>(null)
+  const inheritedConfigByNodeId = ref<Record<string, Record<string, unknown>>>({})
   const isDirty = ref(false)
   const autoSave = ref(true)
   const isSaving = ref(false)
@@ -119,6 +144,123 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     currentWorkflow.value = null
   }
 
+  function getNodeById(nodeId: string) {
+    return editorNodes.value.find(node => node.id === nodeId)
+  }
+
+  function getDefaultConfigValue(nodeType: NodeType, field: string) {
+    const value = NODE_CONFIGS[nodeType]?.defaultConfig[field]
+    return value === undefined ? undefined : cloneValue(value)
+  }
+
+  function getNodeOutputConfig(node: FlowNode): Record<string, unknown> {
+    const config = node.data.config
+    const output: Record<string, unknown> = {}
+
+    for (const field of ['server_id', 'host', 'rpc_port', 'iotdb_home', 'remote_package_path', 'file_path']) {
+      const value = config[field]
+      if (!isEmptyInheritedValue(value)) {
+        output[field] = cloneValue(value)
+      }
+    }
+
+    if (node.data.nodeType === 'iotdb_deploy') {
+      const installDir = config.install_dir
+      if (!isEmptyInheritedValue(installDir)) {
+        const iotdbHome = String(installDir).replace(/\/+$/, '')
+        output.iotdb_home = iotdbHome
+        output.conf_path = `${iotdbHome}/conf/iotdb-system.properties`
+      }
+    }
+
+    if (node.data.nodeType === 'iotdb_config') {
+      const iotdbHome = config.iotdb_home
+      const filePath = config.file_path
+      if (!isEmptyInheritedValue(filePath)) {
+        output.conf_path = cloneValue(filePath)
+      } else if (!isEmptyInheritedValue(iotdbHome)) {
+        output.conf_path = `${String(iotdbHome).replace(/\/+$/, '')}/conf/iotdb-system.properties`
+      }
+    }
+
+    if (node.data.nodeType === 'config' && !isEmptyInheritedValue(config.file_path)) {
+      output.conf_path = cloneValue(config.file_path)
+    }
+
+    return output
+  }
+
+  function resolveInheritedFieldValue(field: string, sourceOutput: Record<string, unknown>) {
+    if (!isEmptyInheritedValue(sourceOutput[field])) {
+      return cloneValue(sourceOutput[field])
+    }
+
+    if (field === 'file_path' && !isEmptyInheritedValue(sourceOutput.conf_path)) {
+      return cloneValue(sourceOutput.conf_path)
+    }
+
+    return undefined
+  }
+
+  function reapplyInheritedConfig() {
+    const previousInherited = inheritedConfigByNodeId.value
+    const nextInherited: Record<string, Record<string, unknown>> = {}
+
+    for (let i = 0; i < editorNodes.value.length; i++) {
+      for (const node of editorNodes.value) {
+        const acceptedFields = INHERITED_FIELDS_BY_NODE_TYPE[node.data.nodeType] || []
+        if (acceptedFields.length === 0) {
+          nextInherited[node.id] = {}
+          continue
+        }
+
+        const incomingEdges = editorEdges.value.filter(edge => edge.target === node.id)
+        const inheritedValues: Record<string, unknown> = {}
+
+        for (const edge of incomingEdges) {
+          const sourceNode = getNodeById(edge.source)
+          if (!sourceNode) continue
+
+          const sourceOutput = getNodeOutputConfig(sourceNode)
+          for (const field of acceptedFields) {
+            const inheritedValue = resolveInheritedFieldValue(field, sourceOutput)
+            if (inheritedValue !== undefined) {
+              inheritedValues[field] = inheritedValue
+            }
+          }
+        }
+
+        const previousNodeInherited = previousInherited[node.id] || {}
+        for (const field of acceptedFields) {
+          const currentValue = node.data.config[field]
+          const previousValue = previousNodeInherited[field]
+          const shouldApplyInheritance =
+            isEmptyInheritedValue(currentValue) ||
+            (!isEmptyInheritedValue(previousValue) && isSameValue(currentValue, previousValue))
+
+          if (!shouldApplyInheritance) {
+            continue
+          }
+
+          if (field in inheritedValues) {
+            node.data.config[field] = cloneValue(inheritedValues[field])
+          } else {
+            const defaultValue = getDefaultConfigValue(node.data.nodeType, field)
+            if (defaultValue !== undefined) {
+              node.data.config[field] = defaultValue
+            } else {
+              delete node.data.config[field]
+            }
+          }
+        }
+
+        nextInherited[node.id] = inheritedValues
+      }
+    }
+
+    inheritedConfigByNodeId.value = nextInherited
+  }
+
   // Editor operations
 
   // Initialize editor with workflow data
@@ -152,9 +294,12 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     // Reset history
     history.value = []
     historyIndex.value = -1
+    inheritedConfigByNodeId.value = {}
+    reapplyInheritedConfig()
     saveHistory()
     isDirty.value = false
     selectedNodeId.value = null
+    selectedEdgeId.value = null
   }
 
   // Save current state to history
@@ -213,7 +358,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       data: {
         label: config.label,
         nodeType,
-        config: config.defaultConfig
+        config: JSON.parse(JSON.stringify(config.defaultConfig))
       }
     }
 
@@ -236,6 +381,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const node = editorNodes.value.find(n => n.id === nodeId)
     if (node) {
       node.data.config = { ...node.data.config, ...config }
+      reapplyInheritedConfig()
       saveHistory()
     }
   }
@@ -253,9 +399,12 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   function deleteNode(nodeId: string) {
     editorNodes.value = editorNodes.value.filter(n => n.id !== nodeId)
     editorEdges.value = editorEdges.value.filter(e => e.source !== nodeId && e.target !== nodeId)
+    delete inheritedConfigByNodeId.value[nodeId]
+    reapplyInheritedConfig()
     if (selectedNodeId.value === nodeId) {
       selectedNodeId.value = null
     }
+    selectedEdgeId.value = null
     saveHistory()
   }
 
@@ -278,6 +427,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
 
     editorEdges.value.push(newEdge)
+    reapplyInheritedConfig()
     saveHistory()
     return newEdge
   }
@@ -285,18 +435,38 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   // Delete edge
   function deleteEdge(edgeId: string) {
     editorEdges.value = editorEdges.value.filter(e => e.id !== edgeId)
+    reapplyInheritedConfig()
+    if (selectedEdgeId.value === edgeId) {
+      selectedEdgeId.value = null
+    }
     saveHistory()
   }
 
   // Select node
   function selectNode(nodeId: string | null) {
     selectedNodeId.value = nodeId
+    if (nodeId) {
+      selectedEdgeId.value = null
+    }
+  }
+
+  // Select edge
+  function selectEdge(edgeId: string | null) {
+    selectedEdgeId.value = edgeId
+    if (edgeId) {
+      selectedNodeId.value = null
+    }
   }
 
   // Get selected node
   const selectedNode = computed(() => {
     if (!selectedNodeId.value) return null
     return editorNodes.value.find(n => n.id === selectedNodeId.value)
+  })
+
+  const selectedEdge = computed(() => {
+    if (!selectedEdgeId.value) return null
+    return editorEdges.value.find(e => e.id === selectedEdgeId.value)
   })
 
   // Save workflow to backend
@@ -355,6 +525,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     editorNodes.value = []
     editorEdges.value = []
     selectedNodeId.value = null
+    selectedEdgeId.value = null
+    inheritedConfigByNodeId.value = {}
     history.value = []
     historyIndex.value = -1
     isDirty.value = false
@@ -371,7 +543,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     editorNodes,
     editorEdges,
     selectedNodeId,
+    selectedEdgeId,
     selectedNode,
+    selectedEdge,
     isDirty,
     autoSave,
     isSaving,
@@ -399,6 +573,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     addEdge,
     deleteEdge,
     selectNode,
+    selectEdge,
     saveWorkflowToBackend,
     setAutoSave,
     clearEditor
