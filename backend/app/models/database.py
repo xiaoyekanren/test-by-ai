@@ -72,3 +72,12 @@ class NodeExecution(Base):
     retry_count = Column(Integer, default=0)
 
     execution = relationship("Execution", back_populates="node_executions")
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

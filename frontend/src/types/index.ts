@@ -103,9 +103,11 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     description: 'Start IoTDB service',
     defaultConfig: {
       server_id: null,
+      node_role: 'standalone',
       iotdb_home: '',
       host: '',
       rpc_port: 6667,
+      wait_port: 6667,
       timeout_seconds: 60,
       wait_strategy: 'port'
     },
@@ -119,7 +121,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'VideoPause',
     color: '#E74C3C',
     description: 'Stop IoTDB service',
-    defaultConfig: { server_id: null, iotdb_home: '', graceful: true, timeout_seconds: 60 },
+    defaultConfig: { server_id: null, node_role: 'standalone', iotdb_home: '', graceful: true, timeout_seconds: 60 },
     inputs: 1,
     outputs: 1
   },
@@ -146,18 +148,96 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
   },
   iotdb_config: {
     type: 'iotdb_config',
-    label: 'IoTDB Config',
+    label: 'IoTDB Config Override',
     category: 'iotdb',
     icon: 'Setting',
     color: '#8E44AD',
-    description: 'Apply IoTDB configuration',
+    description: 'Declare config overrides for deployed IoTDB',
     defaultConfig: {
       server_id: null,
+      node_role: 'standalone',
       iotdb_home: '',
       file_path: '',
       config_items: {},
       backup_before_write: true,
       timeout: 60
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_cluster_deploy: {
+    type: 'iotdb_cluster_deploy',
+    label: 'IoTDB Cluster Deploy',
+    category: 'iotdb',
+    icon: 'Grid',
+    color: '#6c5ce7',
+    description: 'Deploy ConfigNode and DataNode hosts for a cluster',
+    defaultConfig: {
+      artifact_local_path: '',
+      remote_package_path: '/tmp/apache-iotdb-cluster-bin.zip',
+      install_dir: '/opt/iotdb-cluster',
+      package_type: 'auto',
+      extract_subdir: '',
+      overwrite: false,
+      cluster_name: 'defaultCluster',
+      config_nodes: [],
+      data_nodes: [],
+      common_config: {},
+      timeout: 900
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_cluster_start: {
+    type: 'iotdb_cluster_start',
+    label: 'IoTDB Cluster Start',
+    category: 'iotdb',
+    icon: 'VideoPlay',
+    color: '#16a085',
+    description: 'Start cluster nodes in ConfigNode then DataNode order',
+    defaultConfig: {
+      cluster_name: '',
+      config_nodes: [],
+      data_nodes: [],
+      wait_strategy: 'port',
+      timeout_seconds: 180
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_cluster_check: {
+    type: 'iotdb_cluster_check',
+    label: 'IoTDB Cluster Check',
+    category: 'iotdb',
+    icon: 'CircleCheck',
+    color: '#0984e3',
+    description: 'Run show cluster and optional validation SQLs',
+    defaultConfig: {
+      cluster_name: '',
+      config_nodes: [],
+      data_nodes: [],
+      username: 'root',
+      password: 'root',
+      sql_dialect: 'tree',
+      validation_sqls: [],
+      timeout_seconds: 300
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_cluster_stop: {
+    type: 'iotdb_cluster_stop',
+    label: 'IoTDB Cluster Stop',
+    category: 'iotdb',
+    icon: 'VideoPause',
+    color: '#c0392b',
+    description: 'Stop DataNodes first and ConfigNodes last',
+    defaultConfig: {
+      cluster_name: '',
+      config_nodes: [],
+      data_nodes: [],
+      graceful: true,
+      timeout_seconds: 180
     },
     inputs: 1,
     outputs: 1
@@ -348,6 +428,10 @@ export type NodeType =
   | "iotdb_stop"
   | "iotdb_cli"
   | "iotdb_config"
+  | "iotdb_cluster_deploy"
+  | "iotdb_cluster_start"
+  | "iotdb_cluster_check"
+  | "iotdb_cluster_stop"
   | "condition"
   | "loop"
   | "wait"

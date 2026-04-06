@@ -1,134 +1,235 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
-  ElCard,
-  ElForm,
-  ElFormItem,
-  ElInputNumber,
   ElButton,
-  ElMessage,
-  ElDivider,
+  ElCard,
   ElDescriptions,
   ElDescriptionsItem,
+  ElDivider,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElInputNumber,
+  ElMessage,
+  ElSwitch,
   ElTag
 } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
+const saving = ref(false)
 
-// Local form state
 const monitorForm = ref({
-  refreshInterval: settingsStore.settings.monitor.refreshInterval
+  refreshInterval: 10
 })
 
-// Check if settings changed
+const observabilityForm = ref({
+  prometheusUrl: '',
+  grafanaUrl: '',
+  grafanaDashboardUid: '',
+  grafanaDatasource: '',
+  grafanaOrgId: '',
+  grafanaTimeRange: 'now-6h',
+  grafanaEmbedEnabled: false
+})
+
+function syncFormsFromStore() {
+  monitorForm.value.refreshInterval = settingsStore.settings.monitor.refreshInterval
+  observabilityForm.value = {
+    prometheusUrl: settingsStore.settings.observability.prometheusUrl ?? '',
+    grafanaUrl: settingsStore.settings.observability.grafanaUrl ?? '',
+    grafanaDashboardUid: settingsStore.settings.observability.grafanaDashboardUid ?? '',
+    grafanaDatasource: settingsStore.settings.observability.grafanaDatasource ?? '',
+    grafanaOrgId: settingsStore.settings.observability.grafanaOrgId ?? '',
+    grafanaTimeRange: settingsStore.settings.observability.grafanaTimeRange,
+    grafanaEmbedEnabled: settingsStore.settings.observability.grafanaEmbedEnabled
+  }
+}
+
+watch(() => settingsStore.settings, syncFormsFromStore, { deep: true })
+
 const hasChanges = computed(() => {
-  return monitorForm.value.refreshInterval !== settingsStore.settings.monitor.refreshInterval
+  const { monitor, observability } = settingsStore.settings
+  return (
+    monitorForm.value.refreshInterval !== monitor.refreshInterval ||
+    observabilityForm.value.prometheusUrl !== (observability.prometheusUrl ?? '') ||
+    observabilityForm.value.grafanaUrl !== (observability.grafanaUrl ?? '') ||
+    observabilityForm.value.grafanaDashboardUid !== (observability.grafanaDashboardUid ?? '') ||
+    observabilityForm.value.grafanaDatasource !== (observability.grafanaDatasource ?? '') ||
+    observabilityForm.value.grafanaOrgId !== (observability.grafanaOrgId ?? '') ||
+    observabilityForm.value.grafanaTimeRange !== observability.grafanaTimeRange ||
+    observabilityForm.value.grafanaEmbedEnabled !== observability.grafanaEmbedEnabled
+  )
 })
 
-// Save settings
-function handleSave() {
-  settingsStore.updateMonitorSettings({
-    refreshInterval: monitorForm.value.refreshInterval
-  })
-  ElMessage.success('设置已保存')
+async function handleSave() {
+  saving.value = true
+  try {
+    await settingsStore.updateMonitorSettings({
+      refreshInterval: monitorForm.value.refreshInterval
+    })
+
+    await settingsStore.updateObservabilitySettings({
+      prometheusUrl: observabilityForm.value.prometheusUrl || null,
+      grafanaUrl: observabilityForm.value.grafanaUrl || null,
+      grafanaDashboardUid: observabilityForm.value.grafanaDashboardUid || null,
+      grafanaDatasource: observabilityForm.value.grafanaDatasource || null,
+      grafanaOrgId: observabilityForm.value.grafanaOrgId || null,
+      grafanaTimeRange: observabilityForm.value.grafanaTimeRange || 'now-6h',
+      grafanaEmbedEnabled: observabilityForm.value.grafanaEmbedEnabled
+    })
+
+    ElMessage.success('Settings saved')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('Failed to save settings')
+  } finally {
+    saving.value = false
+  }
 }
 
-// Reset to default
-function handleReset() {
-  monitorForm.value.refreshInterval = 10
-  settingsStore.resetSettings()
-  ElMessage.success('已恢复默认设置')
+async function handleReset() {
+  saving.value = true
+  try {
+    await settingsStore.resetSettings()
+    ElMessage.success('Settings reset to defaults')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('Failed to reset settings')
+  } finally {
+    saving.value = false
+  }
 }
 
-// Refresh interval options
-const refreshOptions = [
-  { label: '5 秒', value: 5 },
-  { label: '10 秒（默认）', value: 10 },
-  { label: '30 秒', value: 30 },
-  { label: '1 分钟', value: 60 },
-  { label: '5 分钟', value: 300 }
-]
+onMounted(async () => {
+  await settingsStore.fetchSettings()
+  syncFormsFromStore()
+})
 </script>
 
 <template>
   <div class="settings-view">
     <div class="toolbar">
       <div class="toolbar-title">
-        <h2>系统设置</h2>
+        <h2>System Settings</h2>
       </div>
       <div class="toolbar-actions">
-        <ElButton @click="handleReset" :icon="Refresh">
-          恢复默认
+        <ElButton @click="handleReset" :icon="Refresh" :loading="saving">
+          Reset
         </ElButton>
-        <ElButton type="primary" @click="handleSave" :disabled="!hasChanges">
-          保存设置
+        <ElButton type="primary" @click="handleSave" :disabled="!hasChanges" :loading="saving">
+          Save
         </ElButton>
       </div>
     </div>
 
-    <!-- Monitor Settings -->
     <ElCard shadow="hover" class="settings-card">
       <template #header>
         <div class="card-header">
-          <ElTag type="info" size="small">监控</ElTag>
-          <span>系统监控设置</span>
+          <ElTag type="info" size="small">Monitor</ElTag>
+          <span>System monitor refresh settings</span>
         </div>
       </template>
 
-      <ElForm label-width="140px" label-position="left">
-        <ElFormItem label="数据刷新频率">
+      <ElForm label-width="180px" label-position="left">
+        <ElFormItem label="Refresh interval">
           <ElInputNumber
             v-model="monitorForm.refreshInterval"
             :min="5"
             :max="300"
             :step="5"
-            style="width: 150px"
+            style="width: 180px"
           />
-          <span class="unit">秒</span>
-        </ElFormItem>
-
-        <ElFormItem label="可选预设">
-          <div class="preset-options">
-            <ElTag
-              v-for="opt in refreshOptions"
-              :key="opt.value"
-              :type="monitorForm.refreshInterval === opt.value ? 'primary' : 'info'"
-              class="preset-tag"
-              @click="monitorForm.refreshInterval = opt.value"
-            >
-              {{ opt.label }}
-            </ElTag>
-          </div>
+          <span class="unit">seconds</span>
         </ElFormItem>
       </ElForm>
 
       <ElDivider />
 
       <ElDescriptions :column="1" border size="small">
-        <ElDescriptionsItem label="当前刷新频率">
-          {{ settingsStore.settings.monitor.refreshInterval }} 秒
+        <ElDescriptionsItem label="Current refresh interval">
+          {{ settingsStore.settings.monitor.refreshInterval }} seconds
         </ElDescriptionsItem>
-        <ElDescriptionsItem label="说明">
-          设置系统监控页面自动刷新数据的时间间隔，范围 5-300 秒
+        <ElDescriptionsItem label="Usage">
+          Controls how often the monitor dashboard refreshes local and remote server metrics.
         </ElDescriptionsItem>
       </ElDescriptions>
     </ElCard>
 
-    <!-- Placeholder for future settings -->
     <ElCard shadow="hover" class="settings-card">
       <template #header>
         <div class="card-header">
-          <ElTag type="warning" size="small">工作流</ElTag>
-          <span>工作流设置</span>
+          <ElTag type="success" size="small">Observability</ElTag>
+          <span>External Prometheus and Grafana entry points</span>
         </div>
       </template>
 
-      <div class="placeholder-content">
-        <ElTag type="info">开发中...</ElTag>
-        <span>更多工作流配置选项即将推出</span>
-      </div>
+      <ElForm label-width="180px" label-position="left">
+        <ElFormItem label="Prometheus URL">
+          <ElInput
+            v-model="observabilityForm.prometheusUrl"
+            placeholder="http://prometheus.example.com:9090"
+            clearable
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Grafana URL">
+          <ElInput
+            v-model="observabilityForm.grafanaUrl"
+            placeholder="http://grafana.example.com:3000"
+            clearable
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Grafana dashboard UID">
+          <ElInput
+            v-model="observabilityForm.grafanaDashboardUid"
+            placeholder="iotdb-overview"
+            clearable
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Grafana datasource">
+          <ElInput
+            v-model="observabilityForm.grafanaDatasource"
+            placeholder="Prometheus"
+            clearable
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Grafana org ID">
+          <ElInput
+            v-model="observabilityForm.grafanaOrgId"
+            placeholder="1"
+            clearable
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Default time range">
+          <ElInput
+            v-model="observabilityForm.grafanaTimeRange"
+            placeholder="now-6h"
+          />
+        </ElFormItem>
+
+        <ElFormItem label="Grafana embed mode">
+          <ElSwitch v-model="observabilityForm.grafanaEmbedEnabled" />
+          <span class="hint">Adds kiosk mode to dashboard links for cleaner wallboard views.</span>
+        </ElFormItem>
+      </ElForm>
+
+      <ElDivider />
+
+      <ElDescriptions :column="1" border size="small">
+        <ElDescriptionsItem label="Recommended setup">
+          Keep Prometheus and Grafana external to this app, and use these URLs as shared entry points.
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="Where it appears">
+          The monitor page will show quick links to the configured Prometheus and Grafana targets.
+        </ElDescriptionsItem>
+      </ElDescriptions>
     </ElCard>
   </div>
 </template>
@@ -176,21 +277,9 @@ const refreshOptions = [
   color: #909399;
 }
 
-.preset-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.preset-tag {
-  cursor: pointer;
-}
-
-.placeholder-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.hint {
+  margin-left: 12px;
   color: #909399;
-  padding: 20px 0;
+  font-size: 12px;
 }
 </style>

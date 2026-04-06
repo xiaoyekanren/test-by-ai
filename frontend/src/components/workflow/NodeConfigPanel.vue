@@ -41,6 +41,29 @@ const nodeConfig = computed(() => {
 const nodeTypeLabel = computed(() => nodeConfig.value?.label || '')
 const nodeTypeColor = computed(() => nodeConfig.value?.color || '#909399')
 const nodeCategory = computed(() => nodeConfig.value?.category || '')
+const nodeDescription = computed(() => nodeConfig.value?.description || '')
+
+const nodeHelpText = computed(() => {
+  if (!selectedNode.value) return ''
+
+  if (selectedNode.value.data.nodeType === 'iotdb_config') {
+    return 'Use this node to declare the config items that should be written during workflow execution. It does not read the remote file while you are editing the workflow.'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iotdb_cluster_deploy') {
+    return 'Describe the cluster topology here. During execution, the workflow will upload the package, unpack it on each host, and write role-specific ConfigNode/DataNode settings.'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iotdb_cluster_start') {
+    return 'This node starts the first ConfigNode, then the remaining ConfigNodes, and finally all DataNodes.'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iotdb_cluster_check') {
+    return 'This node runs show cluster against the first DataNode and can execute extra validation SQL statements afterward.'
+  }
+
+  return ''
+})
 
 // Category labels
 const categoryLabels: Record<string, string> = {
@@ -185,9 +208,15 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     ],
     iotdb_start: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'node_role', label: 'Node Role', type: 'select', options: [
+        { value: 'standalone', label: 'Standalone' },
+        { value: 'confignode', label: 'ConfigNode' },
+        { value: 'datanode', label: 'DataNode' }
+      ]},
       { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'host', label: 'Host', type: 'text', placeholder: 'Optional, defaults to server host' },
       { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'wait_port', label: 'Wait Port', type: 'number', min: 1, max: 65535 },
       { field: 'wait_strategy', label: 'Wait Strategy', type: 'select', options: [
         { value: 'port', label: 'Port Check' },
         { value: 'cli', label: 'CLI Check' }
@@ -196,6 +225,11 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     ],
     iotdb_stop: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'node_role', label: 'Node Role', type: 'select', options: [
+        { value: 'standalone', label: 'Standalone' },
+        { value: 'confignode', label: 'ConfigNode' },
+        { value: 'datanode', label: 'DataNode' }
+      ]},
       { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Use graceful shutdown script' },
       { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
@@ -216,11 +250,63 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     ],
     iotdb_config: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'node_role', label: 'Node Role', type: 'select', options: [
+        { value: 'standalone', label: 'Standalone' },
+        { value: 'confignode', label: 'ConfigNode' },
+        { value: 'datanode', label: 'DataNode' }
+      ]},
       { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
-      { field: 'file_path', label: 'File Path', type: 'text', placeholder: 'Optional, defaults to conf/iotdb-system.properties' },
-      { field: 'config_items', label: 'Config Items', type: 'json', placeholder: '{"dn_rpc_port": "6667"}' },
-      { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a .bak file before writing' },
+      { field: 'file_path', label: 'Target Config File', type: 'text', placeholder: 'Optional, defaults to {iotdb_home}/conf/iotdb-system.properties' },
+      { field: 'config_items', label: 'Override Items', type: 'json', placeholder: '{"dn_rpc_port": "6667", "dn_rpc_address": "10.0.0.10"}' },
+      { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a backup before applying overrides' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
+    ],
+    iotdb_cluster_deploy: [
+      { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: '/path/to/apache-iotdb-bin.zip' },
+      { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/apache-iotdb-cluster-bin.zip' },
+      { field: 'install_dir', label: 'Base Install Directory', type: 'text', placeholder: '/opt/iotdb-cluster' },
+      { field: 'package_type', label: 'Package Type', type: 'select', options: [
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'zip', label: 'ZIP' },
+        { value: 'tar.gz', label: 'tar.gz' }
+      ]},
+      { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
+      { field: 'overwrite', label: 'Overwrite Install Dir', type: 'checkbox', placeholder: 'Delete existing install directory first' },
+      { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'defaultCluster' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: '[{"server_id":1,"host":"10.0.0.1","install_dir":"/opt/iotdb-cn-1","cn_internal_port":10710,"cn_consensus_port":10720}]' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: '[{"server_id":2,"host":"10.0.0.2","install_dir":"/opt/iotdb-dn-1","dn_rpc_port":6667,"dn_internal_port":10730}]' },
+      { field: 'common_config', label: 'Common Config', type: 'json', placeholder: '{"schema_replication_factor":"1","data_replication_factor":"1"}' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
+    ],
+    iotdb_cluster_start: [
+      { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy node' },
+      { field: 'wait_strategy', label: 'Wait Strategy', type: 'select', options: [
+        { value: 'port', label: 'Port Check' },
+        { value: 'cli', label: 'CLI Check (DataNode only)' }
+      ]},
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
+    ],
+    iotdb_cluster_check: [
+      { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy/start node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'username', label: 'Username', type: 'text', placeholder: 'root' },
+      { field: 'password', label: 'Password', type: 'text', placeholder: 'root' },
+      { field: 'sql_dialect', label: 'SQL Dialect', type: 'select', options: [
+        { value: 'tree', label: 'Tree' },
+        { value: 'table', label: 'Table' }
+      ]},
+      { field: 'validation_sqls', label: 'Validation SQLs', type: 'textarea', placeholder: 'Optional extra SQL statements, one per line...' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
+    ],
+    iotdb_cluster_stop: [
+      { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy/start node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Stop nodes gracefully before forcing' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
     ],
 
     // Control nodes
@@ -306,7 +392,7 @@ const getListFieldString = (field: string): string => {
 
 // Handle textarea with line-based array fields
 const isListField = (field: string): boolean => {
-  return ['commands', 'sqls'].includes(field)
+  return ['commands', 'sqls', 'validation_sqls'].includes(field)
 }
 </script>
 
@@ -334,6 +420,7 @@ const isListField = (field: string): boolean => {
           <div class="node-type-info">
             <span class="node-type-label">{{ nodeTypeLabel }}</span>
             <span class="node-category">{{ categoryLabels[nodeCategory] }}</span>
+            <span v-if="nodeDescription" class="node-description">{{ nodeDescription }}</span>
           </div>
         </div>
 
@@ -368,6 +455,9 @@ const isListField = (field: string): boolean => {
           label-position="top"
           class="config-form"
         >
+          <div v-if="nodeHelpText" class="node-help">
+            {{ nodeHelpText }}
+          </div>
           <ElFormItem
             v-for="field in getFieldDefinitions(selectedNode.data.nodeType as NodeType)"
             :key="field.field"
@@ -570,6 +660,12 @@ const isListField = (field: string): boolean => {
   opacity: 0.8;
 }
 
+.node-description {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.92;
+}
+
 .node-name-section {
   padding: 12px 16px;
   border-bottom: 1px solid #ebeef5;
@@ -608,6 +704,17 @@ const isListField = (field: string): boolean => {
 
 .config-item {
   margin-bottom: 16px;
+}
+
+.node-help {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #606266;
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
 }
 
 .config-item :deep(.el-form-item__label) {

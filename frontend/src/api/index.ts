@@ -125,4 +125,37 @@ export const monitoringApi = {
     apiClient.post(`/monitoring/local/process/${pid}/kill`)
 }
 
+export interface MonitorSettingsPayload {
+  refreshInterval: number
+}
+
+export interface ObservabilitySettingsPayload {
+  prometheusUrl: string | null
+  grafanaUrl: string | null
+  grafanaDashboardUid: string | null
+  grafanaDatasource: string | null
+  grafanaOrgId: string | null
+  grafanaTimeRange: string
+  grafanaEmbedEnabled: boolean
+}
+
+export interface SettingsPayload {
+  monitor: MonitorSettingsPayload
+  observability: ObservabilitySettingsPayload
+}
+
+export const settingsApi = {
+  get: (): Promise<SettingsPayload> =>
+    apiClient.get('/settings'),
+
+  update: (data: Partial<SettingsPayload>): Promise<SettingsPayload> =>
+    apiClient.put('/settings', data),
+
+  getObservability: (): Promise<ObservabilitySettingsPayload> =>
+    apiClient.get('/settings/observability'),
+
+  updateObservability: (data: ObservabilitySettingsPayload): Promise<ObservabilitySettingsPayload> =>
+    apiClient.put('/settings/observability', data)
+}
+
 export default apiClient

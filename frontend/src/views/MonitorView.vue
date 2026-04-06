@@ -15,7 +15,7 @@ import {
   ElTooltip,
   ElEmpty
 } from 'element-plus'
-import { Refresh, View, CircleClose, Warning, SuccessFilled } from '@element-plus/icons-vue'
+import { Refresh, View, CircleClose, Warning, SuccessFilled, Link } from '@element-plus/icons-vue'
 import { useMonitoringStore } from '@/stores/monitoring'
 import { useServersStore } from '@/stores/servers'
 import { useSettingsStore } from '@/stores/settings'
@@ -53,6 +53,15 @@ const processList = ref<ProcessInfo[]>([])
 const processLoading = ref(false)
 const processLimit = ref(20)
 const processSortBy = ref<'cpu' | 'memory'>('cpu')
+
+function openExternalUrl(url: string | null | undefined) {
+  if (!url) {
+    ElMessage.warning('Configure the URL first in System Settings')
+    return
+  }
+
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 // Build combined server list
 function buildServerList() {
@@ -314,6 +323,7 @@ async function handleKillProcess(row: ProcessInfo) {
 onMounted(async () => {
   loading.value = true
   try {
+    await settingsStore.fetchSettings()
     await serversStore.fetchServers()
     buildServerList()
     await fetchAllStatuses()
@@ -362,6 +372,20 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
         <span class="refresh-info">每 {{ settingsStore.settings.monitor.refreshInterval }}s 刷新</span>
       </div>
       <div class="toolbar-actions">
+        <ElButton
+          v-if="settingsStore.settings.observability.prometheusUrl"
+          @click="openExternalUrl(settingsStore.settings.observability.prometheusUrl)"
+          :icon="Link"
+        >
+          Prometheus
+        </ElButton>
+        <ElButton
+          v-if="settingsStore.settings.observability.grafanaUrl"
+          @click="openExternalUrl(settingsStore.buildGrafanaDashboardUrl())"
+          :icon="Link"
+        >
+          Grafana
+        </ElButton>
         <ElButton @click="refreshData" :icon="Refresh">
           Refresh
         </ElButton>
