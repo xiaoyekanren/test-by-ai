@@ -5,8 +5,9 @@ from datetime import datetime
 
 # Node type literal for validation
 NODE_TYPE = Literal[
-    "shell", "upload", "download", "iotdb_deploy", "iotdb_start", "iotdb_stop",
-    "iotdb_cli", "condition", "loop", "wait", "parallel", "assert", "report", "summary", "notify"
+    "shell", "upload", "download", "config", "log_view", "iotdb_deploy", "iotdb_start",
+    "iotdb_stop", "iotdb_cli", "iotdb_config", "condition", "loop", "wait",
+    "parallel", "assert", "report", "summary", "notify"
 ]
 
 class NodeDefinition(BaseModel):

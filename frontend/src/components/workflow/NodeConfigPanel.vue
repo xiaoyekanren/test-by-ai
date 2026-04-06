@@ -146,7 +146,8 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     upload: [
       { field: 'local_path', label: 'Local Path', type: 'text', placeholder: '/path/to/local/file' },
       { field: 'remote_path', label: 'Remote Path', type: 'text', placeholder: '/path/to/remote/file' },
-      { field: 'server_id', label: 'Server', type: 'server' }
+      { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
     download: [
       { field: 'remote_path', label: 'Remote Path', type: 'text', placeholder: '/path/to/remote/file' },
@@ -155,8 +156,10 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     ],
     config: [
       { field: 'file_path', label: 'File Path', type: 'text', placeholder: '/path/to/config/file' },
-      { field: 'replacements', label: 'Replacements', type: 'json', placeholder: '{"key": "value"}' },
-      { field: 'server_id', label: 'Server', type: 'server' }
+      { field: 'config_items', label: 'Config Items', type: 'json', placeholder: '{"key": "value"}' },
+      { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a .bak file before writing' },
+      { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
     log_view: [
       { field: 'file_path', label: 'File Path', type: 'text', placeholder: '/path/to/log/file' },
@@ -166,28 +169,58 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
 
     // IoTDB nodes
     iotdb_deploy: [
-      { field: 'version', label: 'Version', type: 'text', placeholder: '0.13.0' },
-      { field: 'install_path', label: 'Install Path', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'server_id', label: 'Server', type: 'server' },
-      { field: 'config_template', label: 'Config Template', type: 'text', placeholder: 'Template name (optional)' }
+      { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: '/path/to/apache-iotdb-bin.zip' },
+      { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/apache-iotdb-bin.zip' },
+      { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iotdb' },
+      { field: 'package_type', label: 'Package Type', type: 'select', options: [
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'zip', label: 'ZIP' },
+        { value: 'tar.gz', label: 'tar.gz' }
+      ]},
+      { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
+      { field: 'overwrite', label: 'Overwrite Install Dir', type: 'checkbox', placeholder: 'Delete existing install directory first' },
+      { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
     iotdb_start: [
       { field: 'server_id', label: 'Server', type: 'server' },
-      { field: 'wait_port', label: 'Wait Port', type: 'number', min: 1, max: 65535 },
-      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
+      { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
+      { field: 'host', label: 'Host', type: 'text', placeholder: 'Optional, defaults to server host' },
+      { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'wait_strategy', label: 'Wait Strategy', type: 'select', options: [
+        { value: 'port', label: 'Port Check' },
+        { value: 'cli', label: 'CLI Check' }
+      ]},
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
     iotdb_stop: [
       { field: 'server_id', label: 'Server', type: 'server' },
-      { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox' }
+      { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
+      { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Use graceful shutdown script' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
     iotdb_cli: [
-      { field: 'commands', label: 'Commands', type: 'textarea', placeholder: 'Enter IoTDB CLI commands (one per line)...' },
       { field: 'server_id', label: 'Server', type: 'server' },
-      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
+      { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
+      { field: 'host', label: 'Host', type: 'text', placeholder: 'Optional, defaults to server host' },
+      { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'username', label: 'Username', type: 'text', placeholder: 'root' },
+      { field: 'password', label: 'Password', type: 'text', placeholder: 'root' },
+      { field: 'sql_dialect', label: 'SQL Dialect', type: 'select', options: [
+        { value: 'tree', label: 'Tree' },
+        { value: 'table', label: 'Table' }
+      ]},
+      { field: 'sqls', label: 'SQL Statements', type: 'textarea', placeholder: 'Enter one SQL statement per line...' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
     iotdb_config: [
-      { field: 'template_name', label: 'Template Name', type: 'text', placeholder: 'Configuration template name' },
-      { field: 'server_id', label: 'Server', type: 'server' }
+      { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
+      { field: 'file_path', label: 'File Path', type: 'text', placeholder: 'Optional, defaults to conf/iotdb-system.properties' },
+      { field: 'config_items', label: 'Config Items', type: 'json', placeholder: '{"dn_rpc_port": "6667"}' },
+      { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a .bak file before writing' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
 
     // Control nodes
@@ -257,23 +290,23 @@ const handleJsonInput = (field: string, value: string) => {
 }
 
 // Handle commands array (for iotdb_cli)
-const handleCommandsInput = (value: string) => {
-  const commands = value.split('\n').filter(cmd => cmd.trim())
-  updateConfig('commands', commands)
+const handleListInput = (field: string, value: string) => {
+  const items = value.split('\n').filter(item => item.trim())
+  updateConfig(field, items)
 }
 
-// Get commands as string for display
-const getCommandsString = (): string => {
-  const commands = getConfigValue('commands')
-  if (Array.isArray(commands)) {
-    return commands.join('\n')
+// Get list field as string for display
+const getListFieldString = (field: string): string => {
+  const value = getConfigValue(field)
+  if (Array.isArray(value)) {
+    return value.join('\n')
   }
   return ''
 }
 
-// Handle textarea with commands
-const isCommandsField = (field: string): boolean => {
-  return field === 'commands' && selectedNode.value?.data.nodeType === 'iotdb_cli'
+// Handle textarea with line-based array fields
+const isListField = (field: string): boolean => {
+  return ['commands', 'sqls'].includes(field)
 }
 </script>
 
@@ -401,12 +434,12 @@ const isCommandsField = (field: string): boolean => {
             <!-- Textarea (Command/Commands) -->
             <template v-else-if="field.type === 'textarea'">
               <ElInput
-                v-if="isCommandsField(field.field)"
-                :model-value="getCommandsString()"
+                v-if="isListField(field.field)"
+                :model-value="getListFieldString(field.field)"
                 type="textarea"
                 :rows="4"
                 :placeholder="field.placeholder"
-                @update:model-value="handleCommandsInput($event)"
+                @update:model-value="handleListInput(field.field, $event)"
               />
               <ElInput
                 v-else

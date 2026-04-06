@@ -34,7 +34,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Upload',
     color: '#67C23A',
     description: 'Upload file via SFTP',
-    defaultConfig: { local_path: '', remote_path: '', server_id: null },
+    defaultConfig: { local_path: '', remote_path: '', server_id: null, timeout: 300 },
     inputs: 1,
     outputs: 1
   },
@@ -56,7 +56,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Setting',
     color: '#909399',
     description: 'Modify configuration file',
-    defaultConfig: { file_path: '', replacements: {}, server_id: null },
+    defaultConfig: { file_path: '', config_items: {}, backup_before_write: true, server_id: null, timeout: 60 },
     inputs: 1,
     outputs: 1
   },
@@ -80,7 +80,17 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Download',
     color: '#9B59B6',
     description: 'Deploy IoTDB instance',
-    defaultConfig: { version: '0.13.0', install_path: '/opt/iotdb', server_id: null, config_template: null },
+    defaultConfig: {
+      server_id: null,
+      artifact_local_path: '',
+      remote_package_path: '/tmp/apache-iotdb-bin.zip',
+      install_dir: '/opt/iotdb',
+      package_type: 'auto',
+      extract_subdir: '',
+      overwrite: false,
+      rpc_port: 6667,
+      timeout: 600
+    },
     inputs: 1,
     outputs: 1
   },
@@ -91,7 +101,14 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'VideoPlay',
     color: '#27AE60',
     description: 'Start IoTDB service',
-    defaultConfig: { server_id: null, wait_port: 6667, timeout: 60 },
+    defaultConfig: {
+      server_id: null,
+      iotdb_home: '',
+      host: '',
+      rpc_port: 6667,
+      timeout_seconds: 60,
+      wait_strategy: 'port'
+    },
     inputs: 1,
     outputs: 1
   },
@@ -102,7 +119,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'VideoPause',
     color: '#E74C3C',
     description: 'Stop IoTDB service',
-    defaultConfig: { server_id: null, graceful: true },
+    defaultConfig: { server_id: null, iotdb_home: '', graceful: true, timeout_seconds: 60 },
     inputs: 1,
     outputs: 1
   },
@@ -113,7 +130,17 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Tools',
     color: '#3498DB',
     description: 'Execute IoTDB CLI commands',
-    defaultConfig: { commands: [], server_id: null, timeout: 300 },
+    defaultConfig: {
+      server_id: null,
+      iotdb_home: '',
+      host: '',
+      rpc_port: 6667,
+      username: 'root',
+      password: 'root',
+      sqls: [],
+      sql_dialect: 'tree',
+      timeout_seconds: 300
+    },
     inputs: 1,
     outputs: 1
   },
@@ -124,7 +151,14 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Setting',
     color: '#8E44AD',
     description: 'Apply IoTDB configuration',
-    defaultConfig: { template_name: '', server_id: null },
+    defaultConfig: {
+      server_id: null,
+      iotdb_home: '',
+      file_path: '',
+      config_items: {},
+      backup_before_write: true,
+      timeout: 60
+    },
     inputs: 1,
     outputs: 1
   },
