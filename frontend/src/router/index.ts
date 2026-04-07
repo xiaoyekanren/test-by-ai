@@ -19,6 +19,11 @@ const router = createRouter({
       component: () => import('@/views/WorkflowsView.vue')
     },
     {
+      path: '/executions',
+      name: 'executions',
+      component: () => import('@/views/ExecutionInsightsView.vue')
+    },
+    {
       path: '/workflows/new',
       name: 'workflow-new',
       component: () => import('@/views/WorkflowEditorView.vue')

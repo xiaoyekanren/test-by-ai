@@ -157,12 +157,9 @@ class ExecutionEngine:
             if failed_count == 0:
                 execution.status = "completed"
                 execution.result = "passed"
-            elif passed_count == 0:
-                execution.status = "failed"
-                execution.result = "failed"
             else:
-                execution.status = "completed"
-                execution.result = "partial"
+                execution.status = "failed"
+                execution.result = "failed" if passed_count == 0 else "partial"
 
             self.db.commit()
         except Exception as exc:
@@ -923,12 +920,13 @@ class ExecutionEngine:
         else:
             source_dir_expr = '$(find ' + self._quote(tmp_dir) + " -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 
+        expected_script_path = f"{install_dir.rstrip('/')}/sbin/{expected_script}"
         commands.extend([
             f"source_dir={source_dir_expr}",
             'if [ -z "$source_dir" ]; then source_dir=' + self._quote(tmp_dir) + "; fi",
             f"mkdir -p {self._quote(install_dir)}",
             f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/",
-            f"test -f {self._quote(f'{install_dir.rstrip('/')}/sbin/{expected_script}')}",
+            f"test -f {self._quote(expected_script_path)}",
             f"rm -rf {self._quote(tmp_dir)}"
         ])
 
