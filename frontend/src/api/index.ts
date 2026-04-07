@@ -15,7 +15,12 @@ import type {
   ProcessInfo,
   RemoteMonitoringStatus,
   RemoteProcessesResponse,
-  KillProcessResult
+  KillProcessResult,
+  IoTDBFileInfo,
+  IoTDBCLIResult,
+  IoTDBLogContent,
+  IoTDBConfigContent,
+  IoTDBRestartResult
 } from '@/types'
 
 const apiClient = axios.create({
@@ -156,6 +161,30 @@ export const settingsApi = {
 
   updateObservability: (data: ObservabilitySettingsPayload): Promise<ObservabilitySettingsPayload> =>
     apiClient.put('/settings/observability', data)
+}
+
+// IoTDB API
+export const iotdbApi = {
+  cli: (serverId: number, iotdbHome: string, sql: string, timeout?: number): Promise<IoTDBCLIResult> =>
+    apiClient.post('/iotdb/cli', { server_id: serverId, iotdb_home: iotdbHome, sql, timeout }),
+
+  listLogs: (serverId: number, iotdbHome: string): Promise<IoTDBFileInfo[]> =>
+    apiClient.post('/iotdb/logs/list', { server_id: serverId, iotdb_home: iotdbHome }),
+
+  readLog: (serverId: number, path: string, tail?: number): Promise<IoTDBLogContent> =>
+    apiClient.post('/iotdb/logs/read', { server_id: serverId, path, tail }),
+
+  listConfigs: (serverId: number, iotdbHome: string): Promise<IoTDBFileInfo[]> =>
+    apiClient.post('/iotdb/configs/list', { server_id: serverId, iotdb_home: iotdbHome }),
+
+  readConfig: (serverId: number, path: string): Promise<IoTDBConfigContent> =>
+    apiClient.post('/iotdb/configs/read', { server_id: serverId, path }),
+
+  writeConfig: (serverId: number, path: string, content: string): Promise<{ success: boolean; message: string }> =>
+    apiClient.post('/iotdb/configs/write', { server_id: serverId, path, content }),
+
+  restart: (serverId: number, iotdbHome: string): Promise<IoTDBRestartResult> =>
+    apiClient.post('/iotdb/restart', { server_id: serverId, iotdb_home: iotdbHome })
 }
 
 export default apiClient
