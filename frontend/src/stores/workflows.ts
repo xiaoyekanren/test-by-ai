@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Workflow, WorkflowCreate, WorkflowUpdate, NodeType, FlowNode, FlowEdge } from '@/types'
 import { NODE_CONFIGS } from '@/types'
 import { workflowsApi } from '@/api'
+import { useServersStore } from '@/stores/servers'
 
 // History state for undo/redo
 interface HistoryState {
@@ -20,17 +21,27 @@ const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
   iotdb_start: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port', 'wait_port'],
   iotdb_stop: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
   iotdb_cli: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_config: ['server_id', 'node_role', 'iotdb_home', 'rpc_port', 'file_path'],
+  iotdb_config: ['server_id', 'node_role', 'iotdb_home', 'rpc_port', 'file_path', 'config_items'],
   iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes']
 }
+
+const DEFAULT_IOTDB_CLUSTER_NAME = 'defaultCluster'
+const DEFAULT_CN_INTERNAL_PORT = 10710
+const DEFAULT_CN_CONSENSUS_PORT = 10720
+const DEFAULT_DN_RPC_PORT = 6667
+const DEFAULT_DN_INTERNAL_PORT = 10730
+const DEFAULT_DN_MPP_DATA_EXCHANGE_PORT = 10740
+const DEFAULT_DN_SCHEMA_REGION_CONSENSUS_PORT = 10750
+const DEFAULT_DN_DATA_REGION_CONSENSUS_PORT = 10760
 
 const cloneValue = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 const isEmptyInheritedValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return true
   if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value).length === 0
   return false
 }
 
@@ -52,7 +63,78 @@ const normalizeClusterNodeListForEditor = (
     }))
 }
 
+const stringifyConfigValue = (value: unknown) => String(value ?? '')
+
+const getIntegerConfigValue = (value: unknown, fallback: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
+}
+
+const buildSeedConfigNode = (host: unknown, port: number) => {
+  if (isEmptyInheritedValue(host)) return undefined
+  return `${String(host)}:${port}`
+}
+
+const buildMinimalIotdbConfigItems = (config: Record<string, unknown>): Record<string, string> => {
+  const role = String(config.node_role || 'standalone')
+  const host = config.host
+  const clusterName = stringifyConfigValue(config.cluster_name || DEFAULT_IOTDB_CLUSTER_NAME)
+  const cnInternalPort = getIntegerConfigValue(config.cn_internal_port || config.wait_port, DEFAULT_CN_INTERNAL_PORT)
+  const cnConsensusPort = getIntegerConfigValue(config.cn_consensus_port, DEFAULT_CN_CONSENSUS_PORT)
+  const dnRpcPort = getIntegerConfigValue(config.dn_rpc_port || config.rpc_port, DEFAULT_DN_RPC_PORT)
+  const dnInternalPort = getIntegerConfigValue(config.dn_internal_port, DEFAULT_DN_INTERNAL_PORT)
+  const dnMppDataExchangePort = getIntegerConfigValue(config.dn_mpp_data_exchange_port, DEFAULT_DN_MPP_DATA_EXCHANGE_PORT)
+  const dnSchemaRegionConsensusPort = getIntegerConfigValue(config.dn_schema_region_consensus_port, DEFAULT_DN_SCHEMA_REGION_CONSENSUS_PORT)
+  const dnDataRegionConsensusPort = getIntegerConfigValue(config.dn_data_region_consensus_port, DEFAULT_DN_DATA_REGION_CONSENSUS_PORT)
+  const configItems: Record<string, string> = {
+    cluster_name: clusterName
+  }
+
+  if (role === 'confignode' || role === 'standalone') {
+    configItems.cn_internal_port = String(cnInternalPort)
+    configItems.cn_consensus_port = String(cnConsensusPort)
+
+    if (!isEmptyInheritedValue(host)) {
+      configItems.cn_internal_address = stringifyConfigValue(host)
+    }
+
+    const seedConfigNode = !isEmptyInheritedValue(config.cn_seed_config_node)
+      ? stringifyConfigValue(config.cn_seed_config_node)
+      : buildSeedConfigNode(host, cnInternalPort)
+    if (seedConfigNode) {
+      configItems.cn_seed_config_node = seedConfigNode
+    }
+  }
+
+  if (role === 'datanode' || role === 'standalone') {
+    configItems.dn_rpc_port = String(dnRpcPort)
+    configItems.dn_internal_port = String(dnInternalPort)
+    configItems.dn_mpp_data_exchange_port = String(dnMppDataExchangePort)
+    configItems.dn_schema_region_consensus_port = String(dnSchemaRegionConsensusPort)
+    configItems.dn_data_region_consensus_port = String(dnDataRegionConsensusPort)
+
+    if (!isEmptyInheritedValue(host)) {
+      configItems.dn_rpc_address = stringifyConfigValue(host)
+      configItems.dn_internal_address = stringifyConfigValue(host)
+    }
+
+    const seedConfigNode = !isEmptyInheritedValue(config.cn_seed_config_node)
+      ? stringifyConfigValue(config.cn_seed_config_node)
+      : buildSeedConfigNode(host, cnInternalPort)
+    if (seedConfigNode) {
+      configItems.dn_seed_config_node = seedConfigNode
+    }
+  }
+
+  configItems.schema_replication_factor = stringifyConfigValue(config.schema_replication_factor || 1)
+  configItems.data_replication_factor = stringifyConfigValue(config.data_replication_factor || 1)
+
+  return configItems
+}
+
 export const useWorkflowsStore = defineStore('workflows', () => {
+  const serversStore = useServersStore()
+
   // Workflow list state
   const workflows = ref<Workflow[]>([])
   const currentWorkflow = ref<Workflow | null>(null)
@@ -172,6 +254,12 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     return value === undefined ? undefined : cloneValue(value)
   }
 
+  function resolveServerHost(serverId: unknown) {
+    if (serverId === null || serverId === undefined || serverId === '') return undefined
+    const server = serversStore.servers.find(item => item.id === Number(serverId))
+    return server?.host
+  }
+
   function getNodeOutputConfig(node: FlowNode): Record<string, unknown> {
     const config = node.data.config
     const output: Record<string, unknown> = {}
@@ -183,6 +271,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       }
     }
 
+    if (isEmptyInheritedValue(output.host)) {
+      const serverHost = resolveServerHost(config.server_id)
+      if (serverHost) {
+        output.host = serverHost
+      }
+    }
+
     if (node.data.nodeType === 'iotdb_deploy') {
       const installDir = config.install_dir
       if (!isEmptyInheritedValue(installDir)) {
@@ -190,6 +285,18 @@ export const useWorkflowsStore = defineStore('workflows', () => {
         output.iotdb_home = iotdbHome
         output.conf_path = `${iotdbHome}/conf/iotdb-system.properties`
       }
+      output.config_items = buildMinimalIotdbConfigItems({
+        ...config,
+        host: config.host || output.host,
+        node_role: config.node_role || 'standalone'
+      })
+    }
+
+    if (node.data.nodeType === 'iotdb_start') {
+      output.config_items = buildMinimalIotdbConfigItems({
+        ...config,
+        host: config.host || output.host
+      })
     }
 
     if (node.data.nodeType === 'iotdb_cluster_deploy') {
