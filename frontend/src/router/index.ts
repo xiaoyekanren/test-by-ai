@@ -42,6 +42,11 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue')
+    },
+    {
+      path: '/iotdb',
+      name: 'iotdb',
+      component: () => import('@/views/IoTDBView.vue')
     }
   ]
 })
