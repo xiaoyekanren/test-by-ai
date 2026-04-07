@@ -42,6 +42,42 @@ def print_error(msg):
     print(f"[ERROR] {msg}")
 
 
+def print_section(title):
+    print()
+    print("=" * 42)
+    print(f"   {title}")
+    print("=" * 42)
+
+
+def print_kv(label, value):
+    print(f"{label:<10} {value}")
+
+
+def print_access_summary():
+    print_section("Access")
+    print_kv("Frontend:", f"http://localhost:{FRONTEND_PORT}")
+    print_kv("Backend:", f"http://localhost:{BACKEND_PORT}")
+    print_kv("API Docs:", f"http://localhost:{BACKEND_PORT}/docs")
+
+
+def print_logs_summary():
+    print_section("Logs")
+    print_kv("Backend:", str(BACKEND_LOG_FILE))
+    print_kv("Frontend:", str(FRONTEND_LOG_FILE))
+
+
+def print_stop_summary(frontend_stopped, backend_stopped):
+    print_section("Stopped")
+    print_kv("Frontend:", "STOPPED" if frontend_stopped else "NOT RUNNING")
+    print_kv("Backend:", "STOPPED" if backend_stopped else "NOT RUNNING")
+
+
+def print_start_summary(backend_started, frontend_started):
+    print_section("Started")
+    print_kv("Backend:", "RUNNING" if backend_started else "FAILED")
+    print_kv("Frontend:", "RUNNING" if frontend_started else "FAILED")
+
+
 def get_pid_by_port(port):
     """Get process PID listening on the given port."""
     system = platform.system()
@@ -76,6 +112,41 @@ def get_pid_by_port(port):
 def is_running(port):
     """Check if service is running on the given port."""
     return get_pid_by_port(port) is not None
+
+
+def tail_log(log_file, lines=20):
+    """Return the last N lines of a log file."""
+    if not log_file.exists():
+        return ""
+
+    content = log_file.read_text(errors="replace").splitlines()
+    return "\n".join(content[-lines:])
+
+
+def wait_for_service(port, process, log_file, name, timeout_seconds):
+    """Wait until a service starts listening or its process exits."""
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        pid = get_pid_by_port(port)
+        if pid:
+            return pid
+
+        if process.poll() is not None:
+            break
+
+        time.sleep(0.5)
+
+    pid = get_pid_by_port(port)
+    if pid:
+        return pid
+
+    print_error(f"Failed to start {name}. Check logs at {log_file}")
+    log_tail = tail_log(log_file)
+    if log_tail:
+        print_error(f"Last {min(20, len(log_tail.splitlines()))} log lines:")
+        print(log_tail)
+    return None
 
 
 def stop_process(port, name):
@@ -122,36 +193,37 @@ def start_backend():
         "--port", str(BACKEND_PORT)
     ]
 
-    log_file = open(BACKEND_LOG_FILE, "w")
+    with open(BACKEND_LOG_FILE, "w") as log_file:
+        if platform.system() == "Windows":
+            process = subprocess.Popen(
+                cmd,
+                cwd=backend_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=log_file,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            )
+        else:
+            process = subprocess.Popen(
+                cmd,
+                cwd=backend_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=log_file,
+                start_new_session=True
+            )
 
-    if platform.system() == "Windows":
-        # Use CREATE_NEW_PROCESS_GROUP to detach from console
-        subprocess.Popen(
-            cmd,
-            cwd=backend_dir,
-            stdout=log_file,
-            stderr=log_file,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
-    else:
-        subprocess.Popen(
-            cmd,
-            cwd=backend_dir,
-            stdout=log_file,
-            stderr=log_file,
-            start_new_session=True
-        )
-
-    # Wait and check
-    time.sleep(3)
-    pid = get_pid_by_port(BACKEND_PORT)
+    pid = wait_for_service(
+        BACKEND_PORT,
+        process,
+        BACKEND_LOG_FILE,
+        "backend",
+        timeout_seconds=10,
+    )
     if pid:
         print_info(f"Backend started successfully (PID: {pid})")
-        print_info(f"API docs: http://localhost:{BACKEND_PORT}/docs")
         return True
-    else:
-        print_error(f"Failed to start backend. Check logs at {BACKEND_LOG_FILE}")
-        return False
+    return False
 
 
 def start_frontend():
@@ -170,45 +242,44 @@ def start_frontend():
 
     cmd = "npm run dev -- --port " + str(FRONTEND_PORT)
 
-    log_file = open(FRONTEND_LOG_FILE, "w")
+    with open(FRONTEND_LOG_FILE, "w") as log_file:
+        if platform.system() == "Windows":
+            process = subprocess.Popen(
+                cmd,
+                cwd=frontend_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=log_file,
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            )
+        else:
+            process = subprocess.Popen(
+                cmd,
+                cwd=frontend_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=log_file,
+                shell=True,
+                start_new_session=True
+            )
 
-    if platform.system() == "Windows":
-        subprocess.Popen(
-            cmd,
-            cwd=frontend_dir,
-            stdout=log_file,
-            stderr=log_file,
-            shell=True,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
-    else:
-        subprocess.Popen(
-            cmd,
-            cwd=frontend_dir,
-            stdout=log_file,
-            stderr=log_file,
-            shell=True,
-            start_new_session=True
-        )
-
-    # Wait and check
-    time.sleep(5)
-    pid = get_pid_by_port(FRONTEND_PORT)
+    pid = wait_for_service(
+        FRONTEND_PORT,
+        process,
+        FRONTEND_LOG_FILE,
+        "frontend",
+        timeout_seconds=15,
+    )
     if pid:
         print_info(f"Frontend started successfully (PID: {pid})")
-        print_info(f"Application: http://localhost:{FRONTEND_PORT}")
         return True
-    else:
-        print_error(f"Failed to start frontend. Check logs at {FRONTEND_LOG_FILE}")
-        return False
+    return False
 
 
 def show_status():
     """Show service status."""
-    print()
-    print("=" * 42)
-    print("   IoTDB Test Automation Platform Status")
-    print("=" * 42)
+    print_section("IoTDB Test Automation Platform Status")
     print()
 
     backend_pid = get_pid_by_port(BACKEND_PORT)
@@ -223,10 +294,8 @@ def show_status():
     else:
         print("Frontend: [STOPPED]")
 
-    print()
-    print("Logs:")
-    print(f"  Backend:  {BACKEND_LOG_FILE}")
-    print(f"  Frontend: {FRONTEND_LOG_FILE}")
+    print_logs_summary()
+    print_access_summary()
     print()
 
 
@@ -283,44 +352,74 @@ def main():
     cmd = sys.argv[1].lower()
 
     if cmd == "start":
+        print()
         print_info("Starting IoTDB Test Automation Platform...")
-        start_backend()
-        start_frontend()
-        print_info("All services started!")
-        show_status()
+        backend_started = start_backend()
+        frontend_started = start_frontend() if backend_started else False
+        if backend_started and frontend_started:
+            print_info("All services started!")
+        else:
+            print_error("Startup did not complete successfully")
+        print_start_summary(backend_started, frontend_started)
+        if backend_started and frontend_started:
+            print_access_summary()
+        print_logs_summary()
+        sys.exit(0 if backend_started and frontend_started else 1)
 
     elif cmd == "stop":
+        print()
         print_info("Stopping IoTDB Test Automation Platform...")
-        stop_process(FRONTEND_PORT, "Frontend")
-        stop_process(BACKEND_PORT, "Backend")
+        frontend_stopped = stop_process(FRONTEND_PORT, "Frontend")
+        backend_stopped = stop_process(BACKEND_PORT, "Backend")
         print_info("All services stopped")
+        print_stop_summary(frontend_stopped, backend_stopped)
+        print_logs_summary()
+        print()
 
     elif cmd == "restart":
+        print()
         print_info("Stopping IoTDB Test Automation Platform...")
-        stop_process(FRONTEND_PORT, "Frontend")
-        stop_process(BACKEND_PORT, "Backend")
+        frontend_stopped = stop_process(FRONTEND_PORT, "Frontend")
+        backend_stopped = stop_process(BACKEND_PORT, "Backend")
         print_info("All services stopped")
+        print_stop_summary(frontend_stopped, backend_stopped)
+        print()
         time.sleep(2)
         print_info("Starting IoTDB Test Automation Platform...")
-        start_backend()
-        start_frontend()
-        print_info("All services started!")
-        show_status()
+        backend_started = start_backend()
+        frontend_started = start_frontend() if backend_started else False
+        if backend_started and frontend_started:
+            print_info("All services started!")
+        else:
+            print_error("Restart did not complete successfully")
+        print_start_summary(backend_started, frontend_started)
+        if backend_started and frontend_started:
+            print_access_summary()
+        print_logs_summary()
+        sys.exit(0 if backend_started and frontend_started else 1)
 
     elif cmd == "status":
         show_status()
 
     elif cmd == "start-backend":
+        print()
         start_backend()
+        print()
 
     elif cmd == "stop-backend":
+        print()
         stop_process(BACKEND_PORT, "Backend")
+        print()
 
     elif cmd == "start-frontend":
+        print()
         start_frontend()
+        print()
 
     elif cmd == "stop-frontend":
+        print()
         stop_process(FRONTEND_PORT, "Frontend")
+        print()
 
     elif cmd == "logs":
         show_logs("backend")

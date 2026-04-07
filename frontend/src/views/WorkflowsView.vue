@@ -239,6 +239,11 @@ const handleCloseExecutionDialog = () => {
   currentExecutionWorkflow.value = null
 }
 
+const openExecutionInsights = () => {
+  if (!executionsStore.currentExecution) return
+  router.push(`/executions?executionId=${executionsStore.currentExecution.id}`)
+}
+
 // Format duration helper
 const formatDuration = (seconds: number | null): string => {
   if (seconds === null) return '-'
@@ -479,6 +484,12 @@ onUnmounted(() => {
       </div>
 
       <template #footer>
+        <ElButton
+          v-if="executionsStore.currentExecution"
+          @click="openExecutionInsights"
+        >
+          View Analysis
+        </ElButton>
         <ElButton
           v-if="executionsStore.currentExecution?.status === 'running' || executionsStore.currentExecution?.status === 'pending'"
           type="danger"
