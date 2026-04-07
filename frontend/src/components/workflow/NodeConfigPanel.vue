@@ -7,41 +7,50 @@ import {
   ElInputNumber,
   ElSelect,
   ElOption,
-  ElCheckbox,
+  ElSwitch,
   ElButton,
-  ElIcon,
   ElEmpty
 } from 'element-plus'
-import { ArrowRight, ArrowLeft, Edit } from '@element-plus/icons-vue'
+import { Edit, Plus, Delete } from '@element-plus/icons-vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
-import { NODE_CONFIGS } from '@/types'
 import type { NodeType } from '@/types'
+
+interface KeyValueDraft {
+  id: string
+  key: string
+  value: string
+}
+
+interface FieldDefinition {
+  field: string
+  label: string
+  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'keyValue' | 'server'
+  options?: Array<{ value: string | number | boolean; label: string }>
+  placeholder?: string
+  min?: number
+  max?: number
+}
+
+interface FieldSection {
+  key: string
+  title: string
+  fields: FieldDefinition[]
+}
 
 const workflowsStore = useWorkflowsStore()
 const serversStore = useServersStore()
 
-// Panel state
-const isCollapsed = ref(false)
-
 // Local edit state for node label
 const editingLabel = ref('')
 const isEditingLabel = ref(false)
+const jsonDrafts = ref<Record<string, string>>({})
+const jsonDraftNodeId = ref<string | null>(null)
+const keyValueDrafts = ref<Record<string, KeyValueDraft[]>>({})
+const keyValueDraftSnapshots = ref<Record<string, string>>({})
 
 // Get selected node
 const selectedNode = computed(() => workflowsStore.selectedNode)
-
-// Get node config
-const nodeConfig = computed(() => {
-  if (!selectedNode.value) return null
-  return NODE_CONFIGS[selectedNode.value.data.nodeType as NodeType] || null
-})
-
-// Get node type label and color
-const nodeTypeLabel = computed(() => nodeConfig.value?.label || '')
-const nodeTypeColor = computed(() => nodeConfig.value?.color || '#909399')
-const nodeCategory = computed(() => nodeConfig.value?.category || '')
-const nodeDescription = computed(() => nodeConfig.value?.description || '')
 
 const nodeHelpText = computed(() => {
   if (!selectedNode.value) return ''
@@ -64,14 +73,6 @@ const nodeHelpText = computed(() => {
 
   return ''
 })
-
-// Category labels
-const categoryLabels: Record<string, string> = {
-  basic: 'Basic Node',
-  iotdb: 'IoTDB Node',
-  control: 'Control Node',
-  result: 'Result Node'
-}
 
 // Server options for dropdown
 const serverOptions = computed(() => {
@@ -96,13 +97,19 @@ onMounted(async () => {
 watch(selectedNode, (node) => {
   if (node) {
     editingLabel.value = node.data.label
+    if (jsonDraftNodeId.value !== node.id) {
+      jsonDrafts.value = {}
+      keyValueDrafts.value = {}
+      keyValueDraftSnapshots.value = {}
+      jsonDraftNodeId.value = node.id
+    }
+  } else {
+    jsonDrafts.value = {}
+    keyValueDrafts.value = {}
+    keyValueDraftSnapshots.value = {}
+    jsonDraftNodeId.value = null
   }
 }, { immediate: true })
-
-// Toggle panel
-const togglePanel = () => {
-  isCollapsed.value = !isCollapsed.value
-}
 
 // Start editing label
 const startEditLabel = () => {
@@ -140,25 +147,19 @@ const getConfigValue = (field: string): unknown => {
   return selectedNode.value.data.config[field]
 }
 
+const getFieldLayoutClass = (field: FieldDefinition) => {
+  if (['textarea', 'json', 'keyValue'].includes(field.type)) return 'field-full'
+  if (field.type === 'number') return 'field-compact field-inline'
+  if (field.type === 'checkbox') return 'field-compact field-inline'
+  if (['host', 'username', 'password', 'node_role', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type'].includes(field.field)) return 'field-medium field-inline'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'remote_package_path'].includes(field.field)) return 'field-wide field-inline'
+  if (field.type === 'server') return 'field-wide field-inline'
+  return 'field-wide field-inline'
+}
+
 // Field definitions by node type
-const getFieldDefinitions = (nodeType: NodeType): Array<{
-  field: string
-  label: string
-  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'server'
-  options?: Array<{ value: string | number | boolean; label: string }>
-  placeholder?: string
-  min?: number
-  max?: number
-}> => {
-  const definitions: Record<NodeType, Array<{
-    field: string
-    label: string
-    type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'server'
-    options?: Array<{ value: string | number | boolean; label: string }>
-    placeholder?: string
-    min?: number
-    max?: number
-  }>> = {
+const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
+  const definitions: Record<NodeType, FieldDefinition[]> = {
     // Basic nodes
     shell: [
       { field: 'command', label: 'Command', type: 'textarea', placeholder: 'Enter shell command...' },
@@ -179,7 +180,7 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
     ],
     config: [
       { field: 'file_path', label: 'File Path', type: 'text', placeholder: '/path/to/config/file' },
-      { field: 'config_items', label: 'Config Items', type: 'json', placeholder: '{"key": "value"}' },
+      { field: 'config_items', label: 'Config Items', type: 'keyValue', placeholder: 'e.g. key = value' },
       { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a .bak file before writing' },
       { field: 'server_id', label: 'Server', type: 'server' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
@@ -257,7 +258,7 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
       ]},
       { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'file_path', label: 'Target Config File', type: 'text', placeholder: 'Optional, defaults to {iotdb_home}/conf/iotdb-system.properties' },
-      { field: 'config_items', label: 'Override Items', type: 'json', placeholder: '{"dn_rpc_port": "6667", "dn_rpc_address": "10.0.0.10"}' },
+      { field: 'config_items', label: 'Override Items', type: 'keyValue', placeholder: 'e.g. dn_rpc_port = 6667' },
       { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a backup before applying overrides' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
@@ -365,14 +366,143 @@ const getFieldDefinitions = (nodeType: NodeType): Array<{
   return definitions[nodeType] || []
 }
 
+const fieldSectionTitles: Record<string, string> = {
+  connection: 'Connection',
+  package: 'Package',
+  paths: 'Paths',
+  runtime: 'Runtime',
+  configuration: 'Configuration',
+  command: 'Command',
+  checks: 'Checks',
+  notification: 'Notification',
+  output: 'Output',
+  general: 'General'
+}
+
+const getFieldSection = (field: FieldDefinition) => {
+  if (['server_id', 'host', 'username', 'password'].includes(field.field)) return 'connection'
+  if (['artifact_local_path', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir'].includes(field.field)) return 'paths'
+  if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
+  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write'].includes(field.field)) return 'configuration'
+  if (['command', 'commands', 'sqls', 'validation_sqls', 'expression', 'condition'].includes(field.field)) return 'command'
+  if (['assert_type', 'params', 'expected', 'iterations', 'interval', 'max_concurrent'].includes(field.field)) return 'checks'
+  if (['recipient', 'template'].includes(field.field)) return 'notification'
+  if (['format', 'include_logs'].includes(field.field)) return 'output'
+  return 'general'
+}
+
+const fieldSections = computed<FieldSection[]>(() => {
+  if (!selectedNode.value) return []
+
+  const sections: FieldSection[] = []
+  for (const field of getFieldDefinitions(selectedNode.value.data.nodeType as NodeType)) {
+    const key = getFieldSection(field)
+    let section = sections.find(item => item.key === key)
+    if (!section) {
+      section = { key, title: fieldSectionTitles[key] || 'General', fields: [] }
+      sections.push(section)
+    }
+    section.fields.push(field)
+  }
+
+  return sections
+})
+
 // Handle JSON input
 const handleJsonInput = (field: string, value: string) => {
+  if (!selectedNode.value) return
+
+  const draftKey = `${selectedNode.value.id}:${field}`
+  jsonDrafts.value[draftKey] = value
+
   try {
     const parsed = JSON.parse(value)
     updateConfig(field, parsed)
   } catch {
     // Invalid JSON - keep the current value
   }
+}
+
+const getJsonFieldString = (field: string): string => {
+  if (!selectedNode.value) return ''
+
+  const draftKey = `${selectedNode.value.id}:${field}`
+  if (!(draftKey in jsonDrafts.value)) {
+    jsonDrafts.value[draftKey] = JSON.stringify(getConfigValue(field) || {}, null, 2)
+  }
+
+  return jsonDrafts.value[draftKey]
+}
+
+const getDraftKey = (field: string): string => selectedNode.value ? `${selectedNode.value.id}:${field}` : field
+
+const createEmptyKeyValueRow = (): KeyValueDraft => ({
+  id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+  key: '',
+  value: ''
+})
+
+const getKeyValueSignature = (value: unknown): string => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '{}'
+  return JSON.stringify(value)
+}
+
+const getKeyValueRows = (field: string): KeyValueDraft[] => {
+  if (!selectedNode.value) return []
+
+  const draftKey = getDraftKey(field)
+  const value = getConfigValue(field)
+  const signature = getKeyValueSignature(value)
+  if (!(draftKey in keyValueDrafts.value) || keyValueDraftSnapshots.value[draftKey] !== signature) {
+    const rows = typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? Object.entries(value).map(([key, itemValue], index) => ({
+        id: `${draftKey}-${index}`,
+        key,
+        value: String(itemValue ?? '')
+      }))
+      : []
+
+    keyValueDrafts.value[draftKey] = rows.length > 0 ? rows : [createEmptyKeyValueRow()]
+    keyValueDraftSnapshots.value[draftKey] = signature
+  }
+
+  return keyValueDrafts.value[draftKey]
+}
+
+const syncKeyValueConfig = (field: string) => {
+  const rows = keyValueDrafts.value[getDraftKey(field)] || []
+  const nextConfigItems: Record<string, string> = {}
+
+  for (const row of rows) {
+    const key = row.key.trim()
+    if (key) {
+      nextConfigItems[key] = row.value
+    }
+  }
+
+  updateConfig(field, nextConfigItems)
+  keyValueDraftSnapshots.value[getDraftKey(field)] = JSON.stringify(nextConfigItems)
+}
+
+const updateKeyValueRow = (field: string, rowId: string, prop: 'key' | 'value', value: string) => {
+  const rows = getKeyValueRows(field)
+  const row = rows.find(item => item.id === rowId)
+  if (!row) return
+
+  row[prop] = value
+  syncKeyValueConfig(field)
+}
+
+const addKeyValueRow = (field: string) => {
+  getKeyValueRows(field).push(createEmptyKeyValueRow())
+}
+
+const removeKeyValueRow = (field: string, rowId: string) => {
+  const draftKey = getDraftKey(field)
+  const nextRows = (keyValueDrafts.value[draftKey] || []).filter(row => row.id !== rowId)
+  keyValueDrafts.value[draftKey] = nextRows.length > 0 ? nextRows : [createEmptyKeyValueRow()]
+  syncKeyValueConfig(field)
 }
 
 // Handle commands array (for iotdb_cli)
@@ -397,79 +527,59 @@ const isListField = (field: string): boolean => {
 </script>
 
 <template>
-  <div class="node-config-panel" :class="{ collapsed: isCollapsed }">
-    <!-- Toggle Button -->
-    <div class="panel-toggle" @click="togglePanel">
-      <ElIcon :size="16">
-        <ArrowRight v-if="isCollapsed" />
-        <ArrowLeft v-else />
-      </ElIcon>
+  <div class="node-config-dialog-content">
+    <div v-if="!selectedNode" class="no-selection">
+      <ElEmpty description="Select a node to configure" :image-size="80" />
     </div>
 
-    <!-- Panel Content -->
-    <div v-if="!isCollapsed" class="panel-content">
-      <!-- No Selection State -->
-      <div v-if="!selectedNode" class="no-selection">
-        <ElEmpty description="Select a node to configure" :image-size="80" />
+    <div v-else class="settings-page">
+      <div class="node-name-section">
+        <div class="setting-label">Node Name</div>
+        <div v-if="!isEditingLabel" class="node-name-display">
+          <span class="node-name">{{ selectedNode.data.label }}</span>
+          <ElButton
+            text
+            size="small"
+            :icon="Edit"
+            @click="startEditLabel"
+          />
+        </div>
+        <div v-else class="node-name-edit">
+          <ElInput
+            v-model="editingLabel"
+            size="small"
+            placeholder="Enter node name"
+            @keyup.enter="saveLabel"
+            @keyup.escape="cancelEditLabel"
+          />
+          <ElButton size="small" type="primary" @click="saveLabel">Save</ElButton>
+          <ElButton size="small" @click="cancelEditLabel">Cancel</ElButton>
+        </div>
       </div>
 
-      <!-- Node Configuration -->
-      <div v-else class="config-container">
-        <!-- Node Header -->
-        <div class="node-header" :style="{ backgroundColor: nodeTypeColor }">
-          <div class="node-type-info">
-            <span class="node-type-label">{{ nodeTypeLabel }}</span>
-            <span class="node-category">{{ categoryLabels[nodeCategory] }}</span>
-            <span v-if="nodeDescription" class="node-description">{{ nodeDescription }}</span>
-          </div>
-        </div>
+      <div v-if="nodeHelpText" class="node-help">
+        {{ nodeHelpText }}
+      </div>
 
-        <!-- Node Name (Editable) -->
-        <div class="node-name-section">
-          <div class="node-name-label">Node Name</div>
-          <div v-if="!isEditingLabel" class="node-name-display">
-            <span class="node-name">{{ selectedNode.data.label }}</span>
-            <ElButton
-              text
-              size="small"
-              @click="startEditLabel"
-            >
-              <ElIcon><Edit /></ElIcon>
-            </ElButton>
-          </div>
-          <div v-else class="node-name-edit">
-            <ElInput
-              v-model="editingLabel"
-              size="small"
-              placeholder="Enter node name"
-              @keyup.enter="saveLabel"
-              @keyup.escape="cancelEditLabel"
-            />
-            <ElButton size="small" type="primary" @click="saveLabel">Save</ElButton>
-            <ElButton size="small" @click="cancelEditLabel">Cancel</ElButton>
-          </div>
-        </div>
-
-        <!-- Configuration Form -->
-        <ElForm
-          label-position="top"
-          class="config-form"
+      <ElForm label-position="top" class="settings-form">
+        <section
+          v-for="section in fieldSections"
+          :key="section.key"
+          class="settings-section"
         >
-          <div v-if="nodeHelpText" class="node-help">
-            {{ nodeHelpText }}
-          </div>
+          <div class="section-title">{{ section.title }}</div>
           <ElFormItem
-            v-for="field in getFieldDefinitions(selectedNode.data.nodeType as NodeType)"
+            v-for="field in section.fields"
             :key="field.field"
             :label="field.label"
-            class="config-item"
+            :class="['setting-item', getFieldLayoutClass(field)]"
           >
-            <!-- Server Dropdown -->
             <template v-if="field.type === 'server'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as number | null | undefined)"
                 placeholder="Select server"
                 clearable
+                size="small"
                 style="width: 100%"
                 @update:model-value="updateConfig(field.field, $event)"
               >
@@ -482,11 +592,11 @@ const isListField = (field: string): boolean => {
               </ElSelect>
             </template>
 
-            <!-- Select -->
             <template v-else-if="field.type === 'select'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as string | number | null | undefined)"
                 placeholder="Select option"
+                size="small"
                 style="width: 100%"
                 @update:model-value="updateConfig(field.field, $event)"
               >
@@ -499,35 +609,35 @@ const isListField = (field: string): boolean => {
               </ElSelect>
             </template>
 
-            <!-- Checkbox -->
             <template v-else-if="field.type === 'checkbox'">
-              <ElCheckbox
-                :model-value="Boolean(getConfigValue(field.field))"
-                @update:model-value="updateConfig(field.field, $event)"
-              >
-                {{ field.placeholder || 'Enabled' }}
-              </ElCheckbox>
+              <div class="switch-field">
+                <ElSwitch
+                  :model-value="Boolean(getConfigValue(field.field))"
+                  size="small"
+                  @update:model-value="updateConfig(field.field, $event)"
+                />
+                <span class="switch-label">{{ field.placeholder || 'Enabled' }}</span>
+              </div>
             </template>
 
-            <!-- Number -->
             <template v-else-if="field.type === 'number'">
               <ElInputNumber
                 :model-value="(getConfigValue(field.field) as number) || field.min || 0"
                 :min="field.min"
                 :max="field.max"
-                controls-position="right"
+                size="small"
+                :controls="false"
                 style="width: 100%"
                 @update:model-value="updateConfig(field.field, $event)"
               />
             </template>
 
-            <!-- Textarea (Command/Commands) -->
             <template v-else-if="field.type === 'textarea'">
               <ElInput
                 v-if="isListField(field.field)"
                 :model-value="getListFieldString(field.field)"
                 type="textarea"
-                :rows="4"
+                :rows="3"
                 :placeholder="field.placeholder"
                 @update:model-value="handleListInput(field.field, $event)"
               />
@@ -535,16 +645,15 @@ const isListField = (field: string): boolean => {
                 v-else
                 :model-value="(getConfigValue(field.field) as string) || ''"
                 type="textarea"
-                :rows="4"
+                :rows="3"
                 :placeholder="field.placeholder"
                 @update:model-value="updateConfig(field.field, $event)"
               />
             </template>
 
-            <!-- JSON Editor -->
             <template v-else-if="field.type === 'json'">
               <ElInput
-                :model-value="JSON.stringify(getConfigValue(field.field) || {}, null, 2)"
+                :model-value="getJsonFieldString(field.field)"
                 type="textarea"
                 :rows="4"
                 :placeholder="field.placeholder"
@@ -552,129 +661,107 @@ const isListField = (field: string): boolean => {
               />
             </template>
 
-            <!-- Text Input -->
+            <template v-else-if="field.type === 'keyValue'">
+              <div class="key-value-editor">
+                <div class="key-value-heading">
+                  <span>Key</span>
+                  <span>Value</span>
+                </div>
+                <div
+                  v-for="row in getKeyValueRows(field.field)"
+                  :key="row.id"
+                  class="key-value-row"
+                >
+                  <ElInput
+                    :model-value="row.key"
+                    placeholder="Config key"
+                    size="small"
+                    @update:model-value="updateKeyValueRow(field.field, row.id, 'key', $event)"
+                  />
+                  <ElInput
+                    :model-value="row.value"
+                    placeholder="Value"
+                    size="small"
+                    @update:model-value="updateKeyValueRow(field.field, row.id, 'value', $event)"
+                  />
+                  <ElButton
+                    circle
+                    text
+                    type="danger"
+                    size="small"
+                    :icon="Delete"
+                    @click="removeKeyValueRow(field.field, row.id)"
+                  />
+                </div>
+                <ElButton
+                  class="add-key-value-row"
+                  size="small"
+                  :icon="Plus"
+                  @click="addKeyValueRow(field.field)"
+                >
+                  Add Item
+                </ElButton>
+              </div>
+            </template>
+
             <template v-else>
               <ElInput
                 :model-value="(getConfigValue(field.field) as string) || ''"
                 :placeholder="field.placeholder"
+                size="small"
                 @update:model-value="updateConfig(field.field, $event)"
               />
             </template>
           </ElFormItem>
-        </ElForm>
+        </section>
+      </ElForm>
 
-        <!-- Node ID Display -->
-        <div class="node-id-section">
-          <span class="node-id-label">Node ID:</span>
-          <span class="node-id-value">{{ selectedNode.id }}</span>
-        </div>
+      <div class="node-id-section">
+        <span class="node-id-label">Node ID:</span>
+        <span class="node-id-value">{{ selectedNode.id }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.node-config-panel {
-  width: 320px;
-  height: 100%;
+.node-config-dialog-content {
+  width: 100%;
+  height: min(70vh, 720px);
   background: #fff;
-  border-left: 1px solid #dcdfe6;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  transition: width 0.3s ease;
-}
-
-.node-config-panel.collapsed {
-  width: 32px;
-}
-
-.panel-toggle {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px;
-  height: 48px;
-  background: #f5f7fa;
-  border: 1px solid #dcdfe6;
-  border-left: none;
-  border-radius: 0 8px 8px 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-  transition: background 0.2s;
-}
-
-.panel-toggle:hover {
-  background: #e6e8eb;
-}
-
-.collapsed .panel-toggle {
-  left: 0;
-}
-
-.panel-content {
-  flex: 1;
+  color: #1f2937;
+  font-size: 13px;
   overflow: hidden;
-  margin-left: 32px;
-  display: flex;
-  flex-direction: column;
 }
 
 .no-selection {
-  flex: 1;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
 }
 
-.config-container {
-  flex: 1;
+.settings-page {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.node-header {
-  padding: 16px;
-  color: #fff;
-}
-
-.node-type-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.node-type-label {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.node-category {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.node-description {
-  font-size: 12px;
-  line-height: 1.4;
-  opacity: 0.92;
 }
 
 .node-name-section {
-  padding: 12px 16px;
-  border-bottom: 1px solid #ebeef5;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.node-name-label {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 8px;
+.setting-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .node-name-display {
@@ -685,8 +772,8 @@ const isListField = (field: string): boolean => {
 
 .node-name {
   font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+  font-weight: 600;
+  color: #0f172a;
   flex: 1;
 }
 
@@ -696,39 +783,168 @@ const isListField = (field: string): boolean => {
   align-items: center;
 }
 
-.config-form {
+.settings-form {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px 18px;
+  align-content: start;
+  padding: 16px 18px;
 }
 
-.config-item {
-  margin-bottom: 16px;
+.settings-section {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.section-title {
+  grid-column: 1 / -1;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.setting-item {
+  grid-column: span 6;
+  margin-bottom: 0;
+}
+
+.field-compact {
+  grid-column: span 3;
+}
+
+.field-medium {
+  grid-column: span 4;
+}
+
+.field-wide {
+  grid-column: span 6;
+}
+
+.field-full {
+  grid-column: 1 / -1;
+}
+
+.field-inline {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: center;
 }
 
 .node-help {
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #606266;
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
+  margin: 12px 18px 0;
+  padding: 8px 10px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-color: #e2e8f0;
+  border-radius: 8px;
 }
 
-.config-item :deep(.el-form-item__label) {
-  font-size: 12px;
-  color: #606266;
+.setting-item :deep(.el-form-item__label) {
+  font-size: 13px;
+  color: #334155;
   font-weight: 500;
-  padding-bottom: 4px;
+  line-height: 1.45;
+  padding-bottom: 6px;
+}
+
+.setting-item :deep(.el-form-item__content) {
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.field-inline :deep(.el-form-item__label) {
+  overflow: hidden;
+  padding-bottom: 0;
+  margin-bottom: 0;
+  color: #475569;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-item :deep(.el-input__inner),
+.setting-item :deep(.el-textarea__inner),
+.setting-item :deep(.el-select__selected-item) {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.switch-label {
+  color: #606266;
+  display: none;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.key-value-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key-value-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  gap: 8px;
+  padding: 0 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.key-value-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+}
+
+.add-key-value-row {
+  align-self: flex-start;
 }
 
 .node-id-section {
-  padding: 12px 16px;
-  border-top: 1px solid #ebeef5;
+  padding: 8px 18px;
   background: #f5f7fa;
+  border-top: 1px solid #e5e7eb;
   font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .settings-form,
+  .settings-section {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .field-compact,
+  .field-medium {
+    grid-column: span 3;
+  }
+
+  .field-wide,
+  .field-full,
+  .setting-item {
+    grid-column: 1 / -1;
+  }
 }
 
 .node-id-label {

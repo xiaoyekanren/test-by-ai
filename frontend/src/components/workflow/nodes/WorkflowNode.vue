@@ -33,6 +33,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'click', id: string): void
+  (e: 'dblclick', id: string): void
 }>()
 
 // Get node configuration
@@ -83,6 +84,10 @@ const hasInput = computed(() => nodeConfig.value.inputs > 0)
 const handleClick = () => {
   emit('click', props.id)
 }
+
+const handleDoubleClick = () => {
+  emit('dblclick', props.id)
+}
 </script>
 
 <template>
@@ -91,6 +96,7 @@ const handleClick = () => {
     :class="{ selected: selected }"
     :style="{ borderColor: nodeConfig.color }"
     @click="handleClick"
+    @dblclick.stop="handleDoubleClick"
   >
     <!-- Input Handle -->
     <Handle

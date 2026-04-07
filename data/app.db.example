@@ -1,0 +1,75 @@
+-- 数据库结构示例文件
+-- 用于初始化本地数据库: sqlite3 data/app.db < data/app.db.example
+
+CREATE TABLE servers (
+	id INTEGER NOT NULL,
+	name VARCHAR(100) NOT NULL,
+	host VARCHAR(100) NOT NULL,
+	port INTEGER,
+	username VARCHAR(50),
+	password VARCHAR(100),
+	description TEXT,
+	tags VARCHAR(200),
+	role VARCHAR(20),
+	status VARCHAR(20),
+	created_at DATETIME,
+	updated_at DATETIME,
+	PRIMARY KEY (id),
+	UNIQUE (name)
+);
+
+CREATE TABLE workflows (
+	id INTEGER NOT NULL,
+	name VARCHAR(100) NOT NULL,
+	description TEXT,
+	nodes JSON,
+	edges JSON,
+	variables JSON,
+	created_at DATETIME,
+	updated_at DATETIME,
+	PRIMARY KEY (id),
+	UNIQUE (name)
+);
+
+CREATE TABLE executions (
+	id INTEGER NOT NULL,
+	workflow_id INTEGER NOT NULL,
+	status VARCHAR(20),
+	trigger_type VARCHAR(20),
+	triggered_by VARCHAR(50),
+	started_at DATETIME,
+	finished_at DATETIME,
+	duration INTEGER,
+	result VARCHAR(20),
+	summary JSON,
+	created_at DATETIME,
+	PRIMARY KEY (id),
+	FOREIGN KEY(workflow_id) REFERENCES workflows (id)
+);
+
+CREATE TABLE node_executions (
+	id INTEGER NOT NULL,
+	execution_id INTEGER NOT NULL,
+	node_id VARCHAR(50) NOT NULL,
+	node_type VARCHAR(30) NOT NULL,
+	status VARCHAR(20),
+	started_at DATETIME,
+	finished_at DATETIME,
+	duration INTEGER,
+	input_data JSON,
+	output_data JSON,
+	log_path VARCHAR(200),
+	error_message TEXT,
+	retry_count INTEGER,
+	PRIMARY KEY (id),
+	FOREIGN KEY(execution_id) REFERENCES executions (id)
+);
+
+CREATE TABLE system_settings (
+	id INTEGER NOT NULL,
+	"key" VARCHAR(100) NOT NULL,
+	value JSON NOT NULL,
+	updated_at DATETIME,
+	PRIMARY KEY (id),
+	UNIQUE ("key")
+);

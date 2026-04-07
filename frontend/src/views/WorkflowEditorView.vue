@@ -9,6 +9,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 
 import {
+  ElDialog,
   ElMessage,
   ElMessageBox
 } from 'element-plus'
@@ -18,6 +19,7 @@ import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
 import { useWorkflowsStore } from '@/stores/workflows'
+import { NODE_CONFIGS } from '@/types'
 import type { Execution, NodeType } from '@/types'
 
 const route = useRoute()
@@ -54,6 +56,17 @@ const draggedType = ref<NodeType | null>(null)
 
 // Execution panel state
 const showExecutionPanel = ref(false)
+const configDialogVisible = ref(false)
+
+const selectedNodeConfig = computed(() => {
+  const nodeType = workflowsStore.selectedNode?.data.nodeType
+  return nodeType ? NODE_CONFIGS[nodeType] : null
+})
+
+const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edit Node')
+const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
+const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
+const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -71,6 +84,10 @@ const isEditableElement = (target: EventTarget | null) => {
 }
 
 const handleKeydown = (event: KeyboardEvent) => {
+  if (configDialogVisible.value) {
+    return
+  }
+
   if ((event.key !== 'Delete' && event.key !== 'Backspace') || isEditableElement(event.target)) {
     return
   }
@@ -169,6 +186,9 @@ onPaneReady(() => {
 
 // Handle pane click (deselect node)
 onPaneClick(() => {
+  if (configDialogVisible.value) {
+    return
+  }
   workflowsStore.selectNode(null)
   workflowsStore.selectEdge(null)
 })
@@ -176,6 +196,16 @@ onPaneClick(() => {
 // Handle node click (selection)
 const handleNodeClick = (nodeId: string) => {
   workflowsStore.selectNode(nodeId)
+}
+
+// Handle node double click (configuration)
+const handleNodeDoubleClick = (nodeId: string) => {
+  workflowsStore.selectNode(nodeId)
+  configDialogVisible.value = true
+}
+
+const handleConfigDialogClosed = () => {
+  configDialogVisible.value = false
 }
 
 // Handle edge click (selection)
@@ -372,6 +402,7 @@ const handleExecutionCompleted = (execution: Execution) => {
               :data="nodeProps.data"
               :selected="nodeProps.selected"
               @click="handleNodeClick(nodeProps.id)"
+              @dblclick="handleNodeDoubleClick(nodeProps.id)"
             />
           </template>
         </VueFlow>
@@ -384,9 +415,6 @@ const handleExecutionCompleted = (execution: Execution) => {
         </div>
       </div>
 
-      <!-- Node Configuration Panel -->
-      <NodeConfigPanel />
-
       <!-- Execution Panel (right side, toggleable) -->
       <ExecutionPanel
         v-if="showExecutionPanel"
@@ -395,6 +423,36 @@ const handleExecutionCompleted = (execution: Execution) => {
         @execution-completed="handleExecutionCompleted"
       />
     </div>
+
+    <ElDialog
+      v-model="configDialogVisible"
+      width="860px"
+      top="8vh"
+      append-to-body
+      destroy-on-close
+      :close-on-click-modal="true"
+      :close-on-press-escape="false"
+      @closed="handleConfigDialogClosed"
+    >
+      <template #header>
+        <div class="config-dialog-header" :style="{ '--node-color': selectedNodeColor }">
+          <span class="config-dialog-accent" />
+          <div class="config-dialog-title-block">
+            <div class="config-dialog-meta">{{ selectedNodeCategory || 'Workflow Node' }}</div>
+            <div class="config-dialog-title">{{ selectedNodeTitle }}</div>
+            <div v-if="selectedNodeDescription" class="config-dialog-description">
+              {{ selectedNodeDescription }}
+            </div>
+          </div>
+        </div>
+      </template>
+      <NodeConfigPanel />
+      <template #footer>
+        <span class="config-dialog-footer">
+          Click outside the dialog to save and close. Press the close button to close with current changes kept.
+        </span>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -444,5 +502,62 @@ const handleExecutionCompleted = (execution: Execution) => {
   color: #909399;
   font-size: 14px;
   margin: 0;
+}
+
+.config-dialog-footer {
+  color: #909399;
+  font-size: 12px;
+}
+
+:deep(.el-dialog) {
+  max-width: calc(100vw - 32px);
+}
+
+:deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+:deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.config-dialog-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.config-dialog-accent {
+  width: 6px;
+  min-height: 54px;
+  background: var(--node-color);
+  border-radius: 999px;
+}
+
+.config-dialog-title-block {
+  min-width: 0;
+}
+
+.config-dialog-meta {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.config-dialog-title {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.config-dialog-description {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
 }
 </style>
