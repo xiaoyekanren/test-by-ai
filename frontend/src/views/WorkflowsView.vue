@@ -278,9 +278,6 @@ onUnmounted(() => {
                 :loading="workflowsStore.loading"
               />
             </ElTooltip>
-            <ElButton @click="router.push('/workflows/new')">
-              Create Blank
-            </ElButton>
             <ElButton type="primary" :icon="Plus" @click="openCreateDialog">
               Create Workflow
             </ElButton>

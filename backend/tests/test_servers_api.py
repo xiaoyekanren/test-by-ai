@@ -27,8 +27,7 @@ def test_create_server_with_all_fields(client):
         "username": "admin",
         "password": "secret",
         "description": "Test server description",
-        "tags": "production,linux",
-        "role": "target_node"
+        "tags": "production,linux"
     })
     assert response.status_code == 201
     data = response.json()
@@ -38,7 +37,6 @@ def test_create_server_with_all_fields(client):
     assert data["username"] == "admin"
     assert data["description"] == "Test server description"
     assert data["tags"] == "production,linux"
-    assert data["role"] == "target_node"
 
 def test_create_duplicate_server(client):
     client.post("/api/servers", json={"name": "duplicate-test", "host": "192.168.1.1"})

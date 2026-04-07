@@ -73,7 +73,7 @@ class TestDatabaseSetup:
         columns = [col["name"] for col in inspector.get_columns("servers")]
 
         expected_columns = {"id", "name", "host", "port", "username", "password",
-                          "description", "tags", "role", "status", "created_at", "updated_at"}
+                          "description", "tags", "status", "created_at", "updated_at"}
         actual_columns = set(columns)
 
         assert expected_columns.issubset(actual_columns), \

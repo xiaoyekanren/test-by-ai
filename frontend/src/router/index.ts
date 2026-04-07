@@ -26,7 +26,7 @@ const router = createRouter({
     {
       path: '/workflows/new',
       name: 'workflow-new',
-      component: () => import('@/views/WorkflowEditorView.vue')
+      redirect: '/workflows'
     },
     {
       path: '/workflows/:id/edit',

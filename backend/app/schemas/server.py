@@ -11,7 +11,6 @@ class ServerBase(BaseModel):
     password: Optional[SecretStr] = Field(default=None, max_length=100)
     description: Optional[str] = None
     tags: Optional[str] = Field(default=None, max_length=200)
-    role: Optional[str] = Field(default="test_node")
 
 class ServerCreate(ServerBase):
     pass
@@ -24,7 +23,6 @@ class ServerUpdate(BaseModel):
     password: Optional[SecretStr] = None
     description: Optional[str] = None
     tags: Optional[str] = None
-    role: Optional[str] = None
 
 class ServerResponse(BaseModel):
     id: int
@@ -34,7 +32,6 @@ class ServerResponse(BaseModel):
     username: Optional[str] = Field(default=None, max_length=50)
     description: Optional[str] = None
     tags: Optional[str] = Field(default=None, max_length=200)
-    role: Optional[str] = Field(default="test_node")
     status: str = "offline"
     created_at: datetime
     updated_at: datetime

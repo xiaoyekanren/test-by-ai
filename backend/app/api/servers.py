@@ -36,8 +36,7 @@ def create_server(server: ServerCreate, db: Session = Depends(get_db)):
         username=server.username,
         password=server.password.get_secret_value() if server.password else None,
         description=server.description,
-        tags=server.tags,
-        role=server.role
+        tags=server.tags
     )
 
     db.add(db_server)
