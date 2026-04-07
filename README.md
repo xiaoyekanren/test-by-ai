@@ -1,115 +1,193 @@
-# 服务器管理与工作流平台
+# IoTDB Test Automation Platform
 
-一个基于 Flask + 原生前端的服务器管理系统，提供本机与远程服务器监控、服务器资产管理，以及可视化工作流编排与执行。
+一个用于 IoTDB 测试自动化平台，提供服务器管理、可视化工作流编排与执行、实时监控等功能。
 
 ## 功能概览
 
-- 实时监控：CPU / 内存 / 磁盘 / 网络信息
-- 进程管理：查看进程详情与终止进程
-- 服务器管理：增删改查、连接测试、标签分组
-- SSH 远程采集：通过 SSH 代理采集远程主机数据
-- 工作流编辑器：拖拽节点、连线、保存/加载与并发执行
+- **服务器管理**: 服务器增删改查、SSH 连接测试、标签分组
+- **工作流编辑器**: 可视化拖拽节点、连线设计测试流程
+- **工作流执行引擎**: 支持并发执行、实时状态追踪
+- **实时监控**: CPU / 内存 / 磁盘 / 网络信息采集
+- **SSH 远程执行**: 通过 SSH 在远程服务器执行测试任务
+- **执行洞察**: 查看执行历史、日志、统计分析
 
 ## 页面入口
 
-- `/` 首页概览
-- `/integrated` 集成监控面板（多主机）
-- `/servers` 服务器管理
-- `/workflow` 工作流编辑器
+| 路径 | 功能 |
+|------|------|
+| `/servers` | 服务器管理 |
+| `/workflows` | 工作流列表 |
+| `/workflows/new` | 创建新工作流 |
+| `/workflows/:id/edit` | 编辑工作流 |
+| `/executions` | 执行洞察与历史 |
+| `/monitor` | 实时监控面板 |
+| `/settings` | 系统设置 |
+
+## 技术栈
+
+### 后端
+
+- **FastAPI** - 现代 Python Web 框架
+- **SQLAlchemy + aiosqlite** - 异步 ORM 与 SQLite 数据库
+- **Paramiko** - SSH 远程连接
+- **psutil** - 系统监控数据采集
+- **Pydantic** - 数据验证与序列化
+
+### 前端
+
+- **Vue 3** - 渐进式 JavaScript 框架
+- **TypeScript** - 类型安全
+- **Vite** - 快速构建工具
+- **Element Plus** - UI 组件库
+- **Vue Flow** - 工作流可视化编辑器
+- **Pinia** - 状态管理
+- **Vue Router** - 路由管理
+
+## 项目结构
+
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/           # API 路由 (servers, workflows, executions, monitoring, settings)
+│   │   ├── models/        # 数据库模型
+│   │   ├── schemas/       # Pydantic 数据模型
+│   │   ├── services/      # 业务逻辑 (execution_engine, monitoring, ssh)
+│   │   ├── config.py      # 配置
+│   │   └── main.py        # FastAPI 应用入口
+│   ├── tests/             # pytest 测试
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/           # API 调用封装
+│   │   ├── components/    # UI 组件 (layout, workflow)
+│   │   ├── stores/        # Pinia 状态管理
+│   │   ├── views/         # 页面视图
+│   │   ├── router/        # 路由配置
+│   │   ├── types/         # TypeScript 类型定义
+│   │   └── main.ts        # 应用入口
+│   ├── package.json
+│   └── vite.config.ts
+│
+└── README.md
+```
 
 ## 快速开始
 
 ### 环境要求
 
 - Python 3.8+
-- pip
-
-### 安装依赖
-
-```bash
-pip install -r requirements.txt
-```
+- Node.js 18+
 
 ### 启动服务
 
-```bash
-python app.py
-```
-
-或使用脚本：
+**Mac/Linux:**
 
 ```bash
-./run.sh
+./manage.sh start
 ```
 
-Windows:
+**Windows:**
 
 ```bash
-run.bat
+manage.bat start
 ```
 
-启动后访问：
+脚本会自动创建虚拟环境、安装依赖并启动后端与前端服务。
 
-```
-http://localhost:5001
-```
+### 管理命令
 
-## 核心 API（节选）
+| 命令 | 描述 |
+|------|------|
+| `start` | 启动所有服务 |
+| `stop` | 停止所有服务 |
+| `restart` | 重启所有服务 |
+| `status` | 查看服务状态 |
+| `start-backend` | 仅启动后端 |
+| `start-frontend` | 仅启动前端 |
+| `logs` | 查看后端日志 |
 
-### 本机监控
+### 访问应用
 
-- `GET /api/server/status` 获取 CPU/内存/磁盘信息
-- `GET /api/server/processes?limit=20&sort_by=memory` 获取进程列表
-- `GET /api/server/network` 获取网络信息
-- `GET /api/server/disk` 获取磁盘分区
+启动成功后访问：
 
-### 进程管理
+- 前端: `http://localhost:5173`
+- API 文档: `http://localhost:8000/docs`
 
-- `GET /api/process/<pid>` 获取进程详情
-- `POST /api/process/<pid>/kill` 终止进程
+## 核心 API
 
 ### 服务器管理
 
-- `GET /api/servers` 列表
-- `POST /api/servers` 新增
-- `GET /api/servers/<id>` 详情
-- `PUT /api/servers/<id>` 更新
-- `DELETE /api/servers/<id>` 删除
-- `POST /api/servers/<id>/test` 连接测试
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/servers` | 服务器列表 |
+| POST | `/api/servers` | 新增服务器 |
+| GET | `/api/servers/{id}` | 服务器详情 |
+| PUT | `/api/servers/{id}` | 更新服务器 |
+| DELETE | `/api/servers/{id}` | 删除服务器 |
+| POST | `/api/servers/{id}/test` | SSH 连接测试 |
 
-### 远程代理（SSH）
+### 工作流管理
 
-- `GET /api/servers/<id>/proxy/server/status`
-- `GET /api/servers/<id>/proxy/server/processes`
-- `POST /api/servers/<id>/proxy/server/process/<pid>/kill`
-- `GET /api/servers/<id>/proxy/server/network`
-- `GET /api/servers/<id>/proxy/server/disk`
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/workflows` | 工作流列表 |
+| POST | `/api/workflows` | 创建工作流 |
+| GET | `/api/workflows/{id}` | 工作流详情 |
+| PUT | `/api/workflows/{id}` | 更新工作流 |
+| DELETE | `/api/workflows/{id}` | 删除工作流 |
 
-### 工作流
+### 执行管理
 
-- `GET /api/workflows`
-- `POST /api/workflows`
-- `GET /api/workflows/<id>`
-- `PUT /api/workflows/<id>`
-- `DELETE /api/workflows/<id>`
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/executions` | 执行列表 |
+| POST | `/api/executions` | 创建执行 |
+| GET | `/api/executions/{id}` | 执行详情 |
+| GET | `/api/executions/{id}/logs` | 执行日志 |
 
-## 技术栈
+### 监控
 
-- 后端：Flask、SQLite、psutil、paramiko
-- 前端：原生 HTML/CSS/JavaScript
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/monitoring/status` | CPU/内存/磁盘信息 |
+| GET | `/api/monitoring/processes` | 进程列表 |
+| GET | `/api/monitoring/network` | 网络信息 |
 
-## 项目结构
+### 设置
 
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/settings` | 获取设置 |
+| PUT | `/api/settings` | 更新设置 |
+
+## 工作流节点类型
+
+工作流编辑器支持多种节点类型，用于构建测试自动化流程：
+
+- **SSH 命令节点** - 在远程服务器执行命令
+- **IoTDB 操作节点** - IoTDB 数据库操作
+- **数据生成节点** - 生成测试数据
+- **条件判断节点** - 根据条件分支执行
+- **等待节点** - 延迟执行
+
+## 开发与测试
+
+### 运行后端测试
+
+```bash
+cd backend
+pytest
 ```
-program/
-├── app.py
-├── requirements.txt
-├── run.sh
-├── run.bat
-├── servers.db
-├── templates/
-├── static/
-│   ├── css/
-│   └── js/
-└── README.md
+
+### 前端构建
+
+```bash
+cd frontend
+npm run build
 ```
+
+## License
+
+MIT
