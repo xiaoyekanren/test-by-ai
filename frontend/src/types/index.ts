@@ -368,7 +368,6 @@ export interface Server {
   username: string | null
   description: string | null
   tags: string | null
-  role: string
   status: string
   created_at: string
   updated_at: string
@@ -382,7 +381,6 @@ export interface ServerCreate {
   password?: string | null
   description?: string | null
   tags?: string | null
-  role?: string
 }
 
 export interface ServerUpdate {
@@ -393,7 +391,6 @@ export interface ServerUpdate {
   password?: string | null
   description?: string | null
   tags?: string | null
-  role?: string
 }
 
 export interface ServerTestResult {

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from ..dependencies import get_db
-from ..models.database import Workflow
+from ..models.database import Execution, NodeExecution, Workflow
 from ..schemas.workflow import WorkflowCreate, WorkflowUpdate, WorkflowResponse
 
 router = APIRouter()
@@ -88,6 +88,20 @@ def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Workflow with id {workflow_id} not found"
         )
+
+    execution_ids = [
+        row[0]
+        for row in db.query(Execution.id)
+        .filter(Execution.workflow_id == workflow_id)
+        .all()
+    ]
+    if execution_ids:
+        db.query(NodeExecution).filter(
+            NodeExecution.execution_id.in_(execution_ids)
+        ).delete(synchronize_session=False)
+        db.query(Execution).filter(
+            Execution.id.in_(execution_ids)
+        ).delete(synchronize_session=False)
 
     db.delete(db_workflow)
     db.commit()

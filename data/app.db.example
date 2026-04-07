@@ -10,7 +10,6 @@ CREATE TABLE servers (
 	password VARCHAR(100),
 	description TEXT,
 	tags VARCHAR(200),
-	role VARCHAR(20),
 	status VARCHAR(20),
 	created_at DATETIME,
 	updated_at DATETIME,

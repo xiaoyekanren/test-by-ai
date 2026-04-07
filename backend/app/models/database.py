@@ -17,7 +17,6 @@ class Server(Base):
     password = Column(String(100))
     description = Column(Text)
     tags = Column(String(200))
-    role = Column(String(20), default="test_node")  # 'test_node' | 'target_node' | 'both'
     status = Column(String(20), default="offline")  # 'online' | 'offline'
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

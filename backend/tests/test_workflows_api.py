@@ -35,3 +35,14 @@ def test_delete_workflow(client):
     client.post("/api/workflows", json={"name": "test", "nodes": [], "edges": []})
     response = client.delete("/api/workflows/1")
     assert response.status_code == 204
+
+def test_delete_workflow_with_executions(client):
+    client.post("/api/workflows", json={"name": "test", "nodes": [], "edges": []})
+    execution_response = client.post("/api/executions", json={"workflow_id": 1})
+    assert execution_response.status_code == 201
+
+    response = client.delete("/api/workflows/1")
+    assert response.status_code == 204
+
+    response = client.get("/api/workflows/1")
+    assert response.status_code == 404

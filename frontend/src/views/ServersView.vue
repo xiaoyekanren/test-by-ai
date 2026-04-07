@@ -10,8 +10,6 @@ import {
   ElFormItem,
   ElInput,
   ElInputNumber,
-  ElSelect,
-  ElOption,
   ElMessageBox,
   ElMessage,
   ElTooltip,
@@ -44,8 +42,7 @@ const formData = reactive<ServerCreate & { password?: string }>({
   username: '',
   password: '',
   description: '',
-  tags: '',
-  role: 'worker'
+  tags: ''
 })
 
 const formRules: FormRules = {
@@ -61,9 +58,6 @@ const formRules: FormRules = {
   ],
   username: [
     { required: true, message: 'Please input username', trigger: 'blur' }
-  ],
-  role: [
-    { required: true, message: 'Please select a role', trigger: 'change' }
   ]
 }
 
@@ -180,8 +174,7 @@ function openEditDialog(server: Server) {
     username: server.username || '',
     password: '',
     description: server.description || '',
-    tags: server.tags || '',
-    role: server.role || 'worker'
+    tags: server.tags || ''
   })
   dialogVisible.value = true
 }
@@ -195,8 +188,7 @@ function resetForm() {
     username: '',
     password: '',
     description: '',
-    tags: '',
-    role: 'worker'
+    tags: ''
   })
   formRef.value?.clearValidate()
 }
@@ -217,8 +209,7 @@ async function submitForm() {
           username: formData.username || null,
           password: formData.password || null,
           description: formData.description || null,
-          tags: formData.tags || null,
-          role: formData.role
+          tags: formData.tags || null
         })
         dialogVisible.value = false
         // Auto test connection after creating server
@@ -230,8 +221,7 @@ async function submitForm() {
           port: formData.port,
           username: formData.username || null,
           description: formData.description || null,
-          tags: formData.tags || null,
-          role: formData.role
+          tags: formData.tags || null
         }
         if (formData.password) {
           updateData.password = formData.password
@@ -409,14 +399,6 @@ function parseTags(tags: string | null): string[] {
         </template>
       </ElTableColumn>
 
-      <ElTableColumn prop="role" label="Role" width="100">
-        <template #default="{ row }">
-          <ElTag size="small" :type="row.role === 'master' ? 'warning' : 'info'">
-            {{ row.role }}
-          </ElTag>
-        </template>
-      </ElTableColumn>
-
       <ElTableColumn label="Actions" width="280" fixed="right">
         <template #default="{ row }">
           <div class="action-buttons">
@@ -495,14 +477,6 @@ function parseTags(tags: string | null): string[] {
               <template #default="{ row }">
                 <ElTag :type="getStatusType(row.status)" size="small">
                   {{ row.status }}
-                </ElTag>
-              </template>
-            </ElTableColumn>
-
-            <ElTableColumn prop="role" label="Role" width="80">
-              <template #default="{ row }">
-                <ElTag size="small" :type="row.role === 'master' ? 'warning' : 'info'">
-                  {{ row.role }}
                 </ElTag>
               </template>
             </ElTableColumn>
@@ -600,12 +574,6 @@ function parseTags(tags: string | null): string[] {
           />
         </ElFormItem>
 
-        <ElFormItem label="Role" prop="role">
-          <ElSelect v-model="formData.role" style="width: 100%">
-            <ElOption label="Master" value="master" />
-            <ElOption label="Worker" value="worker" />
-          </ElSelect>
-        </ElFormItem>
       </ElForm>
 
       <template #footer>
