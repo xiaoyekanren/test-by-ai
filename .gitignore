@@ -6,3 +6,6 @@ venv
 .claude
 .trae
 .DS_Store
+data/logs/
+data/pids/
+data/app.db
