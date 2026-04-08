@@ -420,6 +420,7 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
         class="monitor-table"
         stripe
         style="width: 100%"
+        :fit="false"
       >
         <!-- Server Info -->
         <ElTableColumn label="Server" width="340" show-overflow-tooltip>
@@ -531,7 +532,6 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
             </ElTooltip>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="" min-width="1" />
       </ElTable>
     </ElCard>
 

@@ -16,6 +16,8 @@ router = APIRouter()
 MAX_LOG_READ_BYTES = 256 * 1024
 DEFAULT_LOG_TAIL_LINES = 100
 MAX_LOG_TAIL_LINES = 1000
+DEFAULT_CLI_HOST = "127.0.0.1"
+DEFAULT_CLI_RPC_PORT = 6667
 
 
 class CLISessionRequest(BaseModel):
@@ -67,6 +69,7 @@ class ConfigWriteRequest(BaseModel):
 class RestartRequest(BaseModel):
     server_id: int
     iotdb_home: str
+    restart_scope: str = "all"
 
 
 class FileInfo(BaseModel):
@@ -167,10 +170,8 @@ def build_cli_command(
 ) -> str:
     cli_script = posixpath.join(normalize_remote_path(iotdb_home), "sbin", "start-cli.sh")
     command_parts = [ssh_service.quote(cli_script)]
-    if host:
-        command_parts.extend(["-h", ssh_service.quote(host)])
-    if rpc_port:
-        command_parts.extend(["-p", str(rpc_port)])
+    command_parts.extend(["-h", ssh_service.quote(host or DEFAULT_CLI_HOST)])
+    command_parts.extend(["-p", str(rpc_port or DEFAULT_CLI_RPC_PORT)])
     if username:
         command_parts.extend(["-u", ssh_service.quote(username)])
     if cli_password:
@@ -532,8 +533,21 @@ def restart_iotdb(request: RestartRequest, db: Session = Depends(get_db)):
     ssh_service = SSHService()
 
     iotdb_home = normalize_remote_path(request.iotdb_home)
-    stop_script = posixpath.join(iotdb_home, "sbin", "stop-standalone.sh")
-    start_script = posixpath.join(iotdb_home, "sbin", "start-standalone.sh")
+    script_by_scope = {
+        "all": ("stop-standalone.sh", "start-standalone.sh"),
+        "cn": ("stop-confignode.sh", "start-confignode.sh"),
+        "dn": ("stop-datanode.sh", "start-datanode.sh"),
+    }
+    restart_scope = request.restart_scope.lower()
+    if restart_scope not in script_by_scope:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="restart_scope must be one of: all, cn, dn"
+        )
+
+    stop_script_name, start_script_name = script_by_scope[restart_scope]
+    stop_script = posixpath.join(iotdb_home, "sbin", stop_script_name)
+    start_script = posixpath.join(iotdb_home, "sbin", start_script_name)
 
     # Stop first
     stop_result = ssh_service.run_command(
@@ -556,7 +570,7 @@ def restart_iotdb(request: RestartRequest, db: Session = Depends(get_db)):
     )
 
     success = start_result.exit_status == 0 and not start_result.error
-    message = "IoTDB restarted successfully" if success else "Failed to restart IoTDB"
+    message = f"IoTDB {restart_scope} restarted successfully" if success else f"Failed to restart IoTDB {restart_scope}"
 
     return RestartResult(
         server_id=request.server_id,

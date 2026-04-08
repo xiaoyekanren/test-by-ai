@@ -103,11 +103,11 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   }
 
   // Restart IoTDB
-  async function restartIoTDB(serverId: number, iotdbHome: string) {
+  async function restartIoTDB(serverId: number, iotdbHome: string, restartScope = 'all') {
     loading.value = true
     error.value = null
     try {
-      const result = await iotdbApi.restart(serverId, iotdbHome)
+      const result = await iotdbApi.restart(serverId, iotdbHome, restartScope)
       return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to restart IoTDB'
