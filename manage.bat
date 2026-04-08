@@ -21,7 +21,7 @@ if errorlevel 1 (
     echo Node.js %NODE_MIN_MAJOR%+ is required. Please install Node.js first.
     exit /b 1
 )
-npm -v >nul 2>nul
+call npm -v >nul 2>nul
 if errorlevel 1 (
     echo npm is required. Please install npm with Node.js first.
     exit /b 1

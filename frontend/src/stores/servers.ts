@@ -7,6 +7,31 @@ export const useServersStore = defineStore('servers', () => {
   const servers = ref<Server[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const testingServerIds = ref<Set<number>>(new Set())
+
+  function setServerTesting(id: number, isTesting: boolean) {
+    const next = new Set(testingServerIds.value)
+    if (isTesting) {
+      next.add(id)
+    } else {
+      next.delete(id)
+    }
+    testingServerIds.value = next
+  }
+
+  function isTestingServer(id: number) {
+    return testingServerIds.value.has(id)
+  }
+
+  function updateServerStatus(id: number, status: string) {
+    const index = servers.value.findIndex(s => s.id === id)
+    if (index !== -1) {
+      servers.value[index] = {
+        ...servers.value[index],
+        status
+      }
+    }
+  }
 
   async function fetchServers() {
     loading.value = true
@@ -68,24 +93,26 @@ export const useServersStore = defineStore('servers', () => {
     }
   }
 
-  async function testConnection(id: number): Promise<ServerTestResult> {
-    loading.value = true
+  async function testConnection(id: number, options: { useGlobalLoading?: boolean } = {}): Promise<ServerTestResult> {
+    const useGlobalLoading = options.useGlobalLoading ?? true
+    if (useGlobalLoading) {
+      loading.value = true
+    }
+    setServerTesting(id, true)
     error.value = null
     try {
       const result = await serversApi.test(id)
-      // Update server status if connection successful
-      if (result.success) {
-        const index = servers.value.findIndex(s => s.id === id)
-        if (index !== -1) {
-          servers.value[index].status = 'online'
-        }
-      }
+      updateServerStatus(id, result.success ? 'online' : 'offline')
       return result
     } catch (e) {
+      updateServerStatus(id, 'offline')
       error.value = e instanceof Error ? e.message : 'Failed to test connection'
       throw e
     } finally {
-      loading.value = false
+      setServerTesting(id, false)
+      if (useGlobalLoading) {
+        loading.value = false
+      }
     }
   }
 
@@ -106,10 +133,12 @@ export const useServersStore = defineStore('servers', () => {
     servers,
     loading,
     error,
+    testingServerIds,
     fetchServers,
     addServer,
     updateServer,
     deleteServer,
+    isTestingServer,
     testConnection,
     executeCommand
   }

@@ -2,6 +2,9 @@
 import sys
 sys.path.insert(0, 'backend')
 
+from app.services.ssh_service import SSHResult
+from app.models.database import Server
+
 
 def test_list_servers_empty(client):
     response = client.get("/api/servers")
@@ -95,6 +98,23 @@ def test_list_servers(client):
 def test_test_connection_not_found(client):
     response = client.post("/api/servers/999/test")
     assert response.status_code == 404
+
+def test_test_connection_marks_server_offline_on_failure(client, db_session, monkeypatch):
+    class FailingSSHService:
+        def run_command(self, **kwargs):
+            return SSHResult(exit_status=-1, stdout="", stderr="", error="timeout")
+
+    monkeypatch.setattr("app.api.servers.SSHService", FailingSSHService)
+    client.post("/api/servers", json={"name": "test", "host": "192.168.1.1"})
+    server = db_session.query(Server).filter(Server.id == 1).first()
+    server.status = "online"
+    db_session.commit()
+
+    response = client.post("/api/servers/1/test")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is False
+    assert client.get("/api/servers/1").json()["status"] == "offline"
 
 def test_execute_command_not_found(client):
     response = client.post("/api/servers/999/execute", json={"command": "ls"})
