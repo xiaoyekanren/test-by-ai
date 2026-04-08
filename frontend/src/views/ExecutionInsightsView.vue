@@ -7,7 +7,6 @@ import {
   ElCard,
   ElDescriptions,
   ElDescriptionsItem,
-  ElEmpty,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -325,18 +324,9 @@ onUnmounted(() => {
 
 <template>
   <div class="execution-insights-page">
-    <div class="page-hero">
-      <div>
-        <p class="eyebrow">Workflow Diagnostics</p>
-        <h1>运行状态与问题分析</h1>
-        <p class="hero-copy">
-          把执行记录、节点时间线、失败证据和修复建议放到一个页面里，方便定位工作流为什么停住。
-        </p>
-      </div>
-      <ElButton type="primary" :icon="Refresh" @click="refreshPage">刷新数据</ElButton>
-    </div>
-
     <div class="toolbar">
+      <ElButton type="primary" :icon="Refresh" @click="refreshPage">刷新</ElButton>
+
       <ElSelect v-model="workflowFilter" clearable placeholder="筛选工作流" class="toolbar-select">
         <ElOption
           v-for="workflow in workflowsStore.workflows"
@@ -372,7 +362,7 @@ onUnmounted(() => {
 
         <ElScrollbar max-height="780px">
           <div v-if="filteredExecutions.length === 0" class="panel-empty">
-            <ElEmpty description="暂无执行记录" />
+            <span class="empty-text">暂无执行记录</span>
           </div>
 
           <div
@@ -477,7 +467,7 @@ onUnmounted(() => {
             </template>
 
             <div v-if="nodeExecutions.length === 0" class="panel-empty">
-              <ElEmpty description="该执行尚未产生节点记录" />
+              <span class="empty-text">该执行尚未产生节点记录</span>
             </div>
 
             <div v-else class="timeline-list">
@@ -532,7 +522,7 @@ onUnmounted(() => {
             </template>
 
             <div v-if="!selectedNodeExecution" class="panel-empty">
-              <ElEmpty description="选择左侧节点查看原始信息" />
+              <span class="empty-text">选择左侧节点查看原始信息</span>
             </div>
 
             <template v-else>
@@ -561,7 +551,7 @@ onUnmounted(() => {
 
         <ElCard v-else class="panel" shadow="never">
           <div class="panel-empty">
-            <ElEmpty description="从左侧选择一条执行记录开始分析" />
+            <span class="empty-text">从左侧选择一条执行记录开始分析</span>
           </div>
         </ElCard>
       </div>
@@ -572,81 +562,39 @@ onUnmounted(() => {
 <style scoped>
 .execution-insights-page {
   min-height: 100%;
-  padding: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(102, 126, 234, 0.14), transparent 24%),
-    radial-gradient(circle at left 20%, rgba(52, 152, 219, 0.12), transparent 22%),
-    linear-gradient(180deg, #f7fbff 0%, #eef3f8 100%);
-}
-
-.page-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-
-.eyebrow {
-  margin-bottom: 10px;
-  color: #3d6bb3;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.page-hero h1 {
-  margin-bottom: 10px;
-  color: #16324f;
-  font-size: 30px;
-  line-height: 1.15;
-}
-
-.hero-copy {
-  max-width: 760px;
-  color: #58708a;
-  line-height: 1.7;
 }
 
 .toolbar {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .toolbar-select {
-  width: 220px;
+  width: 180px;
 }
 
 .toolbar-search {
   flex: 1;
+  max-width: 300px;
 }
 
 .page-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
 }
 
 .detail-stack {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: 18px;
-}
-
-.panel {
-  border: 1px solid rgba(95, 126, 160, 0.14);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 20px 50px rgba(26, 54, 93, 0.07);
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
 .panel-title {
@@ -654,8 +602,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  color: #16324f;
-  font-weight: 700;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .panel-actions {
@@ -666,64 +614,60 @@ onUnmounted(() => {
 .panel-title-side {
   display: flex;
   justify-content: flex-end;
-  align-items: center;
-  width: 132px;
-  flex: 0 0 132px;
 }
 
 .panel-node-tag {
-  width: 100%;
-  justify-content: center;
+  max-width: 140px;
   overflow: hidden;
 }
 
-.panel-node-tag.is-empty {
-  visibility: hidden;
+.panel-empty {
+  padding: 24px 0;
 }
 
-.panel-empty {
-  padding: 20px 0;
+.empty-text {
+  color: #94a3b8;
+  font-size: 14px;
 }
 
 .execution-row {
   width: 100%;
-  margin-bottom: 10px;
-  padding: 16px;
-  border: 1px solid rgba(103, 126, 154, 0.14);
-  border-radius: 16px;
-  background: #fff;
+  margin-bottom: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
   cursor: pointer;
   text-align: left;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color 0.15s;
 }
 
-.execution-row:hover,
+.execution-row:hover {
+  background: #f1f5f9;
+}
+
 .execution-row.active {
-  border-color: rgba(50, 115, 220, 0.45);
-  box-shadow: 0 14px 28px rgba(43, 90, 155, 0.12);
-  transform: translateY(-1px);
+  background: #eff6ff;
 }
 
 .execution-row-top,
-.execution-row-meta,
-.timeline-title-row,
-.timeline-meta {
+.execution-row-meta {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .execution-row-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .execution-title,
 .timeline-title,
 .metric-value {
-  color: #17314d;
-  font-weight: 700;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .execution-subtitle,
@@ -731,99 +675,106 @@ onUnmounted(() => {
 .timeline-id,
 .timeline-meta,
 .metric-label {
-  color: #68809a;
-  font-size: 13px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .execution-row-meta {
-  margin-top: 10px;
-  flex-wrap: wrap;
+  margin-top: 6px;
 }
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 16px;
 }
 
 .metric-card {
-  padding: 16px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(242, 247, 255, 0.95), rgba(230, 239, 250, 0.8));
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 .metric-value {
-  margin-top: 6px;
-  font-size: 20px;
-}
-
-.execution-descriptions {
-  overflow: hidden;
+  margin-top: 4px;
+  font-size: 16px;
 }
 
 .analysis-headline {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
+
 .raw-label {
-  margin-bottom: 8px;
-  color: #35506e;
+  margin-bottom: 6px;
+  color: #64748b;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .timeline-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .timeline-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
-  padding: 14px;
-  border: 1px solid rgba(103, 126, 154, 0.14);
-  border-radius: 16px;
-  background: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
   cursor: pointer;
   text-align: left;
+  transition: background-color 0.15s;
+}
+
+.timeline-item:hover {
+  background: #f1f5f9;
 }
 
 .timeline-item.active {
-  border-color: rgba(50, 115, 220, 0.4);
-  box-shadow: 0 14px 28px rgba(43, 90, 155, 0.1);
+  background: #eff6ff;
 }
 
 .timeline-dot {
-  width: 12px;
-  height: 12px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: #9aa9b8;
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #94a3b8;
 }
 
 .timeline-dot.success,
 .timeline-dot.completed {
-  background: #3db172;
+  background: #10b981;
 }
 
 .timeline-dot.failed {
-  background: #e85f5f;
+  background: #ef4444;
 }
 
 .timeline-dot.running {
-  background: #e59f2e;
+  background: #f59e0b;
+}
+
+.timeline-main {
+  flex: 1;
+}
+
+.timeline-title-row,
+.timeline-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .timeline-error {
-  margin-top: 10px;
-  color: #ba4b4b;
-  font-size: 13px;
-  line-height: 1.6;
+  margin-top: 8px;
+  color: #ef4444;
+  font-size: 12px;
 }
 
 .inline-icon {
@@ -835,18 +786,23 @@ onUnmounted(() => {
 .raw-panel :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+}
+
+.raw-block {
+  display: flex;
+  flex-direction: column;
 }
 
 .raw-pre {
-  max-height: 320px;
+  max-height: 200px;
   overflow: auto;
-  padding: 14px;
-  border-radius: 14px;
-  background: #0f1a24;
-  color: #dce8f2;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -860,10 +816,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .execution-insights-page {
-    padding: 16px;
-  }
-
   .page-hero,
   .toolbar {
     flex-direction: column;
@@ -872,6 +824,7 @@ onUnmounted(() => {
   .toolbar-select,
   .toolbar-search {
     width: 100%;
+    max-width: none;
   }
 }
 </style>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Document, Monitor, Setting, HomeFilled, DataAnalysis, Platform } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const isCollapse = ref(false)
+const isReady = ref(false)
 
 const emit = defineEmits<{
   collapse: [collapsed: boolean]
@@ -36,7 +37,6 @@ const menuGroups = [
 
 const activeMenu = computed(() => {
   const path = route.path
-  // Match workflow-edit to workflows
   if (path.startsWith('/workflows')) {
     return '/workflows'
   }
@@ -62,146 +62,330 @@ watch(isCollapse, (val) => {
 const goToHome = () => {
   router.push('/')
 }
+
+onMounted(() => {
+  setTimeout(() => {
+    isReady.value = true
+  }, 50)
+})
 </script>
 
 <template>
-  <div class="sidebar" :class="{ 'is-collapse': isCollapse }">
+  <div class="sidebar" :class="{ 'is-collapse': isCollapse, 'is-ready': isReady }">
+    <!-- Header -->
     <div class="sidebar-header">
       <div class="logo" @click="goToHome">
-        <el-icon :size="24"><Monitor /></el-icon>
-        <span v-show="!isCollapse" class="logo-text">管理系统</span>
+        <div class="logo-icon">
+          <el-icon :size="14"><Monitor /></el-icon>
+        </div>
+        <transition name="fade">
+          <div v-show="!isCollapse" class="logo-text">
+            <span class="logo-title">OpsCenter</span>
+            <span class="logo-subtitle">运维管理平台</span>
+          </div>
+        </transition>
       </div>
     </div>
 
-    <el-menu
-      :default-active="activeMenu"
-      :collapse="isCollapse"
-      :collapse-transition="false"
-      @select="handleSelect"
-      class="sidebar-menu"
-    >
-      <!-- 首页 -->
-      <el-menu-item index="/">
-        <el-icon><HomeFilled /></el-icon>
-        <template #title>首页</template>
-      </el-menu-item>
+    <!-- Navigation -->
+    <nav class="sidebar-nav">
+      <!-- Home -->
+      <div
+        class="nav-item"
+        :class="{ 'is-active': activeMenu === '/' }"
+        @click="handleSelect('/')"
+      >
+        <div class="nav-icon">
+          <el-icon :size="14"><HomeFilled /></el-icon>
+        </div>
+        <transition name="fade">
+          <span v-show="!isCollapse" class="nav-label">首页</span>
+        </transition>
+        <div class="nav-indicator"></div>
+      </div>
 
-      <!-- 分组菜单 -->
-      <template v-for="group in menuGroups" :key="group.title">
-        <div v-show="!isCollapse" class="menu-group-title">{{ group.title }}</div>
-        <el-menu-item
-          v-for="item in group.items"
+      <!-- Groups -->
+      <template v-for="(group, groupIndex) in menuGroups" :key="group.title">
+        <transition name="fade">
+          <div v-show="!isCollapse" class="nav-group" :style="{ '--i': groupIndex }">
+            <span class="nav-group-title">{{ group.title }}</span>
+          </div>
+        </transition>
+
+        <div
+          v-for="(item, itemIndex) in group.items"
           :key="item.index"
-          :index="item.index"
+          class="nav-item"
+          :class="{ 'is-active': activeMenu === item.index }"
+          :style="{ '--i': groupIndex * 10 + itemIndex + 1 }"
+          @click="handleSelect(item.index)"
         >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <template #title>{{ item.title }}</template>
-        </el-menu-item>
+          <div class="nav-icon">
+            <el-icon :size="14"><component :is="item.icon" /></el-icon>
+          </div>
+          <transition name="fade">
+            <span v-show="!isCollapse" class="nav-label">{{ item.title }}</span>
+          </transition>
+          <div class="nav-indicator"></div>
+        </div>
       </template>
-    </el-menu>
+    </nav>
 
+    <!-- Footer -->
     <div class="sidebar-footer">
-      <el-button
-        :icon="isCollapse ? 'Expand' : 'Fold'"
-        text
-        @click="toggleCollapse"
-        class="collapse-btn"
-      />
+      <button class="collapse-btn" @click="toggleCollapse">
+        <svg class="collapse-icon" :class="{ 'is-collapsed': isCollapse }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <polyline points="11 17 6 12 11 7"></polyline>
+          <polyline points="18 17 13 12 18 7"></polyline>
+        </svg>
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Light Modern Theme */
 .sidebar {
+  --bg: #ffffff;
+  --bg-hover: #f8fafc;
+  --bg-active: #eff6ff;
+  --accent: #3b82f6;
+  --accent-light: rgba(59, 130, 246, 0.1);
+  --text: #1e293b;
+  --text-dim: #64748b;
+  --text-muted: #94a3b8;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #304156;
-  transition: width 0.3s ease;
-  width: 220px;
+  background: var(--bg);
+  width: 180px;
+  border-right: 1px solid var(--border);
+  transition: width 0.25s ease;
+  overflow: hidden;
 }
 
 .sidebar.is-collapse {
-  width: 64px;
+  width: 52px;
 }
 
+/* Header */
 .sidebar-header {
-  height: 60px;
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #fff;
-  overflow: hidden;
+  gap: 8px;
   cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.logo:hover {
+  opacity: 0.8;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+  border-radius: 6px;
+  color: white;
+  flex-shrink: 0;
 }
 
 .logo-text {
-  font-size: 16px;
-  font-weight: 600;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
 }
 
-.sidebar-menu {
+.logo-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.logo-subtitle {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* Navigation */
+.sidebar-nav {
   flex: 1;
-  border-right: none;
-  background-color: transparent;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 4px 4px;
 }
 
-.sidebar-menu:not(.el-menu--collapse) {
-  width: 220px;
+/* Nav Group */
+.nav-group {
+  padding: 10px 6px 4px;
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
-:deep(.el-menu-item) {
-  color: rgba(255, 255, 255, 0.7);
-  height: 50px;
-  line-height: 50px;
+.sidebar.is-ready .nav-group {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition-delay: calc(var(--i) * 0.05s);
 }
 
-:deep(.el-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #fff;
+.nav-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
-:deep(.el-menu-item.is-active) {
-  background-color: #409eff;
-  color: #fff;
+/* Nav Item */
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  height: 34px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  opacity: 0;
+  transform: translateX(-8px);
 }
 
-:deep(.el-menu-item .el-icon) {
-  color: inherit;
+.sidebar.is-ready .nav-item {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.15s ease, color 0.15s ease;
+  transition-delay: calc(var(--i) * 0.03s);
 }
 
+.nav-item:hover {
+  background: var(--bg-hover);
+}
+
+.nav-item.is-active {
+  background: var(--bg-active);
+}
+
+.nav-item.is-active .nav-icon {
+  color: var(--accent);
+}
+
+.nav-item.is-active .nav-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-item.is-active .nav-indicator {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* Nav Icon */
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+/* Nav Label */
+.nav-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+/* Active Indicator */
+.nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Footer */
 .sidebar-footer {
-  padding: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px;
+  border-top: 1px solid var(--border-light);
 }
 
 .collapse-btn {
   width: 100%;
-  color: rgba(255, 255, 255, 0.7);
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .collapse-btn:hover {
-  color: #fff;
+  background: var(--bg);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
-.menu-group-title {
-  padding: 12px 20px 8px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 1px;
+.collapse-icon {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.25s ease;
 }
 
-.sidebar-menu:not(.el-menu--collapse) .menu-group-title:first-child {
-  margin-top: 8px;
+.collapse-icon.is-collapsed {
+  transform: rotate(180deg);
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 1000;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+  }
 }
 </style>

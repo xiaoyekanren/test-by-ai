@@ -69,12 +69,14 @@ const goToSettings = () => {
 
     <div class="topbar-right">
       <el-tooltip content="刷新页面" placement="bottom">
-        <el-button :icon="Refresh" circle @click="handleRefresh" />
+        <el-button :icon="Refresh" circle size="small" @click="handleRefresh" />
       </el-tooltip>
 
-      <el-dropdown trigger="click" class="user-dropdown">
+      <el-dropdown trigger="click">
         <div class="user-info">
-          <el-avatar :size="32" :icon="User" />
+          <div class="user-avatar">
+            <el-icon :size="14"><User /></el-icon>
+          </div>
           <span class="username">管理员</span>
         </div>
         <template #dropdown>
@@ -99,8 +101,7 @@ const goToSettings = () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background-color: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  background: #ffffff;
 }
 
 .topbar-left {
@@ -109,38 +110,60 @@ const goToSettings = () => {
   gap: 4px;
 }
 
+:deep(.el-breadcrumb__item) {
+  font-size: 12px;
+}
+
+:deep(.el-breadcrumb__inner) {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+:deep(.el-breadcrumb__inner.is-link:hover) {
+  color: #3b82f6;
+}
+
 .page-title {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
   margin: 0;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.user-dropdown {
-  cursor: pointer;
+  gap: 12px;
 }
 
 .user-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s;
 }
 
 .user-info:hover {
-  background-color: #f5f7fa;
+  background: #f8fafc;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border-radius: 8px;
+  color: #64748b;
 }
 
 .username {
-  font-size: 14px;
-  color: #606266;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
 }
 </style>

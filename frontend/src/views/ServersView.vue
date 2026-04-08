@@ -69,6 +69,9 @@ const commandServerId = ref<number | null>(null)
 const commandServerName = ref('')
 const commandResult = ref('')
 const commandLoading = ref(false)
+const pendingStatusChecks = ref(0)
+const statusCheckRunId = ref(0)
+const isStatusChecking = computed(() => pendingStatusChecks.value > 0)
 
 // Table sorting - default to host:port ascending
 const sortProp = ref('host')
@@ -138,12 +141,46 @@ onMounted(async () => {
   await loadServers()
 })
 
-async function loadServers() {
+async function loadServers(checkStatuses = true) {
   try {
     await serversStore.fetchServers()
+    if (checkStatuses) {
+      refreshServerStatuses()
+    }
   } catch (error) {
     ElMessage.error('Failed to load servers')
   }
+}
+
+function refreshServerStatuses() {
+  const servers = [...serversStore.servers]
+  const runId = statusCheckRunId.value + 1
+  statusCheckRunId.value = runId
+  pendingStatusChecks.value = servers.length
+
+  if (servers.length === 0) {
+    return
+  }
+
+  servers.forEach(server => {
+    void checkServerStatus(server, runId)
+  })
+}
+
+async function checkServerStatus(server: Server, runId: number) {
+  try {
+    await serversStore.testConnection(server.id, { useGlobalLoading: false })
+  } catch (error) {
+    // Keep the page responsive; each failed host is marked offline in the store.
+  } finally {
+    if (statusCheckRunId.value === runId) {
+      pendingStatusChecks.value = Math.max(0, pendingStatusChecks.value - 1)
+    }
+  }
+}
+
+function getServerStatus(server: Server) {
+  return serversStore.isTestingServer(server.id) ? 'loading' : server.status
 }
 
 function handleSortChange({ prop, order }: { prop: string; order: string | null }) {
@@ -261,7 +298,7 @@ async function deleteServer(server: Server) {
 // Test connection
 async function testConnection(server: Server) {
   try {
-    const result = await serversStore.testConnection(server.id)
+    const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
     if (result.success) {
       ElMessage.success(`Connection successful: ${result.message}`)
     } else {
@@ -323,14 +360,14 @@ function parseTags(tags: string | null): string[] {
       <div class="toolbar-title">
         <h2>🖥️ 服务器管理</h2>
         <span class="server-count">{{ serversStore.servers.length }} 台</span>
-        <span class="refresh-info">{{ serversStore.loading ? '加载中' : '按 Host:Port 排序' }}</span>
+        <span class="refresh-info">{{ serversStore.loading ? '加载中' : isStatusChecking ? `检查中 ${pendingStatusChecks} 台` : '按 Host:Port 排序' }}</span>
       </div>
       <div class="toolbar-actions">
         <ElRadioGroup v-model="viewMode" size="small" @change="handleViewModeChange">
           <ElRadioButton value="list" :icon="List">List</ElRadioButton>
           <ElRadioButton value="group" :icon="CollectionTag">By Tags</ElRadioButton>
         </ElRadioGroup>
-        <ElButton @click="loadServers" :icon="Refresh" :loading="serversStore.loading" size="small">
+        <ElButton @click="loadServers()" :icon="Refresh" :loading="serversStore.loading" size="small">
           刷新
         </ElButton>
         <ElButton type="primary" @click="openCreateDialog" :icon="Plus" size="small">
@@ -369,11 +406,12 @@ function parseTags(tags: string | null): string[] {
           </template>
         </ElTableColumn>
 
-        <ElTableColumn prop="status" label="Status" sortable="custom" width="120" align="center">
+        <ElTableColumn prop="status" label="Status" sortable="custom" width="90" align="center">
           <template #default="{ row }">
-            <span class="status-tag" :class="row.status">
-              <span>●</span>
-              {{ row.status }}
+            <span class="status-tag" :class="getServerStatus(row)">
+              <span v-if="getServerStatus(row) === 'loading'" class="status-icon spinning">◐</span>
+              <span v-else>●</span>
+              {{ getServerStatus(row) }}
             </span>
           </template>
         </ElTableColumn>
@@ -403,7 +441,7 @@ function parseTags(tags: string | null): string[] {
                   size="small"
                   :icon="Connection"
                   @click="testConnection(row)"
-                  :loading="serversStore.loading"
+                  :loading="serversStore.isTestingServer(row.id)"
                   link
                 />
               </ElTooltip>
@@ -479,11 +517,12 @@ function parseTags(tags: string | null): string[] {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="status" label="Status" width="120" align="center">
+            <ElTableColumn prop="status" label="Status" width="90" align="center">
               <template #default="{ row }">
-                <span class="status-tag" :class="row.status">
-                  <span>●</span>
-                  {{ row.status }}
+                <span class="status-tag" :class="getServerStatus(row)">
+                  <span v-if="getServerStatus(row) === 'loading'" class="status-icon spinning">◐</span>
+                  <span v-else>●</span>
+                  {{ getServerStatus(row) }}
                 </span>
               </template>
             </ElTableColumn>
@@ -496,7 +535,7 @@ function parseTags(tags: string | null): string[] {
                       size="small"
                       :icon="Connection"
                       @click="testConnection(row)"
-                      :loading="serversStore.loading"
+                      :loading="serversStore.isTestingServer(row.id)"
                       link
                     />
                   </ElTooltip>
@@ -643,10 +682,6 @@ function parseTags(tags: string | null): string[] {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding: 10px 16px;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .toolbar-title {
@@ -657,29 +692,24 @@ function parseTags(tags: string | null): string[] {
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #303133;
 }
 
 .server-count {
   font-size: 11px;
-  color: #1890ff;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
-  padding: 2px 6px;
-  border-radius: 10px;
+  color: #3b82f6;
 }
 
 .refresh-info {
   font-size: 11px;
-  color: #909399;
+  color: #94a3b8;
   margin-left: 4px;
 }
 
 .toolbar-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -706,9 +736,9 @@ function parseTags(tags: string | null): string[] {
 }
 
 .server-type-tag {
-  font-size: 9px;
+  font-size: 10px;
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: 4px;
   font-weight: 600;
 }
 
@@ -722,7 +752,6 @@ function parseTags(tags: string | null): string[] {
 
 .name-text {
   font-weight: 500;
-  color: #303133;
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -730,8 +759,8 @@ function parseTags(tags: string | null): string[] {
 }
 
 .description {
-  font-size: 10px;
-  color: #909399;
+  font-size: 11px;
+  color: #94a3b8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -741,11 +770,11 @@ function parseTags(tags: string | null): string[] {
   display: inline-block;
   max-width: 100%;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 11px;
-  background: #f5f7fa;
+  font-size: 12px;
+  background: #f1f5f9;
   padding: 2px 6px;
-  border-radius: 3px;
-  color: #606266;
+  border-radius: 4px;
+  color: #475569;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -755,31 +784,46 @@ function parseTags(tags: string | null): string[] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 72px;
+  gap: 2px;
+  min-width: 58px;
   height: 20px;
-  line-height: 1;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 .status-tag.online {
-  background: #f0f9eb;
-  color: #67c23a;
-  border: 1px solid #c2e7b0;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
 }
 
 .status-tag.offline {
-  background: #fef0f0;
-  color: #f56c6c;
-  border: 1px solid #fbc4c4;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
 }
 
-.status-tag.unknown {
-  background: #f4f4f5;
-  color: #909399;
-  border: 1px solid #d3d4d6;
+.status-tag.loading {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.status-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .tags-container {
@@ -793,15 +837,24 @@ function parseTags(tags: string | null): string[] {
 }
 
 .no-tags {
-  color: #c0c4cc;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .action-buttons {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   justify-content: center;
   align-items: center;
+}
+
+.action-buttons :deep(.el-button) {
+  font-size: 18px;
+  padding: 4px;
+}
+
+.action-buttons :deep(.el-button .el-icon) {
+  font-size: 18px;
 }
 
 .command-section {
@@ -821,16 +874,16 @@ function parseTags(tags: string | null): string[] {
 .result-label {
   font-weight: 500;
   margin-bottom: 8px;
-  color: #606266;
+  color: #64748b;
 }
 
 .result-output {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 16px;
-  border-radius: 6px;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 8px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-all;
@@ -841,10 +894,6 @@ function parseTags(tags: string | null): string[] {
 
 .grouped-view {
   margin-top: 0;
-  padding: 0 16px 16px;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .group-header {
@@ -854,13 +903,13 @@ function parseTags(tags: string | null): string[] {
 }
 
 .group-count {
-  font-size: 11px;
-  color: #909399;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .empty-groups {
   text-align: center;
   padding: 40px;
-  color: #909399;
+  color: #94a3b8;
 }
 </style>

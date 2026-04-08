@@ -16,23 +16,21 @@ const handleSidebarCollapse = (collapsed: boolean) => {
 
 <template>
   <el-container class="main-layout">
-    <el-aside :width="isSidebarCollapse ? '64px' : '220px'" class="layout-aside">
+    <el-aside :width="isSidebarCollapse ? '52px' : '180px'" class="layout-aside">
       <Sidebar @collapse="handleSidebarCollapse" />
     </el-aside>
 
     <el-container class="layout-container">
-      <el-header class="layout-header" height="60px">
+      <el-header class="layout-header" height="56px">
         <TopBar @refresh="handleRefresh" />
       </el-header>
 
       <el-main class="layout-main">
-        <div class="main-content">
-          <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-              <component :is="Component" />
-            </transition>
-          </router-view>
-        </div>
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -42,11 +40,11 @@ const handleSidebarCollapse = (collapsed: boolean) => {
 .main-layout {
   height: 100%;
   width: 100%;
+  background: #f8fafc;
 }
 
 .layout-aside {
-  background-color: #304156;
-  transition: width 0.3s ease;
+  transition: width 0.25s ease;
   overflow: hidden;
 }
 
@@ -58,26 +56,16 @@ const handleSidebarCollapse = (collapsed: boolean) => {
 
 .layout-header {
   padding: 0;
-  background-color: #fff;
-  border-bottom: 1px solid #e4e7ed;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .layout-main {
-  background-color: #f5f7fa;
+  background: #f8fafc;
   padding: 20px;
   overflow-y: auto;
 }
 
-.main-content {
-  background-color: #fff;
-  border-radius: 4px;
-  padding: 20px;
-  min-height: calc(100vh - 120px);
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-/* Transition animations */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -88,22 +76,9 @@ const handleSidebarCollapse = (collapsed: boolean) => {
   opacity: 0;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
-  .layout-aside {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 1000;
-  }
-
   .layout-main {
-    padding: 10px;
-  }
-
-  .main-content {
-    padding: 15px;
+    padding: 12px;
   }
 }
 </style>
