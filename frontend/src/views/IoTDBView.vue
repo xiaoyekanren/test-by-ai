@@ -8,15 +8,13 @@ import {
   ElOption,
   ElInput,
   ElButton,
-  ElTabs,
-  ElTabPane,
   ElMessage,
   ElMessageBox,
   ElDialog,
   ElTag,
   vLoading
 } from 'element-plus'
-import { Refresh, Document, Setting, Platform } from '@element-plus/icons-vue'
+import { Refresh, Platform } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import { useIoTDBStore } from '@/stores/iotdb'
 import { iotdbApi } from '@/api'
@@ -83,15 +81,8 @@ const streamingLog = ref(false)
 const logFilesByNode = ref<Record<string, IoTDBFileInfo[]>>({})
 const logContentByNode = ref<Record<string, string>>({})
 const logsLoadingByNode = ref<Record<string, boolean>>({})
-const LOG_PREVIEW_DEFAULT_HEIGHT = 720
-const LOG_PREVIEW_MIN_HEIGHT = 360
-const LOG_PREVIEW_MAX_HEIGHT = 1200
-const LOG_RESIZE_HANDLE_HEIGHT = 18
-const logPreviewHeight = ref(LOG_PREVIEW_DEFAULT_HEIGHT)
-const resizingLogPreview = ref(false)
+const logContentLoadingByNode = ref<Record<string, boolean>>({})
 const logOutputRef = ref<HTMLElement | null>(null)
-let logPreviewResizeStartY = 0
-let logPreviewResizeStartHeight = LOG_PREVIEW_DEFAULT_HEIGHT
 
 // Config state
 const selectedConfigFile = ref('')
@@ -101,10 +92,6 @@ const configFilesByNode = ref<Record<string, IoTDBFileInfo[]>>({})
 const configContentByNode = ref<Record<string, string>>({})
 const configsLoadingByNode = ref<Record<string, boolean>>({})
 const configSavingByNode = ref<Record<string, boolean>>({})
-const configPreviewHeight = ref(LOG_PREVIEW_DEFAULT_HEIGHT)
-const resizingConfigPreview = ref(false)
-let configPreviewResizeStartY = 0
-let configPreviewResizeStartHeight = LOG_PREVIEW_DEFAULT_HEIGHT
 
 // Computed
 const selectedSavedTarget = computed(() => {
@@ -133,6 +120,10 @@ const activeConfigContent = computed(() => {
 
 const activeLogsLoading = computed(() => {
   return activeNode.value ? Boolean(logsLoadingByNode.value[activeNode.value.id]) : false
+})
+
+const activeLogContentLoading = computed(() => {
+  return activeNode.value ? Boolean(logContentLoadingByNode.value[activeNode.value.id]) : false
 })
 
 const activeConfigsLoading = computed(() => {
@@ -514,62 +505,6 @@ function stopLogStream() {
   streamingLog.value = false
 }
 
-function clampLogPreviewHeight(height: number) {
-  return Math.min(LOG_PREVIEW_MAX_HEIGHT, Math.max(LOG_PREVIEW_MIN_HEIGHT, height))
-}
-
-function handleLogPreviewResizeMove(event: PointerEvent) {
-  if (!resizingLogPreview.value) return
-  const deltaY = event.clientY - logPreviewResizeStartY
-  logPreviewHeight.value = clampLogPreviewHeight(logPreviewResizeStartHeight + deltaY)
-}
-
-function stopLogPreviewResize() {
-  if (!resizingLogPreview.value) return
-  resizingLogPreview.value = false
-  document.body.classList.remove('is-resizing-log-preview')
-  window.removeEventListener('pointermove', handleLogPreviewResizeMove)
-  window.removeEventListener('pointerup', stopLogPreviewResize)
-  window.removeEventListener('pointercancel', stopLogPreviewResize)
-}
-
-function startLogPreviewResize(event: PointerEvent) {
-  event.preventDefault()
-  resizingLogPreview.value = true
-  logPreviewResizeStartY = event.clientY
-  logPreviewResizeStartHeight = logPreviewHeight.value
-  document.body.classList.add('is-resizing-log-preview')
-  window.addEventListener('pointermove', handleLogPreviewResizeMove)
-  window.addEventListener('pointerup', stopLogPreviewResize)
-  window.addEventListener('pointercancel', stopLogPreviewResize)
-}
-
-function handleConfigPreviewResizeMove(event: PointerEvent) {
-  if (!resizingConfigPreview.value) return
-  const deltaY = event.clientY - configPreviewResizeStartY
-  configPreviewHeight.value = clampLogPreviewHeight(configPreviewResizeStartHeight + deltaY)
-}
-
-function stopConfigPreviewResize() {
-  if (!resizingConfigPreview.value) return
-  resizingConfigPreview.value = false
-  document.body.classList.remove('is-resizing-config-preview')
-  window.removeEventListener('pointermove', handleConfigPreviewResizeMove)
-  window.removeEventListener('pointerup', stopConfigPreviewResize)
-  window.removeEventListener('pointercancel', stopConfigPreviewResize)
-}
-
-function startConfigPreviewResize(event: PointerEvent) {
-  event.preventDefault()
-  resizingConfigPreview.value = true
-  configPreviewResizeStartY = event.clientY
-  configPreviewResizeStartHeight = configPreviewHeight.value
-  document.body.classList.add('is-resizing-config-preview')
-  window.addEventListener('pointermove', handleConfigPreviewResizeMove)
-  window.addEventListener('pointerup', stopConfigPreviewResize)
-  window.addEventListener('pointercancel', stopConfigPreviewResize)
-}
-
 function getActiveNodeId() {
   return activeNode.value?.id || ''
 }
@@ -723,8 +658,6 @@ onMounted(async () => {
 onUnmounted(() => {
   stopLogStream()
   closePersistentCliSession()
-  stopLogPreviewResize()
-  stopConfigPreviewResize()
   disposePersistentTerminal()
 })
 
@@ -872,6 +805,7 @@ function disconnectIoTDB() {
   iotdbStore.clearState()
   logFilesByNode.value = {}
   logContentByNode.value = {}
+  logContentLoadingByNode.value = {}
   configFilesByNode.value = {}
   configContentByNode.value = {}
   selectedLogFile.value = ''
@@ -1033,11 +967,14 @@ async function loadLogFile(path: string) {
   if (!activeNode.value) return
   selectedLogFile.value = path
   stopLogStream()
+  logContentLoadingByNode.value[activeNode.value.id] = true
   try {
     const result = await iotdbApi.readLog(activeNode.value.serverId, activeNode.value.iotdbHome, path, LOG_TAIL_LINES)
     logContentByNode.value[activeNode.value.id] = result.content
   } catch (error) {
     ElMessage.error(getErrorMessage(error, 'Failed to read log file'))
+  } finally {
+    logContentLoadingByNode.value[activeNode.value.id] = false
   }
 }
 
@@ -1170,118 +1107,303 @@ function formatSize(size: number): string {
 
 <template>
   <div class="iotdb-view">
-    <!-- Top Control Card -->
-    <div class="connection-card">
-      <div class="connection-card-header">
-        <div>
-          <div class="connection-card-title">连接控制</div>
-          <div class="connection-card-desc">选择连接组后加载节点、刷新配置，CLI 会按节点常驻。</div>
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <ElSelect
+        v-model="selectedSavedTargetId"
+        placeholder="选择已保存连接"
+        class="target-select"
+        clearable
+      >
+        <ElOption
+          v-for="target in savedTargets"
+          :key="target.id"
+          :label="target.name"
+          :value="target.id"
+        />
+      </ElSelect>
+
+      <ElButton
+        type="primary"
+        :loading="connecting"
+        :disabled="connected || (!connectionReady && !selectedSavedTarget)"
+        @click="connectSelectedOrCurrentTarget"
+      >
+        连接
+      </ElButton>
+
+      <ElButton @click="manageTargetsDialogVisible = true">
+        管理
+      </ElButton>
+
+      <div class="toolbar-spacer" />
+
+      <ElTag v-if="currentTargetLabel" type="info" size="small">
+        {{ currentTargetLabel }}
+      </ElTag>
+
+      <ElButton
+        v-if="connected"
+        type="danger"
+        @click="disconnectIoTDB"
+      >
+        断开
+      </ElButton>
+
+      <ElButton
+        v-if="connected"
+        :icon="Refresh"
+        :loading="connecting"
+        @click="reloadCurrentConnection"
+      >
+        刷新
+      </ElButton>
+    </div>
+
+    <!-- Connected Content -->
+    <div v-if="connected" class="content-area">
+      <!-- Node Tabs + Function Tabs -->
+      <div class="tabs-header">
+        <div class="tabs-row">
+          <div class="node-tabs">
+            <button
+              v-for="node in connectedNodes"
+              :key="node.id"
+              class="node-tab"
+              :class="{ active: activeNodeId === node.id }"
+              @click="activeNodeId = node.id"
+            >
+              <span class="node-tab-name">{{ getNodeTitle(node) }}</span>
+              <ElTag size="small" effect="plain">{{ getRestartScopeLabel(node.restartScope) }}</ElTag>
+            </button>
+          </div>
+          <div class="node-info">
+            <span class="node-path">{{ activeNode?.iotdbHome }}</span>
+          </div>
+          <div class="func-spacer" />
+          <ElButton
+            type="warning"
+            size="small"
+            :loading="restarting"
+            @click="restartActiveNode"
+          >
+            重启
+          </ElButton>
         </div>
-        <ElTag v-if="currentTargetLabel" type="info" size="small" class="current-target-tag">
-          当前：{{ currentTargetLabel }}
-        </ElTag>
+        <div class="function-tabs">
+          <button
+            class="func-tab"
+            :class="{ active: activeTab === 'cli-session' }"
+            @click="activeTab = 'cli-session'"
+          >
+            CLI
+          </button>
+          <button
+            class="func-tab"
+            :class="{ active: activeTab === 'logs' }"
+            @click="activeTab = 'logs'"
+          >
+            日志
+          </button>
+          <button
+            class="func-tab"
+            :class="{ active: activeTab === 'configs' }"
+            @click="activeTab = 'configs'"
+          >
+            配置
+          </button>
+        </div>
       </div>
 
-      <div class="control-bar">
-        <div class="open-target-group">
-          <ElSelect
-            v-model="selectedSavedTargetId"
-            placeholder="已保存连接"
-            class="saved-target-select"
-            clearable
-          >
-            <ElOption
-              v-for="target in savedTargets"
-              :key="target.id"
-              :label="target.name"
-              :value="target.id"
-            />
-          </ElSelect>
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- CLI Session -->
+        <div v-show="activeTab === 'cli-session'" class="cli-panel">
+          <div class="cli-params">
+            <ElButton size="small">切换模型（待实现）</ElButton>
+            <div class="cli-actions">
+              <ElButton
+                v-if="!activePersistentCliConnected"
+                type="primary"
+                :loading="activePersistentCliConnecting"
+                @click="handleConnectPersistentCli"
+              >
+                连接 CLI
+              </ElButton>
+              <template v-else>
+                <ElButton type="danger" @click="closePersistentCliSession(true, activeNode?.id)">
+                  断开
+                </ElButton>
+                <ElButton @click="clearPersistentCliOutput">
+                  清空
+                </ElButton>
+              </template>
+            </div>
+            <div class="cli-param">
+              <label>Host</label>
+              <ElInput
+                v-model="activeCliHost"
+                placeholder="127.0.0.1"
+                :disabled="activePersistentCliConnected || activePersistentCliConnecting"
+              />
+            </div>
+            <div class="cli-param">
+              <label>Port</label>
+              <ElInput
+                v-model.number="activeCliPort"
+                placeholder="6667"
+                :disabled="activePersistentCliConnected || activePersistentCliConnecting"
+              />
+            </div>
+            <div class="cli-param">
+              <label>User</label>
+              <ElInput
+                v-model="cliUsername"
+                placeholder="用户名"
+                :disabled="activePersistentCliConnected"
+              />
+            </div>
+            <div class="cli-param">
+              <label>Password</label>
+              <ElInput
+                v-model="cliPassword"
+                type="password"
+                show-password
+                placeholder="密码"
+                :disabled="activePersistentCliConnected"
+              />
+            </div>
+          </div>
+          <div
+            :ref="element => setPersistentTerminalRef(element, activeNode?.id)"
+            class="cli-terminal"
+            @click="focusPersistentTerminal(activeNode?.id)"
+          ></div>
         </div>
 
-        <ElButton
-          type="primary"
-          :loading="connecting"
-          :disabled="connected || (!connectionReady && !selectedSavedTarget)"
-          @click="connectSelectedOrCurrentTarget"
-        >
-          连接
-        </ElButton>
+        <!-- Logs -->
+        <div v-show="activeTab === 'logs'" class="file-panel">
+          <aside class="file-sidebar" v-loading="activeLogsLoading">
+            <div class="sidebar-header">
+              <span>日志文件</span>
+              <ElButton size="small" :icon="Refresh" @click="refreshLogFiles()" :loading="activeLogsLoading" />
+            </div>
+            <div class="file-list">
+              <button
+                v-for="file in activeLogFiles"
+                :key="file.path"
+                class="file-item"
+                :class="{ active: selectedLogFile === file.path }"
+                @click="loadLogFile(file.path)"
+              >
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatSize(file.size) }}</span>
+              </button>
+              <div v-if="activeLogFiles.length === 0" class="file-empty">暂无日志</div>
+            </div>
+          </aside>
+          <div class="file-content">
+            <div v-if="selectedLogFile" class="content-wrapper">
+              <div class="content-header">
+                <span class="content-title">{{ selectedLogFile }}</span>
+                <div class="content-actions">
+                  <ElTag v-if="streamingLog" type="success" size="small">实时</ElTag>
+                  <ElButton v-if="!streamingLog" size="small" :loading="activeLogContentLoading" @click="refreshCurrentLog">刷新</ElButton>
+                  <ElButton
+                    size="small"
+                    :type="streamingLog ? 'danger' : 'success'"
+                    @click="streamingLog ? stopLogStream() : startLogStream()"
+                  >
+                    {{ streamingLog ? '停止' : '实时' }}
+                  </ElButton>
+                </div>
+              </div>
+              <pre ref="logOutputRef" class="content-output">{{ activeLogContent || '等待日志...' }}</pre>
+            </div>
+            <div v-else class="content-placeholder">选择日志文件</div>
+          </div>
+        </div>
 
-        <ElButton @click="manageTargetsDialogVisible = true">
-          管理连接
-        </ElButton>
-
-        <div class="control-spacer" />
-
-        <ElButton
-          type="danger"
-          :disabled="!connected"
-          @click="disconnectIoTDB"
-        >
-          断开
-        </ElButton>
-
-        <ElButton
-          :icon="Refresh"
-          :disabled="!connected"
-          :loading="connecting"
-          @click="reloadCurrentConnection"
-        >
-          刷新
-        </ElButton>
+        <!-- Configs -->
+        <div v-show="activeTab === 'configs'" class="file-panel">
+          <aside class="file-sidebar" v-loading="activeConfigsLoading">
+            <div class="sidebar-header">
+              <span>配置文件</span>
+              <ElButton size="small" :icon="Refresh" @click="refreshConfigFiles()" :loading="activeConfigsLoading" />
+            </div>
+            <div class="file-list">
+              <button
+                v-for="file in activeConfigFiles"
+                :key="file.path"
+                class="file-item"
+                :class="{ active: selectedConfigFile === file.path }"
+                @click="loadConfigFile(file.path)"
+              >
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatSize(file.size) }}</span>
+              </button>
+              <div v-if="activeConfigFiles.length === 0" class="file-empty">暂无配置</div>
+            </div>
+          </aside>
+          <div class="file-content">
+            <div v-if="selectedConfigFile" class="content-wrapper">
+              <div class="content-header">
+                <span class="content-title">{{ selectedConfigFile }}</span>
+                <div class="content-actions">
+                  <template v-if="configEditMode">
+                    <ElButton size="small" type="success" @click="saveConfig" :loading="activeConfigSaving">保存</ElButton>
+                    <ElButton size="small" @click="cancelEdit">取消</ElButton>
+                  </template>
+                  <ElButton v-else size="small" type="primary" @click="enterEditMode">编辑</ElButton>
+                </div>
+              </div>
+              <ElInput
+                v-if="configEditMode"
+                v-model="configEditorContent"
+                type="textarea"
+                class="config-editor"
+              />
+              <pre v-else class="content-output">{{ activeConfigContent }}</pre>
+            </div>
+            <div v-else class="content-placeholder">选择配置文件</div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Empty State -->
+    <div v-else class="empty-state">
+      <el-icon :size="48"><Platform /></el-icon>
+      <p>选择已保存连接后点击连接</p>
+    </div>
+
+    <!-- Create Target Dialog -->
     <ElDialog
       v-model="createTargetDialogVisible"
       :title="targetDialogTitle"
-      width="720px"
+      width="640px"
     >
-      <div class="create-target-form">
-        <label class="create-target-field">
-          <span>连接名称</span>
-          <ElInput
-            v-model="newTargetName"
-            placeholder="如 test-cluster，留空自动生成"
-            clearable
-          />
-        </label>
-
-        <label class="create-target-field">
-          <span>模式</span>
+      <div class="dialog-form">
+        <div class="form-row">
+          <label>连接名称</label>
+          <ElInput v-model="newTargetName" placeholder="留空自动生成" clearable />
+        </div>
+        <div class="form-row">
+          <label>模式</label>
           <ElSelect v-model="newTargetMode" @change="ensureNewTargetNodes">
             <ElOption label="单机" value="standalone" />
             <ElOption label="分布式" value="cluster" />
           </ElSelect>
-        </label>
-
-        <div class="create-node-list">
-          <div
-            v-for="(node, index) in newTargetNodes"
-            :key="index"
-            class="create-node-row"
-          >
-            <ElInput
-              v-model="node.name"
-              placeholder="节点名"
-              class="node-name-input"
-              clearable
-            />
-            <ElSelect
-              v-model="node.restartScope"
-              class="node-scope-select"
-            >
+        </div>
+        <div class="nodes-section">
+          <div v-for="(node, index) in newTargetNodes" :key="index" class="node-row">
+            <ElInput v-model="node.name" placeholder="节点名" class="node-name" clearable />
+            <ElSelect v-model="node.restartScope" class="node-scope">
               <ElOption label="ALL" value="all" />
               <ElOption label="CN" value="cn" />
               <ElOption label="DN" value="dn" />
             </ElSelect>
-            <ElSelect
-              v-model="node.serverId"
-              placeholder="选择 IP"
-              class="node-server-select"
-              clearable
-            >
+            <ElSelect v-model="node.serverId" placeholder="选择服务器" class="node-server" clearable>
               <ElOption
                 v-for="server in serversStore.servers"
                 :key="server.id"
@@ -1289,15 +1411,10 @@ function formatSize(size: number): string {
                 :value="server.id"
               />
             </ElSelect>
-            <ElInput
-              v-model="node.iotdbHome"
-              placeholder="如 /opt/iotdb"
-              class="node-home-input"
-              clearable
-            />
+            <ElInput v-model="node.iotdbHome" placeholder="IoTDB 路径" class="node-path" clearable />
             <ElButton
               type="danger"
-              plain
+              size="small"
               :disabled="newTargetNodes.length <= 1"
               @click="removeNewTargetNode(index)"
             >
@@ -1305,1044 +1422,480 @@ function formatSize(size: number): string {
             </ElButton>
           </div>
         </div>
-
-        <ElButton
-          v-if="newTargetMode === 'cluster'"
-          type="primary"
-          plain
-          @click="addNewTargetNode"
-        >
+        <ElButton v-if="newTargetMode === 'cluster'" type="primary" plain @click="addNewTargetNode">
           添加节点
         </ElButton>
       </div>
-
       <template #footer>
-        <ElButton @click="createTargetDialogVisible = false">
-          取消
-        </ElButton>
-        <ElButton type="primary" @click="createTargetFromDialog">
-          保存并加载
-        </ElButton>
+        <ElButton @click="createTargetDialogVisible = false">取消</ElButton>
+        <ElButton type="primary" @click="createTargetFromDialog">保存</ElButton>
       </template>
     </ElDialog>
 
-    <ElDialog
-      v-model="manageTargetsDialogVisible"
-      title="管理连接"
-      width="760px"
-    >
-      <div class="manage-toolbar">
-        <ElButton type="primary" @click="openCreateTargetDialog">
-          新建连接
-        </ElButton>
+    <!-- Manage Targets Dialog -->
+    <ElDialog v-model="manageTargetsDialogVisible" title="管理连接" width="600px">
+      <div class="manage-header">
+        <ElButton type="primary" @click="openCreateTargetDialog">新建连接</ElButton>
       </div>
-
-      <div v-if="savedTargets.length === 0" class="manage-empty">
-        暂无保存连接
-      </div>
-
-      <div v-else class="saved-target-list">
-        <div
-          v-for="target in savedTargets"
-          :key="target.id"
-          class="saved-target-item"
-        >
-          <div class="saved-target-main">
-            <div class="saved-target-title">
-              <span>{{ target.name }}</span>
-              <ElTag size="small" effect="plain">
-                {{ target.mode === 'cluster' ? '分布式' : '单机' }}
-              </ElTag>
-              <ElTag size="small" type="info" effect="plain">
-                {{ target.nodes.length }} 节点
-              </ElTag>
+      <div v-if="savedTargets.length === 0" class="manage-empty">暂无保存连接</div>
+      <div v-else class="target-list">
+        <div v-for="target in savedTargets" :key="target.id" class="target-item">
+          <div class="target-info">
+            <div class="target-name">
+              {{ target.name }}
+              <ElTag size="small" effect="plain">{{ target.mode === 'cluster' ? '分布式' : '单机' }}</ElTag>
             </div>
-            <div class="saved-target-nodes">
-              <div
-                v-for="node in target.nodes.slice(0, 5)"
-                :key="node.id"
-              >
-                {{ getNodeDisplayName(node) }}
-              </div>
-              <div v-if="target.nodes.length > 5">...</div>
+            <div class="target-nodes">
+              {{ target.nodes.map(n => getNodeDisplayName(n)).join(', ') }}
             </div>
           </div>
-          <div class="saved-target-actions">
-            <ElButton
-              type="primary"
-              plain
-              @click="loadSavedTarget(target)"
-            >
-              加载
-            </ElButton>
-            <ElButton
-              @click="openEditTargetDialog(target)"
-            >
-              编辑
-            </ElButton>
-            <ElButton
-              type="danger"
-              plain
-              :disabled="connected"
-              @click="deleteSavedTarget(target)"
-            >
-              删除
-            </ElButton>
+          <div class="target-actions">
+            <ElButton size="small" type="primary" @click="loadSavedTarget(target)">加载</ElButton>
+            <ElButton size="small" @click="openEditTargetDialog(target)">编辑</ElButton>
+            <ElButton size="small" type="danger" :disabled="connected" @click="deleteSavedTarget(target)">删除</ElButton>
           </div>
         </div>
       </div>
     </ElDialog>
-
-    <!-- Tab Area -->
-    <ElTabs v-model="activeNodeId" class="node-tabs iotdb-node-tabs" v-if="connected">
-      <ElTabPane
-        v-for="node in connectedNodes"
-        :key="node.id"
-        :name="node.id"
-      >
-        <template #label>
-          <span class="node-tab-label">
-            <span>{{ getNodeTitle(node) }}</span>
-            <ElTag size="small" type="info" effect="plain">
-              {{ getRestartScopeLabel(node.restartScope) }}
-            </ElTag>
-          </span>
-        </template>
-
-        <div class="node-action-bar">
-          <div class="node-action-info">
-            <div class="node-title-stack">
-              <div class="node-title-row">
-                <span class="node-action-title">{{ getNodeTitle(node) }}</span>
-                <ElTag size="small" type="info" effect="plain">
-                  {{ getRestartScopeLabel(node.restartScope) }}
-                </ElTag>
-              </div>
-              <span class="node-action-path">{{ node.iotdbHome }}</span>
-            </div>
-          </div>
-          <div class="node-action-right">
-            <div class="node-function-actions">
-              <ElButton
-                :type="activeTab === 'cli-session' ? 'primary' : 'default'"
-                plain
-                @click="activeTab = 'cli-session'"
-              >
-                CLI
-              </ElButton>
-              <ElButton
-                :type="activeTab === 'logs' ? 'primary' : 'default'"
-                plain
-                @click="activeTab = 'logs'"
-              >
-                日志管理
-              </ElButton>
-              <ElButton
-                :type="activeTab === 'configs' ? 'primary' : 'default'"
-                plain
-                @click="activeTab = 'configs'"
-              >
-                配置管理
-              </ElButton>
-              <ElButton
-                type="warning"
-                :disabled="!connected || activeNodeId !== node.id"
-                :loading="restarting && activeNodeId === node.id"
-                @click="restartActiveNode"
-              >
-                重启当前节点
-              </ElButton>
-            </div>
-          </div>
-        </div>
-
-        <ElTabs v-model="activeTab" class="iotdb-tabs node-function-tabs">
-          <ElTabPane label="CLI" name="cli-session">
-            <div class="cli-section">
-              <div class="cli-connection-panel">
-                <div class="cli-param">
-                  <span class="cli-param-label">Host (-h)</span>
-                  <ElInput
-                    v-model="activeCliHost"
-                    placeholder="默认 127.0.0.1"
-                    clearable
-                    :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
-                  />
-                </div>
-                <div class="cli-param">
-                  <span class="cli-param-label">Port (-p)</span>
-                  <ElInput
-                    v-model.number="activeCliPort"
-                    placeholder="默认 6667"
-                    clearable
-                    :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
-                  />
-                </div>
-                <div class="cli-param">
-                  <span class="cli-param-label">User (-u)</span>
-                  <ElInput
-                    v-model="cliUsername"
-                    placeholder="留空则不指定"
-                    clearable
-                    :disabled="activePersistentCliConnected || activePersistentCliConnecting"
-                  />
-                </div>
-                <div class="cli-param">
-                  <span class="cli-param-label">Password (-pw)</span>
-                  <ElInput
-                    v-model="cliPassword"
-                    placeholder="留空则不指定"
-                    show-password
-                    clearable
-                    :disabled="activePersistentCliConnected || activePersistentCliConnecting"
-                  />
-                </div>
-              </div>
-              <div class="persistent-cli-toolbar">
-                <ElTag
-                  :type="activePersistentCliConnected ? 'success' : (activeCliDefaultsLoading ? 'warning' : 'info')"
-                  effect="plain"
-                >
-                  {{ activePersistentCliConnected ? 'CLI 已连接' : (activeCliDefaultsLoading ? '读取 CLI 参数中' : 'CLI 未连接') }}
-                </ElTag>
-                <ElButton
-                  v-if="!activePersistentCliConnected"
-                  type="primary"
-                  :loading="activePersistentCliConnecting || activeCliDefaultsLoading"
-                  :disabled="!activeCliDefaultsLoaded"
-                  @click="handleConnectPersistentCli"
-                >
-                  连接 CLI
-                </ElButton>
-                <ElButton
-                  v-else
-                  type="danger"
-                  @click="closePersistentCliSession(true, node.id)"
-                >
-                  断开 CLI
-                </ElButton>
-                <ElButton @click="clearPersistentCliOutput">
-                  清空输出
-                </ElButton>
-              </div>
-
-              <div
-                :ref="element => setPersistentTerminalRef(element, node.id)"
-                class="persistent-cli-terminal"
-                @click="focusPersistentTerminal(node.id)"
-              ></div>
-            </div>
-          </ElTabPane>
-
-          <ElTabPane label="日志管理" name="logs">
-            <div class="logs-section">
-              <div class="file-layout">
-                <aside
-                  class="file-panel"
-                  v-loading="activeLogsLoading"
-                >
-                  <div class="file-panel-header">
-                    <span>日志目录</span>
-                    <ElButton
-                      size="small"
-                      :icon="Refresh"
-                      @click="refreshLogFiles()"
-                      :loading="activeLogsLoading"
-                    >
-                      刷新
-                    </ElButton>
-                  </div>
-
-                  <div v-if="activeLogFiles.length === 0" class="file-empty">
-                    暂无日志文件
-                  </div>
-
-                  <div
-                    v-else
-                    class="file-list log-file-list"
-                    :style="{ height: `${logPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }"
-                  >
-                    <button
-                      v-for="file in activeLogFiles"
-                      :key="file.path"
-                      type="button"
-                      class="file-item"
-                      :class="{ active: selectedLogFile === file.path }"
-                      @click="loadLogFile(file.path)"
-                    >
-                      <Document class="file-icon" />
-                      <span class="file-name">{{ file.name }}</span>
-                      <span class="file-size">{{ formatSize(file.size) }}</span>
-                    </button>
-                  </div>
-                </aside>
-
-                <section class="file-detail">
-                  <div class="log-preview" v-if="selectedLogFile">
-                    <div class="preview-header">
-                      <div class="preview-title">
-                        <span class="preview-file-name">{{ selectedLogFile }}</span>
-                        <ElTag type="info" effect="plain">
-                          默认读取最后 {{ LOG_TAIL_LINES }} 行，页面最多保留 {{ Math.round(MAX_LOG_VIEW_CHARS / 1024) }} KB
-                        </ElTag>
-                      </div>
-                      <div class="preview-actions">
-                        <ElTag v-if="streamingLog" type="success" effect="plain">实时日志</ElTag>
-                        <ElButton
-                          size="small"
-                          :icon="Refresh"
-                          @click="refreshCurrentLog"
-                          :loading="activeLogsLoading"
-                          :disabled="streamingLog"
-                        >
-                          刷新最后 {{ LOG_TAIL_LINES }} 行
-                        </ElButton>
-                        <ElButton
-                          v-if="!streamingLog"
-                          size="small"
-                          type="success"
-                          @click="startLogStream"
-                        >
-                          实时查看
-                        </ElButton>
-                        <ElButton
-                          v-else
-                          size="small"
-                          type="danger"
-                          @click="stopLogStream"
-                        >
-                          停止实时
-                        </ElButton>
-                      </div>
-                    </div>
-                    <pre
-                      ref="logOutputRef"
-                      class="log-output"
-                      :style="{ height: `${logPreviewHeight}px` }"
-                    >{{ activeLogContent || '等待日志输出...' }}</pre>
-                    <button
-                      type="button"
-                      class="log-resize-handle"
-                      :class="{ active: resizingLogPreview }"
-                      aria-label="拖拽调整日志预览高度"
-                      title="拖拽调整日志预览高度"
-                      @pointerdown="startLogPreviewResize"
-                    >
-                      <span />
-                    </button>
-                  </div>
-
-                  <div v-else class="detail-empty">
-                    从左侧选择一个日志文件
-                  </div>
-                </section>
-              </div>
-            </div>
-          </ElTabPane>
-
-          <ElTabPane label="配置管理" name="configs">
-            <div class="configs-section">
-              <div class="file-layout">
-                <aside
-                  class="file-panel"
-                  v-loading="activeConfigsLoading"
-                >
-                  <div class="file-panel-header">
-                    <span>配置目录</span>
-                    <ElButton
-                      size="small"
-                      :icon="Refresh"
-                      @click="refreshConfigFiles()"
-                      :loading="activeConfigsLoading"
-                    >
-                      刷新
-                    </ElButton>
-                  </div>
-
-                  <div v-if="activeConfigFiles.length === 0" class="file-empty">
-                    暂无配置文件
-                  </div>
-
-                  <div
-                    v-else
-                    class="file-list config-file-list"
-                    :style="{ height: `${configPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }"
-                  >
-                    <button
-                      v-for="file in activeConfigFiles"
-                      :key="file.path"
-                      type="button"
-                      class="file-item"
-                      :class="{ active: selectedConfigFile === file.path }"
-                      @click="loadConfigFile(file.path)"
-                    >
-                      <Setting class="file-icon" />
-                      <span class="file-name">{{ file.name }}</span>
-                      <span class="file-size">{{ formatSize(file.size) }}</span>
-                    </button>
-                  </div>
-                </aside>
-
-                <section class="file-detail">
-                  <div class="config-editor" v-if="selectedConfigFile">
-                    <div class="editor-header">
-                      <span>{{ selectedConfigFile }}</span>
-                      <div class="editor-actions">
-                        <ElButton
-                          v-if="!configEditMode"
-                          size="small"
-                          type="primary"
-                          @click="enterEditMode"
-                        >
-                          进入编辑
-                        </ElButton>
-                        <template v-else>
-                          <ElButton
-                            size="small"
-                            type="success"
-                            @click="saveConfig"
-                            :loading="activeConfigSaving"
-                          >
-                            保存
-                          </ElButton>
-                          <ElButton
-                            size="small"
-                            @click="cancelEdit"
-                          >
-                            取消
-                          </ElButton>
-                        </template>
-                      </div>
-                    </div>
-                    <ElInput
-                      v-if="configEditMode"
-                      v-model="configEditorContent"
-                      type="textarea"
-                      class="config-textarea"
-                      :input-style="{ height: `${configPreviewHeight}px` }"
-                    />
-                    <pre
-                      v-else
-                      class="config-output"
-                      :style="{ height: `${configPreviewHeight}px` }"
-                    >{{ activeConfigContent }}</pre>
-                    <button
-                      type="button"
-                      class="config-resize-handle"
-                      :class="{ active: resizingConfigPreview }"
-                      aria-label="拖拽调整配置预览高度"
-                      title="拖拽调整配置预览高度"
-                      @pointerdown="startConfigPreviewResize"
-                    >
-                      <span />
-                    </button>
-                  </div>
-
-                  <div v-else class="detail-empty">
-                    从左侧选择一个配置文件
-                  </div>
-                </section>
-              </div>
-            </div>
-          </ElTabPane>
-        </ElTabs>
-      </ElTabPane>
-    </ElTabs>
-
-    <!-- Empty State -->
-    <div v-else class="empty-state">
-      <el-icon :size="64"><Platform /></el-icon>
-      <p>请选择已保存连接，或新建单机/分布式连接后点击连接</p>
-    </div>
   </div>
 </template>
 
 <style scoped>
 .iotdb-view {
-  padding: 0;
+  min-height: 100%;
 }
 
-.connection-card {
-  padding: 16px 20px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  margin-bottom: 20px;
-}
-
-.connection-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding-bottom: 14px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.connection-card-title {
-  color: #303133;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.connection-card-desc {
-  margin-top: 4px;
-  color: #909399;
-  font-size: 12px;
-}
-
-.control-bar {
+/* Toolbar */
+.toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 16px;
 }
 
-.open-target-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
+.toolbar-spacer {
+  flex: 1;
 }
 
-.control-spacer {
-  flex: 1 1 auto;
+.target-select {
+  width: 240px;
 }
 
-.saved-target-select {
-  width: 320px;
-}
-
-.current-target-tag {
-  max-width: 420px;
-}
-
-.current-target-tag :deep(.el-tag__content) {
-  min-width: 0;
+/* Content Area */
+.content-area {
+  background: #ffffff;
+  border-radius: 12px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.create-target-form {
+/* Tabs Header */
+.tabs-header {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tabs-row {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.create-target-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: #606266;
-  font-size: 13px;
-}
-
-.create-node-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.create-node-row {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) 120px minmax(160px, 1.2fr) minmax(180px, 1.4fr) auto;
-  gap: 8px;
   align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .node-tabs {
-  width: 100%;
+  display: flex;
+  gap: 0;
 }
 
-.node-tabs :deep(.el-tabs__header) {
-  margin: 0;
-}
-
-.node-tab-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 260px;
-}
-
-.node-tab-label > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-action-bar {
+.node-tab {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 8px;
   padding: 12px 16px;
-  margin: 14px 0;
-  background: #fff;
-  border: 1px solid #e4e7ed;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.node-tab:hover {
+  color: #1e293b;
+  background: #f8fafc;
+}
+
+.node-tab.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+
+.node-tab-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-info {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
+
+.node-path {
+  color: #64748b;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  background: #f8fafc;
+  padding: 4px 8px;
   border-radius: 4px;
 }
 
-.node-action-info {
+.func-spacer {
+  flex: 1;
+}
+
+.function-tabs {
   display: flex;
   align-items: center;
-  flex: 0 1 360px;
-  min-width: 180px;
-  gap: 8px;
+  gap: 4px;
+  padding: 8px 12px;
 }
 
-.node-title-stack {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 3px;
-}
-
-.node-title-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 8px;
-}
-
-.node-action-title {
-  min-width: 0;
-  overflow: hidden;
-  color: #303133;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-action-path {
-  min-width: 0;
-  overflow: hidden;
-  color: #909399;
-  font-size: 12px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-action-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 360px;
-}
-
-.node-function-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-right: auto;
-  flex-wrap: wrap;
-}
-
-.node-function-actions :deep(.el-button) {
-  height: 30px;
+.func-tab {
   padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 13px;
+  transition: all 0.15s;
 }
 
-.manage-empty {
-  padding: 32px 0;
-  color: #909399;
-  text-align: center;
+.func-tab:hover {
+  background: #f1f5f9;
 }
 
-.manage-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
+.func-tab.active {
+  background: #eff6ff;
+  color: #3b82f6;
+  font-weight: 500;
 }
 
-.saved-target-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.func-spacer {
+  flex: 1;
 }
 
-.saved-target-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  background: #fff;
+/* Tab Content */
+.tab-content {
+  min-height: 500px;
 }
 
-.saved-target-main {
-  min-width: 0;
-}
-
-.saved-target-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.saved-target-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: #303133;
-  font-weight: 600;
-}
-
-.saved-target-nodes {
-  display: block;
-  max-width: 520px;
-  color: #606266;
-  font-size: 12px;
-  line-height: 1.6;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-.iotdb-tabs {
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  padding: 20px;
-}
-
-.node-function-tabs :deep(.el-tabs__header) {
-  display: none;
-}
-
-/* CLI Section */
-.cli-section {
+/* CLI Panel */
+.cli-panel {
   display: flex;
   flex-direction: column;
+}
+
+.cli-params {
+  display: flex;
+  align-items: center;
   gap: 12px;
-}
-
-.cli-connection-panel {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  background: #f8fbff;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
   flex-wrap: wrap;
 }
 
 .cli-param {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 6px;
 }
 
-.cli-param:nth-child(1),
-.cli-param:nth-child(3),
-.cli-param:nth-child(4) {
-  flex: 1 1 180px;
-}
-
-.cli-param:nth-child(2) {
-  flex: 0 1 140px;
-}
-
-.cli-param-label {
-  color: #606266;
+.cli-param label {
   font-size: 12px;
-  font-weight: 500;
+  color: #64748b;
   white-space: nowrap;
 }
 
 .cli-param :deep(.el-input) {
-  min-width: 0;
+  width: 140px;
 }
 
-.persistent-cli-toolbar {
+.cli-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.persistent-cli-terminal {
-  position: relative;
-  border: 1px solid #303743;
-  border-radius: 4px;
+.cli-terminal {
+  height: 500px;
+  background: #1e293b;
+  padding: 12px;
   overflow: hidden;
-  background: #101820;
-  height: 720px;
-  min-height: 360px;
-  padding: 8px;
-  outline: none;
 }
 
-.persistent-cli-terminal:focus-within {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
-}
-
-.persistent-cli-terminal :deep(.xterm) {
+.cli-terminal :deep(.xterm) {
   height: 100%;
 }
 
-.persistent-cli-terminal :deep(.xterm-viewport) {
+.cli-terminal :deep(.xterm-viewport) {
   overflow-y: auto;
 }
 
-/* Logs Section */
-.logs-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.log-preview {
-  overflow: hidden;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 13px;
-}
-
-.preview-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.preview-title {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 8px;
-}
-
-.preview-file-name {
-  min-width: 0;
-  overflow: hidden;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-output {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow: auto;
-  margin: 0;
-}
-
-.log-resize-handle,
-.config-resize-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-top: 1px solid #303743;
-  background: #252d36;
-  cursor: ns-resize;
-}
-
-.log-resize-handle:hover,
-.log-resize-handle.active,
-.config-resize-handle:hover,
-.config-resize-handle.active {
-  background: #303b47;
-}
-
-.log-resize-handle span,
-.config-resize-handle span {
-  display: block;
-  width: 44px;
-  height: 3px;
-  border-radius: 3px;
-  background: #7b8794;
-}
-
-:global(.is-resizing-log-preview) {
-  cursor: ns-resize;
-  user-select: none;
-}
-
-:global(.is-resizing-config-preview) {
-  cursor: ns-resize;
-  user-select: none;
-}
-
-/* Configs Section */
-.configs-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.file-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 2fr) minmax(0, 8fr);
-  gap: 16px;
-  min-height: 560px;
-}
-
-.file-panel,
-.file-detail {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  background: #fff;
-}
-
+/* File Panel */
 .file-panel {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 600px;
+}
+
+.file-sidebar {
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 
-.file-panel-header {
+.sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f5f7fa;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .file-list {
-  max-height: 520px;
+  flex: 1;
   overflow-y: auto;
 }
 
-.log-file-list {
-  max-height: none;
-}
-
-.config-file-list {
-  max-height: none;
-}
-
 .file-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  border-bottom: 1px solid #edf0f5;
+  padding: 8px 12px;
   background: transparent;
-  color: #303133;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
   text-align: left;
 }
 
-.file-item:hover,
+.file-item:hover {
+  background: #f8fafc;
+}
+
 .file-item.active {
-  background: #eef5ff;
-  color: #337ecc;
+  background: #eff6ff;
 }
 
-.file-icon {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  color: #7a8da6;
-}
-
-.file-name {
+.file-item .file-name {
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
+  font-size: 12px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 13px;
+  color: #1e293b;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-size {
-  grid-column: 2;
-  color: #909399;
-  font-size: 12px;
+.file-item .file-size {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 11px;
+  color: #94a3b8;
 }
 
-.file-empty,
-.detail-empty {
-  padding: 40px 16px;
-  color: #909399;
+.file-empty {
+  padding: 24px;
   text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
-.file-detail {
-  min-width: 0;
+.file-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
-.detail-note {
-  padding: 10px 12px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #fff;
-}
-
-.config-editor {
+.content-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
-.editor-header {
+.content-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 10px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 13px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
-.editor-actions {
+.content-title {
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: #64748b;
+}
+
+.content-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
-.config-textarea {
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+.content-actions :deep(.el-tag) {
+  height: 28px;
+  line-height: 26px;
 }
 
-.config-textarea :deep(textarea) {
+.content-output {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  margin: 0;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
+  background: #f8fafc;
+  color: #475569;
+  overflow-y: auto;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100%;
+}
+
+.config-editor {
+  flex: 1;
+}
+
+.config-editor :deep(.el-textarea) {
+  height: 100%;
+}
+
+.config-editor :deep(textarea) {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #f8fafc;
+  height: 100% !important;
   resize: none;
 }
 
-.config-output {
-  background: #f5f7fa;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+.content-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+/* Dialogs */
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-row label {
+  width: 80px;
   font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow: auto;
-  margin: 0;
+  color: #64748b;
+}
+
+.form-row :deep(.el-input),
+.form-row :deep(.el-select) {
+  flex: 1;
+}
+
+.nodes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-row {
+  display: grid;
+  grid-template-columns: 100px 80px 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.manage-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.manage-empty {
+  padding: 32px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.target-info {
+  min-width: 0;
+}
+
+.target-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.target-nodes {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-actions {
+  display: flex;
+  gap: 6px;
 }
 
 /* Empty State */
@@ -2352,38 +1905,39 @@ function formatSize(size: number): string {
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  color: #909399;
-  gap: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  color: #94a3b8;
+  gap: 12px;
 }
 
 .empty-state p {
-  font-size: 16px;
+  font-size: 14px;
   margin: 0;
 }
 
+/* Responsive */
 @media (max-width: 900px) {
-  .file-layout {
+  .file-panel {
     grid-template-columns: 1fr;
   }
 
-  .node-action-bar,
-  .node-action-right,
-  .cli-connection-panel {
-    align-items: stretch;
-    flex-direction: column;
+  .file-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    max-height: 200px;
   }
 
-  .node-action-info,
-  .node-action-right {
-    min-width: 0;
-    width: 100%;
+  .cli-params {
+    flex-wrap: wrap;
   }
 
-  .node-function-actions {
-    margin-right: 0;
+  .cli-param :deep(.el-input) {
+    width: 120px;
+  }
+
+  .node-row {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>
