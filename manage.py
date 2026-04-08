@@ -10,6 +10,8 @@ import subprocess
 import time
 import signal
 import platform
+import shutil
+import hashlib
 from pathlib import Path
 
 # Configuration
@@ -17,6 +19,17 @@ BACKEND_PORT = 8000
 FRONTEND_PORT = 5173
 PID_DIR = Path("data/pids")
 LOG_DIR = Path("data/logs")
+DEP_STATE_DIR = Path("data/deps")
+VENV_DIR = Path("venv")
+REQUIREMENTS_FILE = Path("backend/requirements.txt")
+FRONTEND_DIR = Path("frontend")
+PACKAGE_JSON_FILE = FRONTEND_DIR / "package.json"
+PACKAGE_LOCK_FILE = FRONTEND_DIR / "package-lock.json"
+PIP_LOG_FILE = LOG_DIR / "pip-sync.log"
+NPM_LOG_FILE = LOG_DIR / "npm-sync.log"
+BACKEND_REQUIREMENTS_STAMP = DEP_STATE_DIR / "backend-requirements.sha256"
+PYTHON_MIN_VERSION = (3, 10)
+NODE_MIN_MAJOR = 18
 
 BACKEND_PID_FILE = PID_DIR / "backend.pid"
 FRONTEND_PID_FILE = PID_DIR / "frontend.pid"
@@ -28,6 +41,7 @@ def ensure_dirs():
     """Create necessary directories."""
     PID_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    DEP_STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def print_info(msg):
@@ -51,6 +65,310 @@ def print_section(title):
 
 def print_kv(label, value):
     print(f"{label:<10} {value}")
+
+
+def venv_python_path():
+    if platform.system() == "Windows":
+        return VENV_DIR / "Scripts" / "python.exe"
+    return VENV_DIR / "bin" / "python"
+
+
+def is_running_from_venv():
+    expected = venv_python_path()
+    if not expected.exists():
+        return False
+    try:
+        return Path(sys.executable).resolve() == expected.resolve()
+    except OSError:
+        return False
+
+
+def run_logged(cmd, log_file, cwd=None):
+    with open(log_file, "a") as output:
+        return subprocess.run(cmd, cwd=cwd, stdout=output, stderr=output)
+
+
+def command_output(cmd, cwd=None):
+    result = subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.stdout.strip() or result.stderr.strip()
+
+
+def ensure_python_version():
+    if sys.version_info < PYTHON_MIN_VERSION:
+        required = ".".join(str(part) for part in PYTHON_MIN_VERSION)
+        current = platform.python_version()
+        print_error(f"Python {required}+ is required. Current version: {current}")
+        sys.exit(1)
+
+
+def check_node_runtime():
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+
+    if not node:
+        print_error(f"Node.js {NODE_MIN_MAJOR}+ is required. Please install Node.js first.")
+        sys.exit(1)
+    if not npm:
+        print_error("npm is required. Please install npm with Node.js first.")
+        sys.exit(1)
+
+    try:
+        result = subprocess.run(
+            [node, "-p", 'Number(process.versions.node.split(".")[0])'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        node_major = int(result.stdout.strip())
+    except Exception:
+        node_major = 0
+
+    if node_major < NODE_MIN_MAJOR:
+        current = command_output([node, "-v"])
+        print_error(f"Node.js {NODE_MIN_MAJOR}+ is required. Current version: {current or 'unknown'}")
+        sys.exit(1)
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def get_venv_python():
+    venv_python = venv_python_path()
+    if venv_python.exists():
+        result = subprocess.run(
+            [
+                str(venv_python),
+                "-c",
+                "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            current = command_output([str(venv_python), "--version"])
+            print_error(f"Python 3.10+ is required, but the existing venv is too old: {current}")
+            sys.exit(1)
+        return venv_python
+
+    print_error("Virtual environment not found. Run ./manage.sh install first.")
+    sys.exit(1)
+
+
+def backend_deps_need_sync(force=False):
+    if force:
+        return True
+    if not REQUIREMENTS_FILE.exists():
+        print_error(f"Missing requirements file: {REQUIREMENTS_FILE}")
+        sys.exit(1)
+
+    current_hash = file_sha256(REQUIREMENTS_FILE)
+    if not BACKEND_REQUIREMENTS_STAMP.exists():
+        return True
+    return BACKEND_REQUIREMENTS_STAMP.read_text().strip() != current_hash
+
+
+def mark_backend_deps_synced():
+    DEP_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    BACKEND_REQUIREMENTS_STAMP.write_text(file_sha256(REQUIREMENTS_FILE) + "\n")
+
+
+def sync_backend_deps(force=False):
+    venv_python = get_venv_python()
+
+    if not backend_deps_need_sync(force):
+        print_info("Backend dependencies already installed")
+        return venv_python
+
+    ensure_dirs()
+    PIP_LOG_FILE.write_text("")
+    print_section("Backend Dependency Sync")
+    print_kv("Python:", command_output([str(venv_python), "--version"]))
+    print_kv("Requirements:", str(REQUIREMENTS_FILE))
+    print_kv("Log File:", str(PIP_LOG_FILE))
+    print()
+
+    print_info("Checking pip...")
+    result = run_logged(
+        [str(venv_python), "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip"],
+        PIP_LOG_FILE,
+    )
+    if result.returncode != 0:
+        print_error("Failed to upgrade pip. Full output:")
+        print(PIP_LOG_FILE.read_text(errors="replace"))
+        sys.exit(1)
+
+    print_info("Syncing backend dependencies...")
+    result = run_logged(
+        [
+            str(venv_python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "-r",
+            str(REQUIREMENTS_FILE),
+        ],
+        PIP_LOG_FILE,
+    )
+    if result.returncode != 0:
+        print_error("Failed to sync backend dependencies. Full output:")
+        print(PIP_LOG_FILE.read_text(errors="replace"))
+        sys.exit(1)
+
+    print_info("Backend dependency sync complete")
+    mark_backend_deps_synced()
+    return venv_python
+
+
+def frontend_deps_need_sync(force=False):
+    if force:
+        return True
+    node_modules = FRONTEND_DIR / "node_modules"
+    package_lock_marker = node_modules / ".package-lock.json"
+    if not node_modules.exists():
+        return True
+    if PACKAGE_LOCK_FILE.exists() and (
+        not package_lock_marker.exists()
+        or PACKAGE_LOCK_FILE.stat().st_mtime > package_lock_marker.stat().st_mtime
+    ):
+        return True
+    if PACKAGE_JSON_FILE.stat().st_mtime > node_modules.stat().st_mtime:
+        return True
+    return False
+
+
+def sync_frontend_deps(force=False):
+    check_node_runtime()
+
+    if not PACKAGE_JSON_FILE.exists():
+        print_error(f"Missing package file: {PACKAGE_JSON_FILE}")
+        sys.exit(1)
+
+    if not frontend_deps_need_sync(force):
+        print_info("Frontend dependencies already installed")
+        return
+
+    ensure_dirs()
+    NPM_LOG_FILE.write_text("")
+    print_section("Frontend Dependency Sync")
+    print_kv("Node:", command_output(["node", "-v"]))
+    print_kv("npm:", command_output(["npm", "-v"]))
+    print_kv("Package:", str(PACKAGE_JSON_FILE))
+    print_kv("Log File:", str(NPM_LOG_FILE))
+    print()
+
+    if PACKAGE_LOCK_FILE.exists():
+        print_info("Installing frontend dependencies with npm ci...")
+        cmd = ["npm", "ci"]
+    else:
+        print_info("Installing frontend dependencies with npm install...")
+        cmd = ["npm", "install"]
+
+    result = run_logged(cmd, NPM_LOG_FILE, cwd=FRONTEND_DIR)
+    if result.returncode != 0:
+        print_error("Failed to install frontend dependencies. Full output:")
+        print(NPM_LOG_FILE.read_text(errors="replace"))
+        sys.exit(1)
+
+    print_info("Frontend dependency sync complete")
+
+
+def sync_runtime_deps(cmd):
+    if os.environ.get("MANAGE_DEPS_SYNCED") == "1":
+        return
+
+    needs_backend_sync = cmd in ("install", "start", "restart")
+    needs_frontend_sync = cmd in ("install", "start", "restart")
+    force_sync = cmd == "install"
+
+    venv_python = None
+    if needs_backend_sync:
+        venv_python = sync_backend_deps(force=force_sync)
+    if needs_frontend_sync:
+        sync_frontend_deps(force=force_sync)
+
+    if cmd == "install":
+        print_section("Install Complete")
+        print("Run ./manage.sh start to start backend and frontend services.")
+        sys.exit(0)
+
+    if needs_backend_sync and venv_python and not is_running_from_venv():
+        os.environ["MANAGE_DEPS_SYNCED"] = "1"
+        os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+def check_path(path):
+    return "OK" if path.exists() else "MISSING"
+
+
+def get_node_major():
+    try:
+        result = subprocess.run(
+            ["node", "-p", 'Number(process.versions.node.split(".")[0])'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        return int(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def show_check():
+    print_section("Environment Check")
+
+    python_version = command_output([sys.executable, "--version"])
+    print_kv("Python:", python_version or "unknown")
+    print_kv("Python exe:", sys.executable)
+
+    venv_python = venv_python_path()
+    if venv_python.exists():
+        print_kv("Venv:", f"OK ({command_output([str(venv_python), '--version'])})")
+    else:
+        print_kv("Venv:", "MISSING")
+
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+    node_major = get_node_major() if node else None
+    node_status = "OK" if node_major is not None and node_major >= NODE_MIN_MAJOR else "MISSING/TOO OLD"
+    print_kv("Node:", f"{node_status} ({command_output(['node', '-v']) if node else 'not found'})")
+    print_kv("npm:", f"OK ({command_output(['npm', '-v'])})" if npm else "MISSING")
+
+    print_section("Project Files")
+    print_kv("Backend:", check_path(Path("backend")))
+    print_kv("Frontend:", check_path(FRONTEND_DIR))
+    print_kv("Reqs:", check_path(REQUIREMENTS_FILE))
+    print_kv("Package:", check_path(PACKAGE_JSON_FILE))
+    print_kv("Lock:", check_path(PACKAGE_LOCK_FILE))
+
+    print_section("Dependencies")
+    if REQUIREMENTS_FILE.exists():
+        print_kv("Backend:", "SYNCED" if not backend_deps_need_sync() else "NEEDS INSTALL")
+    else:
+        print_kv("Backend:", "MISSING REQUIREMENTS")
+    if PACKAGE_JSON_FILE.exists():
+        print_kv("Frontend:", "SYNCED" if not frontend_deps_need_sync() else "NEEDS INSTALL")
+    else:
+        print_kv("Frontend:", "MISSING PACKAGE")
+
+    print_section("Ports")
+    backend_pid = get_pid_by_port(BACKEND_PORT)
+    frontend_pid = get_pid_by_port(FRONTEND_PORT)
+    print_kv("Backend:", f"IN USE (PID: {backend_pid})" if backend_pid else "FREE")
+    print_kv("Frontend:", f"IN USE (PID: {frontend_pid})" if frontend_pid else "FREE")
 
 
 def print_access_summary():
@@ -320,21 +638,15 @@ def show_help():
     """Show help message."""
     print("IoTDB Test Automation Platform - Service Management")
     print()
-    print("Usage: python manage.py {start|stop|restart|status}")
+    print("Usage: python manage.py {start|stop|restart|status|install|check}")
     print()
     print("Commands:")
     print("  start           Start all services (backend + frontend)")
     print("  stop            Stop all services")
     print("  restart         Restart all services")
     print("  status          Show service status")
-    print()
-    print("  start-backend   Start only backend server")
-    print("  stop-backend    Stop only backend server")
-    print("  start-frontend  Start only frontend server")
-    print("  stop-frontend   Stop only frontend server")
-    print()
-    print("  logs            Show backend logs")
-    print("  logs-frontend   Show frontend logs")
+    print("  install         Install backend and frontend dependencies")
+    print("  check           Check runtimes, project files, dependencies, and ports")
     print()
     print(f"Access URLs:")
     print(f"  Frontend:  http://localhost:{FRONTEND_PORT}")
@@ -343,6 +655,8 @@ def show_help():
 
 
 def main():
+    os.chdir(Path(__file__).resolve().parent)
+    ensure_python_version()
     ensure_dirs()
 
     if len(sys.argv) < 2:
@@ -350,6 +664,7 @@ def main():
         return
 
     cmd = sys.argv[1].lower()
+    sync_runtime_deps(cmd)
 
     if cmd == "start":
         print()
@@ -401,31 +716,8 @@ def main():
     elif cmd == "status":
         show_status()
 
-    elif cmd == "start-backend":
-        print()
-        start_backend()
-        print()
-
-    elif cmd == "stop-backend":
-        print()
-        stop_process(BACKEND_PORT, "Backend")
-        print()
-
-    elif cmd == "start-frontend":
-        print()
-        start_frontend()
-        print()
-
-    elif cmd == "stop-frontend":
-        print()
-        stop_process(FRONTEND_PORT, "Frontend")
-        print()
-
-    elif cmd == "logs":
-        show_logs("backend")
-
-    elif cmd == "logs-frontend":
-        show_logs("frontend")
+    elif cmd == "check":
+        show_check()
 
     elif cmd in ("--help", "-h", "help"):
         show_help()

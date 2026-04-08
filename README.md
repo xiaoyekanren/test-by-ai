@@ -85,6 +85,7 @@
 **Mac/Linux:**
 
 ```bash
+./manage.sh install
 ./manage.sh start
 ```
 
@@ -94,7 +95,12 @@
 manage.bat start
 ```
 
-脚本会自动创建虚拟环境、安装依赖并启动后端与前端服务。
+首次部署建议先执行 `./manage.sh install` 检查 Python / Node.js 环境并安装依赖；之后执行 `./manage.sh start` 启动服务。`start` / `restart` 也会自动补齐缺失的后端和前端依赖。脚本会使用满足版本要求的 `python3` 或 `python` 创建虚拟环境，也可以通过 `PYTHON_BIN=/path/to/python ./manage.sh install` 指定 Python。
+
+环境要求：
+
+- Python 3.10+
+- Node.js 18+（包含 npm）
 
 ### 管理命令
 
@@ -104,9 +110,8 @@ manage.bat start
 | `stop` | 停止所有服务 |
 | `restart` | 重启所有服务 |
 | `status` | 查看服务状态 |
-| `start-backend` | 仅启动后端 |
-| `start-frontend` | 仅启动前端 |
-| `logs` | 查看后端日志 |
+| `install` | 安装后端、前端依赖 |
+| `check` | 检查环境、项目文件、依赖状态和端口占用 |
 
 ### 访问应用
 

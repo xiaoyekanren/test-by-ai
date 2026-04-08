@@ -9,4 +9,5 @@ venv
 .DS_Store
 data/logs/
 data/pids/
+data/deps/
 data/app.db
