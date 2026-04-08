@@ -579,17 +579,6 @@ export interface IoTDBFileInfo {
   modified: string
 }
 
-export interface IoTDBCLIResult {
-  server_id: number
-  server_name: string
-  iotdb_home: string
-  command: string
-  exit_status: number
-  stdout: string
-  stderr: string
-  error: string | null
-}
-
 export interface IoTDBLogContent {
   server_id: number
   server_name: string
