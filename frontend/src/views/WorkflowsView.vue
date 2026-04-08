@@ -265,31 +265,33 @@ onUnmounted(() => {
 
 <template>
   <div class="workflows-view">
-    <ElCard>
-      <template #header>
-        <div class="card-header">
-          <span class="title">Workflows</span>
-          <div class="toolbar">
-            <ElTooltip content="Refresh" placement="top">
-              <ElButton
-                :icon="Refresh"
-                circle
-                @click="fetchWorkflows"
-                :loading="workflowsStore.loading"
-              />
-            </ElTooltip>
-            <ElButton type="primary" :icon="Plus" @click="openCreateDialog">
-              Create Workflow
-            </ElButton>
-          </div>
-        </div>
-      </template>
+    <div class="toolbar">
+      <div class="toolbar-title">
+        <h2>⚙️ 工作流管理</h2>
+        <span class="workflow-count">{{ workflowsStore.workflows.length }} 个</span>
+        <span class="refresh-info">{{ workflowsStore.loading ? '加载中' : '点击行编辑' }}</span>
+      </div>
+      <div class="toolbar-actions">
+        <ElButton
+          @click="fetchWorkflows"
+          :icon="Refresh"
+          :loading="workflowsStore.loading"
+          size="small"
+        >
+          刷新
+        </ElButton>
+        <ElButton type="primary" :icon="Plus" size="small" @click="openCreateDialog">
+          新建工作流
+        </ElButton>
+      </div>
+    </div>
 
+    <ElCard shadow="hover" class="workflows-card">
       <!-- Empty State -->
       <div v-if="isEmpty" class="empty-state">
-        <ElEmpty description="No workflows yet">
-          <ElButton type="primary" :icon="Plus" @click="openCreateDialog">
-            Create your first workflow
+        <ElEmpty description="暂无工作流">
+          <ElButton type="primary" :icon="Plus" size="small" @click="openCreateDialog">
+            创建第一个工作流
           </ElButton>
         </ElEmpty>
       </div>
@@ -302,67 +304,72 @@ onUnmounted(() => {
         v-loading="workflowsStore.loading"
         @row-click="handleRowClick"
         class="workflow-table"
+        stripe
+        :fit="false"
         highlight-current-row
       >
-        <ElTableColumn prop="name" label="Name" min-width="180">
+        <ElTableColumn prop="name" label="Workflow" width="220" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="workflow-name">{{ row.name }}</span>
+            <div class="workflow-info">
+              <ElTag type="info" size="small" class="workflow-type-tag">FLOW</ElTag>
+              <span class="workflow-name">{{ row.name }}</span>
+            </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="description" label="Description" min-width="200">
+        <ElTableColumn prop="description" label="Description" width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="description">{{ row.description || '-' }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Nodes" width="100" align="center">
+        <ElTableColumn label="Nodes" width="90" align="center">
           <template #default="{ row }">
-            <ElTag type="info" size="small">
+            <span class="node-count">
               {{ row.nodes?.length || 0 }}
-            </ElTag>
+            </span>
           </template>
         </ElTableColumn>
         <ElTableColumn prop="created_at" label="Created At" width="180">
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
+            <span class="created-at">{{ formatDate(row.created_at) }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Actions" width="250" fixed="right">
+        <ElTableColumn label="Actions" width="160" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <ElTooltip content="Execute" placement="top">
                 <ElButton
                   type="success"
                   :icon="VideoPlay"
-                  circle
                   size="small"
                   @click="handleExecute(row)"
+                  link
                 />
               </ElTooltip>
               <ElTooltip content="Edit" placement="top">
                 <ElButton
                   type="primary"
                   :icon="Edit"
-                  circle
                   size="small"
                   @click="handleEdit(row)"
+                  link
                 />
               </ElTooltip>
               <ElTooltip content="Duplicate" placement="top">
                 <ElButton
                   type="info"
                   :icon="CopyDocument"
-                  circle
                   size="small"
                   @click="handleDuplicate(row)"
+                  link
                 />
               </ElTooltip>
               <ElTooltip content="Delete" placement="top">
                 <ElButton
                   type="danger"
                   :icon="Delete"
-                  circle
                   size="small"
                   @click="handleDelete(row)"
+                  link
                 />
               </ElTooltip>
             </div>
@@ -508,29 +515,70 @@ onUnmounted(() => {
   padding: 0;
 }
 
-.card-header {
+.toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
-.card-header .title {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.toolbar {
+.toolbar-title {
   display: flex;
-  gap: 12px;
   align-items: center;
+  gap: 8px;
+}
+
+.toolbar-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.workflow-count {
+  font-size: 11px;
+  color: #1890ff;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.refresh-info {
+  font-size: 11px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.workflows-card {
+  width: 100%;
+  margin: 0;
 }
 
 .empty-state {
-  padding: 40px 0;
+  padding: 32px 0;
 }
 
 .workflow-table {
   cursor: pointer;
+}
+
+.workflow-table :deep(.el-table__cell) {
+  padding: 6px 0;
+}
+
+.workflow-table :deep(.el-table__header-cell) {
+  padding: 6px 0;
+  font-size: 11px;
 }
 
 .workflow-table :deep(.el-table__row) {
@@ -541,23 +589,66 @@ onUnmounted(() => {
   background-color: var(--el-fill-color-light);
 }
 
+.workflow-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 .workflow-name {
   font-weight: 500;
+  color: #303133;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflow-type-tag {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 600;
 }
 
 .description {
-  color: var(--el-text-color-secondary);
+  color: #909399;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
-  max-width: 280px;
+}
+
+.node-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid #d9ecff;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.created-at {
+  font-size: 11px;
+  color: #909399;
 }
 
 .action-buttons {
   display: flex;
-  gap: 8px;
-  justify-content: flex-start;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
 }
 
 /* Execution Dialog Styles */

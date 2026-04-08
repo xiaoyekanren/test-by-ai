@@ -182,8 +182,8 @@ export const iotdbApi = {
   writeConfig: (serverId: number, iotdbHome: string, path: string, content: string): Promise<{ success: boolean; message: string }> =>
     apiClient.post('/iotdb/configs/write', { server_id: serverId, iotdb_home: iotdbHome, path, content }),
 
-  restart: (serverId: number, iotdbHome: string): Promise<IoTDBRestartResult> =>
-    apiClient.post('/iotdb/restart', { server_id: serverId, iotdb_home: iotdbHome })
+  restart: (serverId: number, iotdbHome: string, restartScope = 'all'): Promise<IoTDBRestartResult> =>
+    apiClient.post('/iotdb/restart', { server_id: serverId, iotdb_home: iotdbHome, restart_scope: restartScope })
 }
 
 export default apiClient

@@ -396,9 +396,10 @@ def print_start_summary(backend_started, frontend_started):
     print_kv("Frontend:", "RUNNING" if frontend_started else "FAILED")
 
 
-def get_pid_by_port(port):
-    """Get process PID listening on the given port."""
+def get_pids_by_port(port):
+    """Get process PIDs listening on the given port."""
     system = platform.system()
+    pids = []
 
     if system == "Windows":
         try:
@@ -410,7 +411,7 @@ def get_pid_by_port(port):
                 if "LISTENING" in line and f":{port}" in line:
                     parts = line.split()
                     if len(parts) >= 5:
-                        return int(parts[-1])
+                        pids.append(int(parts[-1]))
         except Exception:
             pass
     else:  # Linux/Mac
@@ -420,11 +421,17 @@ def get_pid_by_port(port):
                 capture_output=True, text=True, timeout=5
             )
             if result.stdout.strip():
-                return int(result.stdout.strip().split()[0])
+                pids.extend(int(pid) for pid in result.stdout.strip().split())
         except Exception:
             pass
 
-    return None
+    return sorted(set(pids))
+
+
+def get_pid_by_port(port):
+    """Get one process PID listening on the given port."""
+    pids = get_pids_by_port(port)
+    return pids[0] if pids else None
 
 
 def is_running(port):
@@ -469,22 +476,48 @@ def wait_for_service(port, process, log_file, name, timeout_seconds):
 
 def stop_process(port, name):
     """Stop process by port."""
-    pid = get_pid_by_port(port)
-    if pid is None:
+    pids = get_pids_by_port(port)
+    if not pids:
         print_warn(f"{name} is not running")
-        return False
+        return True
 
-    print_info(f"Stopping {name} (PID: {pid})...")
+    print_info(f"Stopping {name} (PID: {', '.join(str(pid) for pid in pids)})...")
 
     system = platform.system()
     try:
         if system == "Windows":
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"],
-                           capture_output=True, timeout=10)
+            for pid in pids:
+                subprocess.run(["taskkill", "/PID", str(pid), "/F", "/T"],
+                               capture_output=True, timeout=10)
         else:
-            os.kill(pid, signal.SIGKILL)
-        print_info(f"{name} stopped")
-        return True
+            for pid in pids:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                if not is_running(port):
+                    print_info(f"{name} stopped")
+                    return True
+                time.sleep(0.2)
+
+            for pid in get_pids_by_port(port):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if not is_running(port):
+                print_info(f"{name} stopped")
+                return True
+            time.sleep(0.2)
+
+        print_error(f"Failed to stop {name}: port {port} is still in use")
+        return False
     except Exception as e:
         print_error(f"Failed to stop {name}: {e}")
         return False

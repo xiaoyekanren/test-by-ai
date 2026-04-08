@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import {
+  ElCard,
   ElTable,
   ElTableColumn,
   ElButton,
@@ -308,18 +309,6 @@ async function executeCommand() {
   }
 }
 
-// Get status tag type
-function getStatusType(status: string): 'success' | 'danger' | 'info' {
-  switch (status) {
-    case 'online':
-      return 'success'
-    case 'offline':
-      return 'danger'
-    default:
-      return 'info'
-  }
-}
-
 // Parse tags string to array
 function parseTags(tags: string | null): string[] {
   if (!tags) return []
@@ -332,111 +321,123 @@ function parseTags(tags: string | null): string[] {
     <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-title">
-        <h2>Servers Management</h2>
-        <span class="server-count">{{ serversStore.servers.length }} servers</span>
+        <h2>🖥️ 服务器管理</h2>
+        <span class="server-count">{{ serversStore.servers.length }} 台</span>
+        <span class="refresh-info">{{ serversStore.loading ? '加载中' : '按 Host:Port 排序' }}</span>
       </div>
       <div class="toolbar-actions">
         <ElRadioGroup v-model="viewMode" size="small" @change="handleViewModeChange">
           <ElRadioButton value="list" :icon="List">List</ElRadioButton>
           <ElRadioButton value="group" :icon="CollectionTag">By Tags</ElRadioButton>
         </ElRadioGroup>
-        <ElButton @click="loadServers" :icon="Refresh" :loading="serversStore.loading">
-          Refresh
+        <ElButton @click="loadServers" :icon="Refresh" :loading="serversStore.loading" size="small">
+          刷新
         </ElButton>
-        <ElButton type="primary" @click="openCreateDialog" :icon="Plus">
-          Add Server
+        <ElButton type="primary" @click="openCreateDialog" :icon="Plus" size="small">
+          新增服务器
         </ElButton>
       </div>
     </div>
 
     <!-- List View -->
-    <ElTable
-      v-if="viewMode === 'list'"
-      :data="sortedServers"
-      v-loading="serversStore.loading"
-      stripe
-      style="width: 100%"
-      @sort-change="handleSortChange"
-      :default-sort="{ prop: 'host', order: 'ascending' }"
-    >
-      <ElTableColumn prop="name" label="Name" sortable="custom" min-width="150">
-        <template #default="{ row }">
-          <div class="server-name">
-            <span class="name-text">{{ row.name }}</span>
-            <span v-if="row.description" class="description">{{ row.description }}</span>
-          </div>
-        </template>
-      </ElTableColumn>
+    <ElCard v-if="viewMode === 'list'" shadow="hover" class="servers-card">
+      <ElTable
+        :data="sortedServers"
+        v-loading="serversStore.loading"
+        stripe
+        style="width: 100%"
+        class="server-table"
+        @sort-change="handleSortChange"
+        :default-sort="{ prop: 'host', order: 'ascending' }"
+        :fit="false"
+      >
+        <ElTableColumn prop="name" label="Name" sortable="custom" width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="server-info">
+              <ElTag type="info" size="small" class="server-type-tag">SSH</ElTag>
+              <div class="server-name">
+                <span class="name-text">{{ row.name }}</span>
+                <span v-if="row.description" class="description">{{ row.description }}</span>
+              </div>
+            </div>
+          </template>
+        </ElTableColumn>
 
-      <ElTableColumn label="Host:Port" prop="host" sortable="custom" min-width="180">
-        <template #default="{ row }">
-          <code class="host-port">{{ row.host }}:{{ row.port }}</code>
-        </template>
-      </ElTableColumn>
+        <ElTableColumn label="Host:Port" prop="host" sortable="custom" width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <code class="host-port">{{ row.host }}:{{ row.port }}</code>
+          </template>
+        </ElTableColumn>
 
-      <ElTableColumn prop="status" label="Status" sortable="custom" width="120">
-        <template #default="{ row }">
-          <ElTag :type="getStatusType(row.status)" size="small">
-            {{ row.status }}
-          </ElTag>
-        </template>
-      </ElTableColumn>
+        <ElTableColumn prop="status" label="Status" sortable="custom" width="120" align="center">
+          <template #default="{ row }">
+            <span class="status-tag" :class="row.status">
+              <span>●</span>
+              {{ row.status }}
+            </span>
+          </template>
+        </ElTableColumn>
 
-      <ElTableColumn label="Tags" min-width="150">
-        <template #default="{ row }">
-          <div class="tags-container">
-            <ElTag
-              v-for="tag in parseTags(row.tags)"
-              :key="tag"
-              size="small"
-              type="info"
-              class="tag-item"
-            >
-              {{ tag }}
-            </ElTag>
-            <span v-if="!parseTags(row.tags).length" class="no-tags">-</span>
-          </div>
-        </template>
-      </ElTableColumn>
+        <ElTableColumn label="Tags" width="180">
+          <template #default="{ row }">
+            <div class="tags-container">
+              <ElTag
+                v-for="tag in parseTags(row.tags)"
+                :key="tag"
+                size="small"
+                type="info"
+                class="tag-item"
+              >
+                {{ tag }}
+              </ElTag>
+              <span v-if="!parseTags(row.tags).length" class="no-tags">-</span>
+            </div>
+          </template>
+        </ElTableColumn>
 
-      <ElTableColumn label="Actions" width="280" fixed="right">
-        <template #default="{ row }">
-          <div class="action-buttons">
-            <ElTooltip content="Test Connection" placement="top">
-              <ElButton
-                size="small"
-                :icon="Connection"
-                @click="testConnection(row)"
-                :loading="serversStore.loading"
-              />
-            </ElTooltip>
-            <ElTooltip content="Execute Command" placement="top">
-              <ElButton
-                size="small"
-                :icon="Promotion"
-                @click="openCommandDialog(row)"
-              />
-            </ElTooltip>
-            <ElTooltip content="Edit" placement="top">
-              <ElButton
-                size="small"
-                type="primary"
-                :icon="Edit"
-                @click="openEditDialog(row)"
-              />
-            </ElTooltip>
-            <ElTooltip content="Delete" placement="top">
-              <ElButton
-                size="small"
-                type="danger"
-                :icon="Delete"
-                @click="deleteServer(row)"
-              />
-            </ElTooltip>
-          </div>
-        </template>
-      </ElTableColumn>
-    </ElTable>
+        <ElTableColumn label="Actions" width="150" align="center">
+          <template #default="{ row }">
+            <div class="action-buttons">
+              <ElTooltip content="Test Connection" placement="top">
+                <ElButton
+                  size="small"
+                  :icon="Connection"
+                  @click="testConnection(row)"
+                  :loading="serversStore.loading"
+                  link
+                />
+              </ElTooltip>
+              <ElTooltip content="Execute Command" placement="top">
+                <ElButton
+                  size="small"
+                  :icon="Promotion"
+                  @click="openCommandDialog(row)"
+                  link
+                />
+              </ElTooltip>
+              <ElTooltip content="Edit" placement="top">
+                <ElButton
+                  size="small"
+                  type="primary"
+                  :icon="Edit"
+                  @click="openEditDialog(row)"
+                  link
+                />
+              </ElTooltip>
+              <ElTooltip content="Delete" placement="top">
+                <ElButton
+                  size="small"
+                  type="danger"
+                  :icon="Delete"
+                  @click="deleteServer(row)"
+                  link
+                />
+              </ElTooltip>
+            </div>
+          </template>
+        </ElTableColumn>
+      </ElTable>
+    </ElCard>
 
     <!-- Grouped View by Tags -->
     <div v-else class="grouped-view">
@@ -457,31 +458,37 @@ function parseTags(tags: string | null): string[] {
             stripe
             style="width: 100%"
             size="small"
+            class="server-table"
+            :fit="false"
           >
-            <ElTableColumn prop="name" label="Name" min-width="150">
+            <ElTableColumn prop="name" label="Name" width="220" show-overflow-tooltip>
               <template #default="{ row }">
-                <div class="server-name">
-                  <span class="name-text">{{ row.name }}</span>
-                  <span v-if="row.description" class="description">{{ row.description }}</span>
+                <div class="server-info">
+                  <ElTag type="info" size="small" class="server-type-tag">SSH</ElTag>
+                  <div class="server-name">
+                    <span class="name-text">{{ row.name }}</span>
+                    <span v-if="row.description" class="description">{{ row.description }}</span>
+                  </div>
                 </div>
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Host:Port" min-width="180">
+            <ElTableColumn label="Host:Port" width="220" show-overflow-tooltip>
               <template #default="{ row }">
                 <code class="host-port">{{ row.host }}:{{ row.port }}</code>
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="status" label="Status" width="100">
+            <ElTableColumn prop="status" label="Status" width="120" align="center">
               <template #default="{ row }">
-                <ElTag :type="getStatusType(row.status)" size="small">
+                <span class="status-tag" :class="row.status">
+                  <span>●</span>
                   {{ row.status }}
-                </ElTag>
+                </span>
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="200" fixed="right">
+            <ElTableColumn label="Actions" width="120" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <ElTooltip content="Test Connection" placement="top">
@@ -490,6 +497,7 @@ function parseTags(tags: string | null): string[] {
                       :icon="Connection"
                       @click="testConnection(row)"
                       :loading="serversStore.loading"
+                      link
                     />
                   </ElTooltip>
                   <ElTooltip content="Edit" placement="top">
@@ -498,6 +506,7 @@ function parseTags(tags: string | null): string[] {
                       type="primary"
                       :icon="Edit"
                       @click="openEditDialog(row)"
+                      link
                     />
                   </ElTooltip>
                   <ElTooltip content="Delete" placement="top">
@@ -506,6 +515,7 @@ function parseTags(tags: string | null): string[] {
                       type="danger"
                       :icon="Delete"
                       @click="deleteServer(row)"
+                      link
                     />
                   </ElTooltip>
                 </div>
@@ -632,8 +642,8 @@ function parseTags(tags: string | null): string[] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px 20px;
+  margin-bottom: 12px;
+  padding: 10px 16px;
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -641,50 +651,135 @@ function parseTags(tags: string | null): string[] {
 
 .toolbar-title {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
 
 .server-count {
-  font-size: 14px;
+  font-size: 11px;
+  color: #1890ff;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.refresh-info {
+  font-size: 11px;
   color: #909399;
+  margin-left: 4px;
 }
 
 .toolbar-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
+  align-items: center;
+}
+
+.servers-card {
+  width: 100%;
+  margin: 0;
+}
+
+.server-table :deep(.el-table__cell) {
+  padding: 6px 0;
+}
+
+.server-table :deep(.el-table__header-cell) {
+  padding: 6px 0;
+  font-size: 11px;
+}
+
+.server-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.server-type-tag {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 600;
 }
 
 .server-name {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .name-text {
   font-weight: 500;
   color: #303133;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .description {
-  font-size: 12px;
+  font-size: 10px;
   color: #909399;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .host-port {
+  display: inline-block;
+  max-width: 100%;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 13px;
+  font-size: 11px;
   background: #f5f7fa;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
   color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 72px;
+  height: 20px;
+  line-height: 1;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.status-tag.online {
+  background: #f0f9eb;
+  color: #67c23a;
+  border: 1px solid #c2e7b0;
+}
+
+.status-tag.offline {
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fbc4c4;
+}
+
+.status-tag.unknown {
+  background: #f4f4f5;
+  color: #909399;
+  border: 1px solid #d3d4d6;
 }
 
 .tags-container {
@@ -699,11 +794,14 @@ function parseTags(tags: string | null): string[] {
 
 .no-tags {
   color: #c0c4cc;
+  font-size: 11px;
 }
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
 }
 
 .command-section {
@@ -742,17 +840,21 @@ function parseTags(tags: string | null): string[] {
 }
 
 .grouped-view {
-  margin-top: 20px;
+  margin-top: 0;
+  padding: 0 16px 16px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .group-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .group-count {
-  font-size: 13px;
+  font-size: 11px;
   color: #909399;
 }
 

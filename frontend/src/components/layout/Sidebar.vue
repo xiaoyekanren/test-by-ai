@@ -11,13 +11,27 @@ const emit = defineEmits<{
   collapse: [collapsed: boolean]
 }>()
 
-const menuItems = [
-  { index: '/', title: '首页', icon: HomeFilled },
-  { index: '/servers', title: '服务器管理', icon: Setting },
-  { index: '/workflows', title: '工作流管理', icon: Document },
-  { index: '/executions', title: '运行分析', icon: DataAnalysis },
-  { index: '/monitor', title: '系统监控', icon: Monitor },
-  { index: '/iotdb', title: 'IoTDB可视化', icon: Platform }
+const menuGroups = [
+  {
+    title: '运维管理',
+    items: [
+      { index: '/servers', title: '服务器管理', icon: Setting },
+      { index: '/monitor', title: '系统监控', icon: Monitor }
+    ]
+  },
+  {
+    title: '工作流',
+    items: [
+      { index: '/workflows', title: '工作流管理', icon: Document },
+      { index: '/executions', title: '运行分析', icon: DataAnalysis }
+    ]
+  },
+  {
+    title: '数据服务',
+    items: [
+      { index: '/iotdb', title: 'IoTDB可视化', icon: Platform }
+    ]
+  }
 ]
 
 const activeMenu = computed(() => {
@@ -66,14 +80,24 @@ const goToHome = () => {
       @select="handleSelect"
       class="sidebar-menu"
     >
-      <el-menu-item
-        v-for="item in menuItems"
-        :key="item.index"
-        :index="item.index"
-      >
-        <el-icon><component :is="item.icon" /></el-icon>
-        <template #title>{{ item.title }}</template>
+      <!-- 首页 -->
+      <el-menu-item index="/">
+        <el-icon><HomeFilled /></el-icon>
+        <template #title>首页</template>
       </el-menu-item>
+
+      <!-- 分组菜单 -->
+      <template v-for="group in menuGroups" :key="group.title">
+        <div v-show="!isCollapse" class="menu-group-title">{{ group.title }}</div>
+        <el-menu-item
+          v-for="item in group.items"
+          :key="item.index"
+          :index="item.index"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.title }}</template>
+        </el-menu-item>
+      </template>
     </el-menu>
 
     <div class="sidebar-footer">
@@ -168,5 +192,16 @@ const goToHome = () => {
 
 .collapse-btn:hover {
   color: #fff;
+}
+
+.menu-group-title {
+  padding: 12px 20px 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+}
+
+.sidebar-menu:not(.el-menu--collapse) .menu-group-title:first-child {
+  margin-top: 8px;
 }
 </style>

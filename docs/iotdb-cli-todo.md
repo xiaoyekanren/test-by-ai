@@ -13,3 +13,9 @@
 - Status: TODO
 - Context: `chunkSizeWarningLimit` currently reduces build warning noise, but it does not reduce real bundle size.
 - Follow-up: evaluate deliberate vendor chunk splitting for Vue, Element Plus, Vue Flow, and xterm when frontend performance work is prioritized.
+
+## Cluster log split view
+
+- Status: TODO
+- Context: IoTDB visualization now uses node tabs as the primary navigation and function tabs under the active node.
+- Follow-up: add a log view mode switch for "current node" versus "all nodes split view" so cluster troubleshooting can compare multiple node logs side by side without changing the default node-focused workflow.
