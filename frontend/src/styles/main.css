@@ -207,7 +207,9 @@ body {
   color: #1e293b !important;
   border-radius: 6px !important;
   margin: 2px 8px !important;
-  padding: 8px 12px !important;
+  padding: 6px 12px !important;
+  line-height: 20px !important;
+  height: auto !important;
 }
 
 .el-select-dropdown__item:hover {
