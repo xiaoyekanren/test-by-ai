@@ -569,3 +569,37 @@ export interface KillProcessResult {
   name?: string
   error?: string
 }
+
+// IoTDB Visualization types
+
+export interface IoTDBFileInfo {
+  name: string
+  path: string
+  size: number
+  modified: string
+}
+
+export interface IoTDBLogContent {
+  server_id: number
+  server_name: string
+  path: string
+  content: string
+  size: number
+}
+
+export interface IoTDBConfigContent {
+  server_id: number
+  server_name: string
+  path: string
+  content: string
+}
+
+export interface IoTDBRestartResult {
+  server_id: number
+  server_name: string
+  iotdb_home: string
+  success: boolean
+  message: string
+  stdout: string
+  stderr: string
+}

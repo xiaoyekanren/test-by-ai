@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Document, Monitor, Setting, HomeFilled, DataAnalysis } from '@element-plus/icons-vue'
+import { Document, Monitor, Setting, HomeFilled, DataAnalysis, Platform } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,7 +16,8 @@ const menuItems = [
   { index: '/servers', title: '服务器管理', icon: Setting },
   { index: '/workflows', title: '工作流管理', icon: Document },
   { index: '/executions', title: '运行分析', icon: DataAnalysis },
-  { index: '/monitor', title: '系统监控', icon: Monitor }
+  { index: '/monitor', title: '系统监控', icon: Monitor },
+  { index: '/iotdb', title: 'IoTDB可视化', icon: Platform }
 ]
 
 const activeMenu = computed(() => {

@@ -17,10 +17,10 @@
 |------|------|
 | `/servers` | 服务器管理 |
 | `/workflows` | 工作流列表 |
-| `/workflows/new` | 创建新工作流 |
 | `/workflows/:id/edit` | 编辑工作流 |
 | `/executions` | 执行洞察与历史 |
 | `/monitor` | 实时监控面板 |
+| `/iotdb` | IoTDB 可视化 |
 | `/settings` | 系统设置 |
 
 ## 技术栈
@@ -77,7 +77,7 @@
 
 ### 环境要求
 
-- Python 3.8+
+- Python 3.10+
 - Node.js 18+
 
 ### 启动服务

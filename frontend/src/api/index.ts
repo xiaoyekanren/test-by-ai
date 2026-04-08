@@ -15,7 +15,11 @@ import type {
   ProcessInfo,
   RemoteMonitoringStatus,
   RemoteProcessesResponse,
-  KillProcessResult
+  KillProcessResult,
+  IoTDBFileInfo,
+  IoTDBLogContent,
+  IoTDBConfigContent,
+  IoTDBRestartResult
 } from '@/types'
 
 const apiClient = axios.create({
@@ -103,6 +107,9 @@ export const executionsApi = {
   stop: (id: number): Promise<Execution> =>
     apiClient.post(`/executions/${id}/stop`),
 
+  delete: (id: number): Promise<void> =>
+    apiClient.delete(`/executions/${id}`),
+
   getNodes: (id: number): Promise<NodeExecution[]> =>
     apiClient.get(`/executions/${id}/nodes`)
 }
@@ -156,6 +163,27 @@ export const settingsApi = {
 
   updateObservability: (data: ObservabilitySettingsPayload): Promise<ObservabilitySettingsPayload> =>
     apiClient.put('/settings/observability', data)
+}
+
+// IoTDB API
+export const iotdbApi = {
+  listLogs: (serverId: number, iotdbHome: string): Promise<IoTDBFileInfo[]> =>
+    apiClient.post('/iotdb/logs/list', { server_id: serverId, iotdb_home: iotdbHome }),
+
+  readLog: (serverId: number, iotdbHome: string, path: string, tail?: number): Promise<IoTDBLogContent> =>
+    apiClient.post('/iotdb/logs/read', { server_id: serverId, iotdb_home: iotdbHome, path, tail }),
+
+  listConfigs: (serverId: number, iotdbHome: string): Promise<IoTDBFileInfo[]> =>
+    apiClient.post('/iotdb/configs/list', { server_id: serverId, iotdb_home: iotdbHome }),
+
+  readConfig: (serverId: number, iotdbHome: string, path: string): Promise<IoTDBConfigContent> =>
+    apiClient.post('/iotdb/configs/read', { server_id: serverId, iotdb_home: iotdbHome, path }),
+
+  writeConfig: (serverId: number, iotdbHome: string, path: string, content: string): Promise<{ success: boolean; message: string }> =>
+    apiClient.post('/iotdb/configs/write', { server_id: serverId, iotdb_home: iotdbHome, path, content }),
+
+  restart: (serverId: number, iotdbHome: string): Promise<IoTDBRestartResult> =>
+    apiClient.post('/iotdb/restart', { server_id: serverId, iotdb_home: iotdbHome })
 }
 
 export default apiClient
