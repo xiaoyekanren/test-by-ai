@@ -11,11 +11,10 @@ import {
   ElOption,
   ElMessage,
   ElMessageBox,
-  ElProgress,
   ElTooltip,
   ElEmpty
 } from 'element-plus'
-import { Refresh, View, CircleClose, Warning, SuccessFilled, Link } from '@element-plus/icons-vue'
+import { Refresh, Reading, Link } from '@element-plus/icons-vue'
 import { useMonitoringStore } from '@/stores/monitoring'
 import { useServersStore } from '@/stores/servers'
 import { useSettingsStore } from '@/stores/settings'
@@ -44,6 +43,7 @@ interface MonitorServer {
 
 const monitorServers = ref<MonitorServer[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
 const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
 
 // Process drawer state
@@ -108,32 +108,26 @@ function getProgressColor(percent: number): string {
   return '#f56c6c'
 }
 
-// Get status icon type
-function getStatusType(status: string): 'success' | 'warning' | 'danger' | 'info' {
-  switch (status) {
-    case 'online': return 'success'
-    case 'loading': return 'warning'
-    case 'offline': return 'danger'
-    default: return 'info'
-  }
+function sortByMetric(key: 'cpu' | 'memoryPercent' | 'diskPercent') {
+  return (a: MonitorServer, b: MonitorServer) => (a[key] ?? -1) - (b[key] ?? -1)
 }
 
 // Fetch all server statuses (initial load)
 async function fetchAllStatuses() {
   // Build parallel promises for all servers
   const promises: Promise<void>[] = []
-  const updatedServers: MonitorServer[] = monitorServers.value.map(s => ({ ...s, status: 'loading' as MonitorServer['status'] }))
+  monitorServers.value = monitorServers.value.map(s => ({ ...s, status: 'loading' as MonitorServer['status'] }))
 
   // Local server
-  const localIdx = updatedServers.findIndex(s => s.id === 'local')
+  const localIdx = monitorServers.value.findIndex(s => s.id === 'local')
   if (localIdx !== -1) {
-    const localServer = updatedServers[localIdx]
     promises.push(
       monitoringStore.fetchLocalStatus()
         .then(status => {
           if (status) {
-            updatedServers[localIdx] = {
-              ...localServer,
+            const updated = [...monitorServers.value]
+            updated[localIdx] = {
+              ...updated[localIdx],
               status: 'online',
               cpu: status.cpu_percent,
               memoryPercent: status.memory.percent,
@@ -143,23 +137,27 @@ async function fetchAllStatuses() {
               diskUsed: status.disk.used,
               diskTotal: status.disk.total
             }
+            monitorServers.value = updated
           }
         })
         .catch(() => {
-          updatedServers[localIdx] = { ...localServer, status: 'offline' }
+          const updated = [...monitorServers.value]
+          updated[localIdx] = { ...updated[localIdx], status: 'offline' }
+          monitorServers.value = updated
         })
     )
   }
 
   // Remote servers - parallel fetch
-  updatedServers.forEach((server, idx) => {
+  monitorServers.value.forEach((server, idx) => {
     if (!server.isLocal) {
       promises.push(
         monitoringStore.fetchRemoteStatus(server.id as number)
           .then(status => {
             if (status) {
-              updatedServers[idx] = {
-                ...server,
+              const updated = [...monitorServers.value]
+              updated[idx] = {
+                ...updated[idx],
                 status: 'online',
                 cpu: status.cpu_percent,
                 memoryPercent: status.memory?.percent,
@@ -169,85 +167,100 @@ async function fetchAllStatuses() {
                 diskUsed: status.disk?.used,
                 diskTotal: status.disk?.total
               }
+              monitorServers.value = updated
             }
           })
           .catch(() => {
-            updatedServers[idx] = { ...server, status: 'offline' }
+            const updated = [...monitorServers.value]
+            updated[idx] = { ...updated[idx], status: 'offline' }
+            monitorServers.value = updated
           })
       )
     }
   })
 
   // Execute all in parallel
-  await Promise.all(promises)
-  // Replace entire array
-  monitorServers.value = updatedServers
+  await Promise.allSettled(promises)
 }
 
 // Refresh all data - stream update, each server updates independently
-function refreshData() {
-  // Set all servers to loading state (keep existing data)
+async function refreshData() {
+  if (refreshing.value) return
+
+  refreshing.value = true
   monitorServers.value = monitorServers.value.map(s => ({
     ...s,
     status: 'loading' as MonitorServer['status']
   }))
 
-  // Local server
-  const localIdx = monitorServers.value.findIndex(s => s.id === 'local')
-  if (localIdx !== -1) {
-    monitoringStore.fetchLocalStatus()
-      .then(status => {
-        if (status) {
-          const updated = [...monitorServers.value]
-          updated[localIdx] = {
-            ...updated[localIdx],
-            status: 'online',
-            cpu: status.cpu_percent,
-            memoryPercent: status.memory.percent,
-            memoryUsed: status.memory.used,
-            memoryTotal: status.memory.total,
-            diskPercent: status.disk.percent,
-            diskUsed: status.disk.used,
-            diskTotal: status.disk.total
-          }
-          monitorServers.value = updated
-        }
-      })
-      .catch(() => {
-        const updated = [...monitorServers.value]
-        updated[localIdx] = { ...updated[localIdx], status: 'offline' }
-        monitorServers.value = updated
-      })
-  }
+  const requests: Promise<void>[] = []
 
-  // Remote servers - each updates independently
-  monitorServers.value.forEach((server, idx) => {
-    if (!server.isLocal) {
-      monitoringStore.fetchRemoteStatus(server.id as number)
-        .then(status => {
-          if (status) {
-            const updated = [...monitorServers.value]
-            updated[idx] = {
-              ...updated[idx],
-              status: 'online',
-              cpu: status.cpu_percent,
-              memoryPercent: status.memory?.percent,
-              memoryUsed: status.memory?.used,
-              memoryTotal: status.memory?.total,
-              diskPercent: status.disk?.percent,
-              diskUsed: status.disk?.used,
-              diskTotal: status.disk?.total
+  try {
+    // Local server
+    const localIdx = monitorServers.value.findIndex(s => s.id === 'local')
+    if (localIdx !== -1) {
+      requests.push(
+        monitoringStore.fetchLocalStatus()
+          .then(status => {
+            if (status) {
+              const updated = [...monitorServers.value]
+              updated[localIdx] = {
+                ...updated[localIdx],
+                status: 'online',
+                cpu: status.cpu_percent,
+                memoryPercent: status.memory.percent,
+                memoryUsed: status.memory.used,
+                memoryTotal: status.memory.total,
+                diskPercent: status.disk.percent,
+                diskUsed: status.disk.used,
+                diskTotal: status.disk.total
+              }
+              monitorServers.value = updated
             }
+          })
+          .catch(() => {
+            const updated = [...monitorServers.value]
+            updated[localIdx] = { ...updated[localIdx], status: 'offline' }
             monitorServers.value = updated
-          }
-        })
-        .catch(() => {
-          const updated = [...monitorServers.value]
-          updated[idx] = { ...updated[idx], status: 'offline' }
-          monitorServers.value = updated
-        })
+          })
+      )
     }
-  })
+
+    // Remote servers - each updates independently
+    monitorServers.value.forEach((server, idx) => {
+      if (!server.isLocal) {
+        requests.push(
+          monitoringStore.fetchRemoteStatus(server.id as number)
+            .then(status => {
+              if (status) {
+                const updated = [...monitorServers.value]
+                updated[idx] = {
+                  ...updated[idx],
+                  status: 'online',
+                  cpu: status.cpu_percent,
+                  memoryPercent: status.memory?.percent,
+                  memoryUsed: status.memory?.used,
+                  memoryTotal: status.memory?.total,
+                  diskPercent: status.disk?.percent,
+                  diskUsed: status.disk?.used,
+                  diskTotal: status.disk?.total
+                }
+                monitorServers.value = updated
+              }
+            })
+            .catch(() => {
+              const updated = [...monitorServers.value]
+              updated[idx] = { ...updated[idx], status: 'offline' }
+              monitorServers.value = updated
+            })
+        )
+      }
+    })
+
+    await Promise.allSettled(requests)
+  } finally {
+    refreshing.value = false
+  }
 }
 
 // Open process drawer for a server
@@ -284,7 +297,7 @@ async function fetchProcessList() {
   }
 }
 
-// Handle limit/sort change
+// Handle process query changes
 async function handleProcessLimitChange() {
   await fetchProcessList()
 }
@@ -367,15 +380,16 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
     <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-title">
-        <h2>System Monitor</h2>
-        <span class="server-count">{{ monitorServers.length }} servers</span>
-        <span class="refresh-info">每 {{ settingsStore.settings.monitor.refreshInterval }}s 刷新</span>
+        <h2>📊 系统监控</h2>
+        <span class="server-count">{{ monitorServers.length }} 台</span>
+        <span class="refresh-info">{{ settingsStore.settings.monitor.refreshInterval }}s 刷新</span>
       </div>
       <div class="toolbar-actions">
         <ElButton
           v-if="settingsStore.settings.observability.prometheusUrl"
           @click="openExternalUrl(settingsStore.settings.observability.prometheusUrl)"
           :icon="Link"
+          size="small"
         >
           Prometheus
         </ElButton>
@@ -383,48 +397,59 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
           v-if="settingsStore.settings.observability.grafanaUrl"
           @click="openExternalUrl(settingsStore.buildGrafanaDashboardUrl())"
           :icon="Link"
+          size="small"
         >
           Grafana
         </ElButton>
-        <ElButton @click="refreshData" :icon="Refresh">
-          Refresh
+        <ElButton
+          @click="refreshData"
+          :icon="Refresh"
+          :loading="refreshing"
+          size="small"
+          type="primary"
+        >
+          刷新
         </ElButton>
       </div>
     </div>
 
     <!-- Server Monitor Table -->
-    <ElCard shadow="hover">
+    <ElCard shadow="hover" class="monitor-card">
       <ElTable
         :data="monitorServers"
+        class="monitor-table"
         stripe
         style="width: 100%"
       >
         <!-- Server Info -->
-        <ElTableColumn label="Server" min-width="180">
+        <ElTableColumn label="Server" width="340" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="server-info">
-              <ElTag :type="row.isLocal ? 'warning' : 'info'" size="small">
+              <ElTag :type="row.isLocal ? 'warning' : 'info'" size="small" class="server-type-tag">
                 {{ row.isLocal ? 'LOCAL' : 'SSH' }}
               </ElTag>
               <span class="server-name">{{ row.name }}</span>
-              <span class="server-host">{{ row.host }}{{ row.port ? `:${row.port}` : '' }}</span>
+              <span v-if="!row.isLocal" class="server-host">{{ row.host }}:{{ row.port }}</span>
             </div>
           </template>
         </ElTableColumn>
 
         <!-- CPU -->
-        <ElTableColumn label="CPU" width="140" align="center">
+        <ElTableColumn
+          label="CPU"
+          prop="cpu"
+          width="100"
+          align="center"
+          sortable
+          :sort-method="sortByMetric('cpu')"
+        >
           <template #default="{ row }">
             <div class="metric-cell" v-if="row.cpu !== undefined">
-              <ElProgress
-                :percentage="row.cpu || 0"
-                :color="getProgressColor(row.cpu || 0)"
-                :stroke-width="6"
-                :show-text="false"
-                style="width: 60px"
-              />
-              <span class="metric-value" :class="{ 'high-usage': row.cpu > 80 }">
-                {{ (row.cpu || 0).toFixed(1) }}%
+              <div class="metric-bar">
+                <div class="bar-fill" :style="{ width: `${row.cpu || 0}%`, background: getProgressColor(row.cpu || 0) }"></div>
+              </div>
+              <span class="metric-value" :class="{ high: row.cpu > 80 }">
+                {{ Math.round(row.cpu || 0) }}%
               </span>
             </div>
             <span v-else class="metric-error">-</span>
@@ -432,43 +457,49 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
         </ElTableColumn>
 
         <!-- Memory -->
-        <ElTableColumn label="Memory" width="160" align="center">
+        <ElTableColumn
+          label="Memory"
+          prop="memoryPercent"
+          width="240"
+          align="center"
+          sortable
+          :sort-method="sortByMetric('memoryPercent')"
+        >
           <template #default="{ row }">
-            <div class="metric-cell" v-if="row.memoryPercent !== undefined">
-              <ElProgress
-                :percentage="row.memoryPercent || 0"
-                :color="getProgressColor(row.memoryPercent || 0)"
-                :stroke-width="6"
-                :show-text="false"
-                style="width: 60px"
-              />
-              <span class="metric-value" :class="{ 'high-usage': row.memoryPercent > 80 }">
-                {{ (row.memoryPercent || 0).toFixed(1) }}%
+            <div class="metric-cell metric-cell-composite" v-if="row.memoryPercent !== undefined">
+              <div class="metric-bar">
+                <div class="bar-fill" :style="{ width: `${row.memoryPercent || 0}%`, background: getProgressColor(row.memoryPercent || 0) }"></div>
+              </div>
+              <span class="metric-value" :class="{ high: row.memoryPercent > 80 }">
+                {{ Math.round(row.memoryPercent || 0) }}%
               </span>
-              <span class="metric-detail">
-                {{ formatBytes(row.memoryUsed || 0) }}/{{ formatBytes(row.memoryTotal || 0) }}
+              <span v-if="row.memoryUsed !== undefined && row.memoryTotal !== undefined" class="metric-detail">
+                {{ formatBytes(row.memoryUsed) }}/{{ formatBytes(row.memoryTotal) }}
               </span>
             </div>
             <span v-else class="metric-error">-</span>
           </template>
         </ElTableColumn>
 
-        <!-- Disk / -->
-        <ElTableColumn label="Disk /" width="160" align="center">
+        <!-- Disk -->
+        <ElTableColumn
+          label="Disk"
+          prop="diskPercent"
+          width="240"
+          align="center"
+          sortable
+          :sort-method="sortByMetric('diskPercent')"
+        >
           <template #default="{ row }">
-            <div class="metric-cell" v-if="row.diskPercent !== undefined">
-              <ElProgress
-                :percentage="row.diskPercent || 0"
-                :color="getProgressColor(row.diskPercent || 0)"
-                :stroke-width="6"
-                :show-text="false"
-                style="width: 60px"
-              />
-              <span class="metric-value" :class="{ 'high-usage': row.diskPercent > 80 }">
-                {{ (row.diskPercent || 0).toFixed(1) }}%
+            <div class="metric-cell metric-cell-composite" v-if="row.diskPercent !== undefined">
+              <div class="metric-bar">
+                <div class="bar-fill" :style="{ width: `${row.diskPercent || 0}%`, background: getProgressColor(row.diskPercent || 0) }"></div>
+              </div>
+              <span class="metric-value" :class="{ high: row.diskPercent > 80 }">
+                {{ Math.round(row.diskPercent || 0) }}%
               </span>
-              <span class="metric-detail">
-                {{ formatBytes(row.diskUsed || 0) }}/{{ formatBytes(row.diskTotal || 0) }}
+              <span v-if="row.diskUsed !== undefined && row.diskTotal !== undefined" class="metric-detail">
+                {{ formatBytes(row.diskUsed) }}/{{ formatBytes(row.diskTotal) }}
               </span>
             </div>
             <span v-else class="metric-error">-</span>
@@ -476,55 +507,56 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
         </ElTableColumn>
 
         <!-- Status -->
-        <ElTableColumn label="Status" width="100" align="center">
+        <ElTableColumn label="Status" width="90" align="center">
           <template #default="{ row }">
-            <ElTag :type="getStatusType(row.status)" size="small" class="status-tag">
+            <span class="status-tag" :class="row.status">
               <span v-if="row.status === 'loading'" class="status-icon spinning">◐</span>
-              <component v-else :is="row.status === 'online' ? SuccessFilled : (row.status === 'offline' ? CircleClose : Warning)" class="status-icon" />
+              <span v-else>●</span>
               {{ row.status }}
-            </ElTag>
+            </span>
           </template>
         </ElTableColumn>
 
         <!-- Actions -->
-        <ElTableColumn label="Actions" width="120" align="center" fixed="right">
+        <ElTableColumn label="查看进程" width="90" align="center">
           <template #default="{ row }">
-            <ElTooltip content="View Processes" placement="top">
+            <ElTooltip content="进程管理" placement="top">
               <ElButton
                 size="small"
-                :icon="View"
+                :icon="Reading"
                 @click="openProcessDrawer(row)"
                 :disabled="row.status !== 'online'"
-              >
-                Processes
-              </ElButton>
+                link
+              />
             </ElTooltip>
           </template>
         </ElTableColumn>
+        <ElTableColumn label="" min-width="1" />
       </ElTable>
     </ElCard>
 
     <!-- Process Management Drawer -->
     <ElDrawer
       v-model="processDrawerVisible"
-      :title="`Processes - ${currentServerForProcess?.name || ''}`"
+      :title="`进程管理 - ${currentServerForProcess?.name || ''}`"
       size="50%"
       direction="rtl"
     >
       <div class="process-drawer-content">
         <!-- Controls -->
         <div class="process-controls">
-          <ElSelect v-model="processLimit" placeholder="Limit" style="width: 100px" @change="handleProcessLimitChange">
+          <ElSelect v-model="processLimit" placeholder="数量" style="width: 80px" size="small" @change="handleProcessLimitChange">
             <ElOption :value="20" label="20" />
             <ElOption :value="50" label="50" />
             <ElOption :value="100" label="100" />
+            <ElOption :value="500" label="所有" />
           </ElSelect>
-          <ElSelect v-model="processSortBy" placeholder="Sort by" style="width: 120px; margin-left: 10px" @change="handleProcessSortChange">
-            <ElOption value="cpu" label="CPU Usage" />
-            <ElOption value="memory" label="Memory Usage" />
+          <ElSelect v-model="processSortBy" placeholder="取值" style="width: 110px" size="small" @change="handleProcessSortChange">
+            <ElOption value="cpu" label="CPU（默认）" />
+            <ElOption value="memory" label="MEM" />
           </ElSelect>
-          <ElButton @click="fetchProcessList" :loading="processLoading" style="margin-left: 10px">
-            Refresh
+          <ElButton @click="fetchProcessList" :loading="processLoading" size="small">
+            刷新
           </ElButton>
         </div>
 
@@ -533,32 +565,33 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
           :data="processList"
           v-loading="processLoading"
           stripe
-          max-height="500"
-          style="width: 100%; margin-top: 16px"
+          style="width: 100%; margin-top: 12px"
+          size="small"
         >
-          <ElTableColumn prop="pid" label="PID" width="80" />
-          <ElTableColumn prop="name" label="Name" min-width="200" show-overflow-tooltip />
-          <ElTableColumn prop="cpu_percent" label="CPU %" width="100">
+          <ElTableColumn prop="pid" label="PID" width="70" />
+          <ElTableColumn prop="name" label="名称" min-width="180" show-overflow-tooltip />
+          <ElTableColumn prop="cpu_percent" label="CPU %" width="90" sortable>
             <template #default="{ row }">
-              <span :class="{ 'high-usage': row.cpu_percent > 50 }">
+              <span :class="{ 'high-usage': row.cpu_percent > 50 }" style="font-size:12px">
                 {{ row.cpu_percent.toFixed(1) }}%
               </span>
             </template>
           </ElTableColumn>
-          <ElTableColumn prop="memory_percent" label="Mem %" width="100">
+          <ElTableColumn prop="memory_percent" label="Mem %" width="90" sortable>
             <template #default="{ row }">
-              <span :class="{ 'high-usage': row.memory_percent > 50 }">
+              <span :class="{ 'high-usage': row.memory_percent > 50 }" style="font-size:12px">
                 {{ row.memory_percent.toFixed(1) }}%
               </span>
             </template>
           </ElTableColumn>
-          <ElTableColumn label="Action" width="80" fixed="right">
+          <ElTableColumn label="操作" width="70" fixed="right">
             <template #default="{ row }">
               <ElButton
                 type="danger"
                 size="small"
                 @click="handleKillProcess(row)"
                 :disabled="row.pid < 2 || !currentServerForProcess?.isLocal"
+                link
               >
                 Kill
               </ElButton>
@@ -566,7 +599,7 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
           </ElTableColumn>
         </ElTable>
 
-        <ElEmpty v-if="!processLoading && processList.length === 0" description="No processes found" />
+        <ElEmpty v-if="!processLoading && processList.length === 0" description="无进程数据" />
       </div>
     </ElDrawer>
   </div>
@@ -581,8 +614,8 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px 20px;
+  margin-bottom: 12px;
+  padding: 10px 16px;
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -590,66 +623,109 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 
 .toolbar-title {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
 
 .server-count {
-  font-size: 14px;
-  color: #909399;
+  font-size: 11px;
+  color: #1890ff;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  padding: 2px 6px;
+  border-radius: 10px;
 }
 
 .refresh-info {
-  font-size: 12px;
-  color: #c0c4cc;
-  padding: 2px 8px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  font-size: 11px;
+  color: #909399;
+  margin-left: 4px;
 }
 
 .toolbar-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
+}
+
+.monitor-card {
+  width: 100%;
+  margin: 0;
 }
 
 .server-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .server-name {
   font-weight: 500;
   color: #303133;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .server-host {
-  font-size: 12px;
+  font-size: 10px;
   color: #909399;
   font-family: 'Monaco', 'Menlo', monospace;
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 2px;
+  min-width: 58px;
+  height: 20px;
+  line-height: 1;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.status-tag.online {
+  background: #f0f9eb;
+  color: #67c23a;
+  border: 1px solid #c2e7b0;
+}
+
+.status-tag.offline {
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fbc4c4;
+}
+
+.status-tag.loading {
+  background: #fdf6ec;
+  color: #e6a23c;
+  border: 1px solid #faecd8;
 }
 
 .status-icon {
-  width: 12px;
-  height: 12px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  font-size: 8px;
+  line-height: 1;
 }
 
 .status-icon.spinning {
-  display: inline-block;
   animation: spin 1s linear infinite;
 }
 
@@ -661,38 +737,115 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 .metric-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: center;
+  gap: 4px;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.metric-cell-composite {
+  display: grid;
+  grid-template-columns: 70px 38px 112px;
+  gap: 8px;
+}
+
+.metric-cell-composite .metric-bar {
+  width: 70px;
+}
+
+.metric-cell-composite .metric-value {
+  text-align: right;
+}
+
+.metric-cell-composite .metric-detail {
+  min-width: 0;
+  text-align: left;
+}
+
+.metric-bar {
+  width: 50px;
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 .metric-value {
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 500;
+  font-size: 11px;
+  color: #303133;
+}
+
+.metric-value.high {
+  color: #f56c6c;
 }
 
 .metric-detail {
-  font-size: 11px;
+  display: inline-block;
+  min-width: 80px;
+  font-size: 10px;
   color: #909399;
-  width: 100%;
-  text-align: center;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .metric-error {
+  font-weight: 500;
+  font-size: 11px;
   color: #c0c4cc;
+}
+
+.monitor-table :deep(.el-table__cell) {
+  padding: 6px 0;
+}
+
+.monitor-table :deep(.el-table__header-cell) {
+  padding: 6px 0;
+  font-size: 11px;
+}
+
+.monitor-table :deep(.el-progress-bar__outer) {
+  height: 4px !important;
+}
+
+.monitor-table :deep(.el-progress-bar__inner) {
+  border-radius: 2px;
 }
 
 .high-usage {
   color: #f56c6c;
 }
 
+.server-type-tag {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.server-type-tag.local {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+.server-type-tag.ssh {
+  background: #f4f4f5;
+  color: #909399;
+}
+
 .process-drawer-content {
-  padding: 0 20px;
+  padding: 0 16px;
 }
 
 .process-controls {
   display: flex;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  gap: 8px;
 }
 </style>

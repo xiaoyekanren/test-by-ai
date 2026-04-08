@@ -5,6 +5,7 @@ venv
 .kiro
 .claude
 .trae
+.superpowers/
 .DS_Store
 data/logs/
 data/pids/
