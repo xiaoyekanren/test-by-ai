@@ -386,8 +386,8 @@ def print_logs_summary():
 
 def print_stop_summary(frontend_stopped, backend_stopped):
     print_section("Stopped")
-    print_kv("Frontend:", "STOPPED" if frontend_stopped else "NOT RUNNING")
-    print_kv("Backend:", "STOPPED" if backend_stopped else "NOT RUNNING")
+    print_kv("Frontend:", "STOPPED" if frontend_stopped else "FAILED")
+    print_kv("Backend:", "STOPPED" if backend_stopped else "FAILED")
 
 
 def print_start_summary(backend_started, frontend_started):
@@ -558,7 +558,7 @@ def start_frontend():
         print_error("Frontend directory not found")
         return False
 
-    cmd = "npm run dev -- --port " + str(FRONTEND_PORT)
+    cmd = f"npm run dev -- --host 0.0.0.0 --port {FRONTEND_PORT}"
 
     with open(FRONTEND_LOG_FILE, "w") as log_file:
         if platform.system() == "Windows":
@@ -684,8 +684,10 @@ def main():
     elif cmd == "stop":
         print()
         print_info("Stopping IoTDB Test Automation Platform...")
-        frontend_stopped = stop_process(FRONTEND_PORT, "Frontend")
-        backend_stopped = stop_process(BACKEND_PORT, "Backend")
+        stop_process(FRONTEND_PORT, "Frontend")
+        stop_process(BACKEND_PORT, "Backend")
+        frontend_stopped = not is_running(FRONTEND_PORT)
+        backend_stopped = not is_running(BACKEND_PORT)
         print_info("All services stopped")
         print_stop_summary(frontend_stopped, backend_stopped)
         print_logs_summary()
@@ -694,8 +696,10 @@ def main():
     elif cmd == "restart":
         print()
         print_info("Stopping IoTDB Test Automation Platform...")
-        frontend_stopped = stop_process(FRONTEND_PORT, "Frontend")
-        backend_stopped = stop_process(BACKEND_PORT, "Backend")
+        stop_process(FRONTEND_PORT, "Frontend")
+        stop_process(BACKEND_PORT, "Backend")
+        frontend_stopped = not is_running(FRONTEND_PORT)
+        backend_stopped = not is_running(BACKEND_PORT)
         print_info("All services stopped")
         print_stop_summary(frontend_stopped, backend_stopped)
         print()
