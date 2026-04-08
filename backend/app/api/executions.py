@@ -1,5 +1,5 @@
 # backend/app/api/executions.py
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -73,6 +73,21 @@ def stop_execution(execution_id: int, db: Session = Depends(get_db)):
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
     return execution
+
+
+@router.delete("/{execution_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_execution(execution_id: int, db: Session = Depends(get_db)):
+    """Delete an execution and its node records"""
+    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    db.query(NodeExecution).filter(
+        NodeExecution.execution_id == execution_id
+    ).delete(synchronize_session=False)
+    db.delete(execution)
+    db.commit()
+    return None
 
 
 @router.get("/{execution_id}/nodes", response_model=List[NodeExecutionResponse])

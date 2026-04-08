@@ -73,6 +73,23 @@ export const useExecutionsStore = defineStore('executions', () => {
     }
   }
 
+  async function deleteExecution(id: number) {
+    loading.value = true
+    error.value = null
+    try {
+      await executionsApi.delete(id)
+      executions.value = executions.value.filter(execution => execution.id !== id)
+      if (currentExecution.value?.id === id) {
+        clearCurrentExecution()
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to delete execution'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchNodeExecutions(executionId: number) {
     loading.value = true
     error.value = null
@@ -102,6 +119,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     fetchExecution,
     createExecution,
     stopExecution,
+    deleteExecution,
     fetchNodeExecutions,
     clearCurrentExecution
   }

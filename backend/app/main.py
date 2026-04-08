@@ -41,8 +41,10 @@ from app.api.workflows import router as workflows_router
 from app.api.executions import router as executions_router
 from app.api.monitoring import router as monitoring_router
 from app.api.settings import router as settings_router
+from app.api.iotdb import router as iotdb_router
 app.include_router(servers_router, prefix="/api/servers", tags=["servers"])
 app.include_router(workflows_router, prefix="/api/workflows", tags=["workflows"])
 app.include_router(executions_router, prefix="/api/executions", tags=["executions"])
 app.include_router(monitoring_router, prefix="/api/monitoring", tags=["monitoring"])
 app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
+app.include_router(iotdb_router, prefix="/api/iotdb", tags=["iotdb"])
