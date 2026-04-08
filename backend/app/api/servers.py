@@ -128,6 +128,8 @@ def test_connection(server_id: int, db: Session = Depends(get_db)):
     )
 
     if result.error:
+        server.status = "offline"
+        db.commit()
         return {
             "success": False,
             "message": f"Connection failed: {result.error}",

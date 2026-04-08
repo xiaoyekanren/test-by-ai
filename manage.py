@@ -83,14 +83,26 @@ def is_running_from_venv():
         return False
 
 
+def prepare_subprocess_cmd(cmd):
+    if platform.system() != "Windows" or not isinstance(cmd, (list, tuple)) or not cmd:
+        return cmd
+
+    executable = str(cmd[0])
+    resolved = shutil.which(executable) or executable
+    if Path(resolved).suffix.lower() in (".bat", ".cmd"):
+        return ["cmd.exe", "/d", "/c", resolved, *[str(arg) for arg in cmd[1:]]]
+
+    return [str(arg) for arg in cmd]
+
+
 def run_logged(cmd, log_file, cwd=None):
     with open(log_file, "a") as output:
-        return subprocess.run(cmd, cwd=cwd, stdout=output, stderr=output)
+        return subprocess.run(prepare_subprocess_cmd(cmd), cwd=cwd, stdout=output, stderr=output)
 
 
 def command_output(cmd, cwd=None):
     result = subprocess.run(
-        cmd,
+        prepare_subprocess_cmd(cmd),
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -301,7 +313,8 @@ def sync_runtime_deps(cmd):
 
     if cmd == "install":
         print_section("Install Complete")
-        print("Run ./manage.sh start to start backend and frontend services.")
+        launcher = ".\\manage.bat" if platform.system() == "Windows" else "./manage.sh"
+        print(f"Run {launcher} start to start backend and frontend services.")
         sys.exit(0)
 
     if needs_backend_sync and venv_python and not is_running_from_venv():
