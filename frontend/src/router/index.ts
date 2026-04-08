@@ -6,7 +6,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/servers'
+      component: () => import('@/views/HomeView.vue')
     },
     {
       path: '/servers',
@@ -22,11 +22,6 @@ const router = createRouter({
       path: '/executions',
       name: 'executions',
       component: () => import('@/views/ExecutionInsightsView.vue')
-    },
-    {
-      path: '/workflows/new',
-      name: 'workflow-new',
-      redirect: '/workflows'
     },
     {
       path: '/workflows/:id/edit',

@@ -1,15 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { IoTDBFileInfo, IoTDBCLIResult, IoTDBLogContent, IoTDBConfigContent, IoTDBRestartResult } from '@/types'
+import type { IoTDBFileInfo } from '@/types'
 import { iotdbApi } from '@/api'
 
 export const useIoTDBStore = defineStore('iotdb', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
-
-  // CLI state
-  const cliResult = ref<IoTDBCLIResult | null>(null)
-  const cliLoading = ref(false)
 
   // Logs state
   const logFiles = ref<IoTDBFileInfo[]>([])
@@ -23,21 +19,6 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   const currentConfigFile = ref<string>('')
   const configsLoading = ref(false)
   const configSaving = ref(false)
-
-  // Execute CLI command
-  async function executeCLI(serverId: number, iotdbHome: string, sql: string, timeout?: number) {
-    cliLoading.value = true
-    error.value = null
-    try {
-      cliResult.value = await iotdbApi.cli(serverId, iotdbHome, sql, timeout)
-      return cliResult.value
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to execute CLI'
-      throw e
-    } finally {
-      cliLoading.value = false
-    }
-  }
 
   // List log files
   async function listLogFiles(serverId: number, iotdbHome: string) {
@@ -55,11 +36,11 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   }
 
   // Read log file
-  async function readLogFile(serverId: number, path: string, tail?: number) {
+  async function readLogFile(serverId: number, iotdbHome: string, path: string, tail?: number) {
     logsLoading.value = true
     error.value = null
     try {
-      const result = await iotdbApi.readLog(serverId, path, tail)
+      const result = await iotdbApi.readLog(serverId, iotdbHome, path, tail)
       logContent.value = result.content
       currentLogFile.value = path
       return result
@@ -87,11 +68,11 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   }
 
   // Read config file
-  async function readConfigFile(serverId: number, path: string) {
+  async function readConfigFile(serverId: number, iotdbHome: string, path: string) {
     configsLoading.value = true
     error.value = null
     try {
-      const result = await iotdbApi.readConfig(serverId, path)
+      const result = await iotdbApi.readConfig(serverId, iotdbHome, path)
       configContent.value = result.content
       currentConfigFile.value = path
       return result
@@ -104,11 +85,11 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   }
 
   // Write config file
-  async function writeConfigFile(serverId: number, path: string, content: string) {
+  async function writeConfigFile(serverId: number, iotdbHome: string, path: string, content: string) {
     configSaving.value = true
     error.value = null
     try {
-      const result = await iotdbApi.writeConfig(serverId, path, content)
+      const result = await iotdbApi.writeConfig(serverId, iotdbHome, path, content)
       if (result.success) {
         configContent.value = content
       }
@@ -138,7 +119,6 @@ export const useIoTDBStore = defineStore('iotdb', () => {
 
   // Clear state
   function clearState() {
-    cliResult.value = null
     logFiles.value = []
     logContent.value = ''
     currentLogFile.value = ''
@@ -151,8 +131,6 @@ export const useIoTDBStore = defineStore('iotdb', () => {
   return {
     loading,
     error,
-    cliResult,
-    cliLoading,
     logFiles,
     logContent,
     currentLogFile,
@@ -162,7 +140,6 @@ export const useIoTDBStore = defineStore('iotdb', () => {
     currentConfigFile,
     configsLoading,
     configSaving,
-    executeCLI,
     listLogFiles,
     readLogFile,
     listConfigFiles,

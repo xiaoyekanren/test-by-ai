@@ -9,12 +9,15 @@ import {
   ElDescriptionsItem,
   ElEmpty,
   ElInput,
+  ElMessage,
+  ElMessageBox,
   ElOption,
   ElSelect,
   ElScrollbar,
   ElTag
 } from 'element-plus'
 import {
+  Delete as DeleteIcon,
   Refresh,
   Clock,
   Monitor
@@ -35,6 +38,7 @@ const statusFilter = ref<string | null>(null)
 const searchKeyword = ref('')
 const rawNodeId = ref<string | null>(null)
 const loadingDetail = ref(false)
+const deletingExecutionId = ref<number | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -247,6 +251,58 @@ async function refreshPage() {
   startPollingIfNeeded()
 }
 
+async function deleteExecution(executionId: number) {
+  const execution = executionsStore.executions.find(item => item.id === executionId)
+  const workflowName = execution
+    ? workflowNameMap.value.get(execution.workflow_id) || `Workflow #${execution.workflow_id}`
+    : `Execution #${executionId}`
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除「${workflowName}」的执行记录 #${executionId} 吗？删除后节点执行信息也会一起移除。`,
+      '删除执行记录',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+  } catch {
+    return
+  }
+
+  const listBeforeDelete = filteredExecutions.value
+  const deletedIndex = listBeforeDelete.findIndex(item => item.id === executionId)
+  const nextExecution = listBeforeDelete[deletedIndex + 1] || listBeforeDelete[deletedIndex - 1] || null
+  const wasSelected = selectedExecutionId.value === executionId
+
+  deletingExecutionId.value = executionId
+  try {
+    if (wasSelected) {
+      stopPolling()
+    }
+
+    await executionsStore.deleteExecution(executionId)
+    ElMessage.success('执行记录已删除')
+
+    if (!wasSelected) return
+
+    if (nextExecution) {
+      await loadExecution(nextExecution.id)
+    } else {
+      executionsStore.clearCurrentExecution()
+      rawNodeId.value = null
+      selectedExecutionId.value = null
+      await router.replace({ path: '/executions' })
+    }
+  } catch {
+    ElMessage.error('删除执行记录失败')
+  } finally {
+    deletingExecutionId.value = null
+  }
+}
+
 watch(() => currentExecution.value?.status, () => {
   startPollingIfNeeded()
 })
@@ -319,29 +375,45 @@ onUnmounted(() => {
             <ElEmpty description="暂无执行记录" />
           </div>
 
-          <button
+          <div
             v-for="execution in filteredExecutions"
             :key="execution.id"
-            type="button"
             class="execution-row"
+            role="button"
+            tabindex="0"
             :class="{ active: selectedExecutionId === execution.id }"
             @click="loadExecution(execution.id)"
+            @keydown.enter="loadExecution(execution.id)"
+            @keydown.space.prevent="loadExecution(execution.id)"
           >
             <div class="execution-row-top">
               <div>
                 <div class="execution-title">{{ execution.workflowName }}</div>
                 <div class="execution-subtitle">Execution #{{ execution.id }}</div>
               </div>
-              <ElTag :type="getStatusTone(execution.status)" effect="dark">
-                {{ execution.status }}
-              </ElTag>
+              <div class="execution-row-actions">
+                <ElTag :type="getStatusTone(execution.status)" effect="dark">
+                  {{ execution.status }}
+                </ElTag>
+                <ElButton
+                  circle
+                  plain
+                  type="danger"
+                  size="small"
+                  :icon="DeleteIcon"
+                  :loading="deletingExecutionId === execution.id"
+                  aria-label="删除执行记录"
+                  @click.stop="deleteExecution(execution.id)"
+                  @keydown.stop
+                />
+              </div>
             </div>
             <div class="execution-row-meta">
               <span>{{ formatDate(execution.created_at) }}</span>
               <span>{{ execution.result || 'n/a' }}</span>
               <span>{{ formatDuration(execution.duration) }}</span>
             </div>
-          </button>
+          </div>
         </ElScrollbar>
       </ElCard>
 
@@ -639,6 +711,12 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.execution-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .execution-title,

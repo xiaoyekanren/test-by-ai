@@ -63,13 +63,7 @@ def update_workflow(workflow_id: int, workflow_update: WorkflowUpdate, db: Sessi
             detail=f"Workflow with id {workflow_id} not found"
         )
 
-    update_data = workflow_update.model_dump(exclude_unset=True)
-
-    # Handle nodes and edges serialization
-    if "nodes" in update_data:
-        update_data["nodes"] = [node.model_dump(by_alias=True) if hasattr(node, 'model_dump') else node for node in update_data["nodes"]]
-    if "edges" in update_data:
-        update_data["edges"] = [edge.model_dump(by_alias=True) if hasattr(edge, 'model_dump') else edge for edge in update_data["edges"]]
+    update_data = workflow_update.model_dump(exclude_unset=True, by_alias=True)
 
     for key, value in update_data.items():
         setattr(db_workflow, key, value)

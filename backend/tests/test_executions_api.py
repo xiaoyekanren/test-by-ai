@@ -2,6 +2,7 @@
 import sys
 sys.path.insert(0, 'backend')
 import pytest
+from app.models.database import NodeExecution
 
 @pytest.fixture(autouse=True)
 def setup_workflow(client):
@@ -32,3 +33,25 @@ def test_stop_execution(client):
     client.post("/api/executions", json={"workflow_id": 1})
     response = client.post("/api/executions/1/stop")
     assert response.status_code == 200
+
+def test_delete_execution(client, db_session):
+    create_response = client.post("/api/executions", json={"workflow_id": 1})
+    execution_id = create_response.json()["id"]
+    db_session.add(NodeExecution(
+        execution_id=execution_id,
+        node_id="node-1",
+        node_type="shell",
+        status="success",
+    ))
+    db_session.commit()
+
+    response = client.delete(f"/api/executions/{execution_id}")
+    assert response.status_code == 204
+    assert client.get(f"/api/executions/{execution_id}").status_code == 404
+    assert db_session.query(NodeExecution).filter(
+        NodeExecution.execution_id == execution_id
+    ).count() == 0
+
+def test_delete_execution_not_found(client):
+    response = client.delete("/api/executions/999")
+    assert response.status_code == 404
