@@ -519,11 +519,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding: 10px 16px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
   background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 .toolbar-title {
@@ -534,23 +534,23 @@ onUnmounted(() => {
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
 }
 
 .workflow-count {
-  font-size: 11px;
-  color: #1890ff;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
+  font-size: 10px;
+  color: #3b82f6;
+  background: #eff6ff;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .refresh-info {
-  font-size: 11px;
-  color: #909399;
+  font-size: 10px;
+  color: #94a3b8;
   margin-left: 4px;
 }
 
@@ -573,12 +573,14 @@ onUnmounted(() => {
 }
 
 .workflow-table :deep(.el-table__cell) {
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .workflow-table :deep(.el-table__header-cell) {
-  padding: 6px 0;
-  font-size: 11px;
+  padding: 4px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 .workflow-table :deep(.el-table__row) {
@@ -600,8 +602,8 @@ onUnmounted(() => {
 
 .workflow-name {
   font-weight: 500;
-  color: #303133;
-  font-size: 13px;
+  color: #1e293b;
+  font-size: 12px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -609,15 +611,15 @@ onUnmounted(() => {
 
 .workflow-type-tag {
   flex: 0 0 auto;
-  font-size: 9px;
+  font-size: 10px;
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: 4px;
   font-weight: 600;
 }
 
 .description {
-  color: #909399;
-  font-size: 12px;
+  color: #94a3b8;
+  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -629,19 +631,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   min-width: 34px;
-  height: 20px;
+  height: 18px;
   padding: 2px 8px;
-  border-radius: 3px;
-  border: 1px solid #d9ecff;
-  background: #ecf5ff;
-  color: #409eff;
-  font-size: 11px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #3b82f6;
+  font-size: 10px;
   font-weight: 500;
 }
 
 .created-at {
-  font-size: 11px;
-  color: #909399;
+  font-size: 10px;
+  color: #94a3b8;
 }
 
 .action-buttons {

@@ -45,7 +45,7 @@ body {
 .el-card {
   background-color: #ffffff !important;
   border: none !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03) !important;
   color: #1e293b !important;
 }
@@ -54,20 +54,21 @@ body {
   border-bottom: 1px solid #f1f5f9 !important;
   color: #1e293b !important;
   font-weight: 600;
+  font-size: 12px;
 }
 
 /* Tables */
 .el-table {
   background-color: #ffffff !important;
   color: #1e293b !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
 }
 
 .el-table th.el-table__cell {
   background-color: #f8fafc !important;
-  color: #64748b !important;
+  color: #94a3b8 !important;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 10px;
   border-bottom: 1px solid #e2e8f0 !important;
 }
 
@@ -91,8 +92,9 @@ body {
 
 /* Buttons */
 .el-button {
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   font-weight: 500 !important;
+  font-size: 12px !important;
   background-color: #ffffff !important;
   border: 1px solid #dcdfe6 !important;
   color: #606266 !important;
@@ -174,7 +176,7 @@ body {
 .el-input__wrapper {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   box-shadow: none !important;
 }
 
@@ -199,7 +201,7 @@ body {
 .el-select-dropdown {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
 }
 
@@ -224,29 +226,29 @@ body {
 /* Dialog */
 .el-dialog {
   background-color: #ffffff !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
 }
 
 .el-dialog__header {
   border-bottom: 1px solid #f1f5f9 !important;
-  padding: 20px 24px !important;
+  padding: 16px 20px !important;
 }
 
 .el-dialog__title {
   color: #1e293b !important;
   font-weight: 600 !important;
-  font-size: 18px !important;
+  font-size: 14px !important;
 }
 
 .el-dialog__body {
   color: #1e293b !important;
-  padding: 24px !important;
+  padding: 20px !important;
 }
 
 .el-dialog__footer {
   border-top: 1px solid #f1f5f9 !important;
-  padding: 16px 24px !important;
+  padding: 12px 20px !important;
 }
 
 /* Tags */
@@ -281,11 +283,12 @@ body {
 
 /* Pagination */
 .el-pagination button {
-  border-radius: 8px !important;
+  border-radius: 6px !important;
 }
 
 .el-pagination .el-pager li {
-  border-radius: 8px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
 }
 
 .el-pagination .el-pager li.is-active {
@@ -295,15 +298,16 @@ body {
 /* Message Box */
 .el-message-box {
   background-color: #ffffff !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
 }
 
 /* Tooltip */
 .el-tooltip__popper {
   background-color: #1e293b !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  font-size: 11px !important;
 }
 
 .el-tooltip__popper.is-dark {
@@ -315,7 +319,7 @@ body {
 .el-popover {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
 }
 
@@ -347,16 +351,17 @@ body {
 .el-dropdown-menu {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
+  border-radius: 6px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
   padding: 4px !important;
 }
 
 .el-dropdown-menu__item {
   color: #1e293b !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   margin: 2px 4px !important;
-  padding: 8px 12px !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
 }
 
 .el-dropdown-menu__item:hover {
@@ -394,7 +399,7 @@ body {
 
 /* Alert */
 .el-alert {
-  border-radius: 8px !important;
+  border-radius: 6px !important;
 }
 
 .el-alert--success {

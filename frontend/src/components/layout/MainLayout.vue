@@ -62,7 +62,7 @@ const handleSidebarCollapse = (collapsed: boolean) => {
 
 .layout-main {
   background: #f8fafc;
-  padding: 20px;
+  padding: 12px;
   overflow-y: auto;
 }
 

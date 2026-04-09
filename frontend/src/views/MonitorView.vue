@@ -614,11 +614,11 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding: 10px 16px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
   background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 .toolbar-title {
@@ -629,23 +629,23 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
 }
 
 .server-count {
-  font-size: 11px;
-  color: #1890ff;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
+  font-size: 10px;
+  color: #3b82f6;
+  background: #eff6ff;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .refresh-info {
-  font-size: 11px;
-  color: #909399;
+  font-size: 10px;
+  color: #94a3b8;
   margin-left: 4px;
 }
 
@@ -669,15 +669,15 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 
 .server-name {
   font-weight: 500;
-  color: #303133;
-  font-size: 13px;
+  color: #1e293b;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .server-host {
   font-size: 10px;
-  color: #909399;
+  color: #94a3b8;
   font-family: 'Monaco', 'Menlo', monospace;
   margin-left: 4px;
   overflow: hidden;
@@ -690,29 +690,26 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
   justify-content: center;
   gap: 2px;
   min-width: 58px;
-  height: 20px;
+  height: 18px;
   line-height: 1;
   font-size: 10px;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
 .status-tag.online {
-  background: #f0f9eb;
-  color: #67c23a;
-  border: 1px solid #c2e7b0;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
 }
 
 .status-tag.offline {
-  background: #fef0f0;
-  color: #f56c6c;
-  border: 1px solid #fbc4c4;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
 }
 
 .status-tag.loading {
-  background: #fdf6ec;
-  color: #e6a23c;
-  border: 1px solid #faecd8;
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
 }
 
 .status-icon {
@@ -801,12 +798,14 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 }
 
 .monitor-table :deep(.el-table__cell) {
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .monitor-table :deep(.el-table__header-cell) {
-  padding: 6px 0;
-  font-size: 11px;
+  padding: 4px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 .monitor-table :deep(.el-progress-bar__outer) {
@@ -822,9 +821,9 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
 }
 
 .server-type-tag {
-  font-size: 9px;
+  font-size: 10px;
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: 4px;
   font-weight: 600;
 }
 

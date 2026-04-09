@@ -681,7 +681,11 @@ function parseTags(tags: string | null): string[] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 .toolbar-title {
@@ -692,24 +696,29 @@ function parseTags(tags: string | null): string[] {
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
+  color: #1e293b;
 }
 
 .server-count {
-  font-size: 11px;
+  font-size: 10px;
   color: #3b82f6;
+  background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .refresh-info {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
   margin-left: 4px;
 }
 
 .toolbar-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -719,12 +728,14 @@ function parseTags(tags: string | null): string[] {
 }
 
 .server-table :deep(.el-table__cell) {
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .server-table :deep(.el-table__header-cell) {
-  padding: 6px 0;
-  font-size: 11px;
+  padding: 4px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 .server-info {
@@ -752,14 +763,15 @@ function parseTags(tags: string | null): string[] {
 
 .name-text {
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
+  color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .description {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -786,9 +798,9 @@ function parseTags(tags: string | null): string[] {
   justify-content: center;
   gap: 2px;
   min-width: 58px;
-  height: 20px;
-  font-size: 11px;
-  padding: 2px 8px;
+  height: 18px;
+  font-size: 10px;
+  padding: 2px 6px;
   border-radius: 6px;
 }
 

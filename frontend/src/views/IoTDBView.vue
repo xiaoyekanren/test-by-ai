@@ -1579,10 +1579,11 @@ function formatSize(size: number): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 8px 10px;
   background: #ffffff;
-  border-radius: 12px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 10px;
 }
 
 .toolbar-spacer {
@@ -1596,7 +1597,8 @@ function formatSize(size: number): string {
 /* Content Area */
 .content-area {
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
   overflow: hidden;
 }
 
@@ -1608,7 +1610,7 @@ function formatSize(size: number): string {
 .tabs-row {
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -1620,14 +1622,14 @@ function formatSize(size: number): string {
 .node-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 12px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   transition: all 0.15s;
 }
 
@@ -1646,20 +1648,21 @@ function formatSize(size: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .node-info {
   display: flex;
   align-items: center;
-  margin-left: 12px;
+  margin-left: 8px;
 }
 
 .node-path {
   color: #64748b;
-  font-size: 12px;
+  font-size: 10px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   background: #f8fafc;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
 }
 
@@ -1671,17 +1674,17 @@ function formatSize(size: number): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 6px 8px;
 }
 
 .func-tab {
-  padding: 6px 12px;
+  padding: 4px 10px;
   background: transparent;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   transition: all 0.15s;
 }
 
@@ -1701,7 +1704,7 @@ function formatSize(size: number): string {
 
 /* Tab Content */
 .tab-content {
-  min-height: 500px;
+  min-height: 400px;
 }
 
 /* CLI Panel */
@@ -1713,8 +1716,8 @@ function formatSize(size: number): string {
 .cli-params {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 8px 12px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   flex-wrap: wrap;
@@ -1723,11 +1726,11 @@ function formatSize(size: number): string {
 .cli-param {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .cli-param label {
-  font-size: 12px;
+  font-size: 10px;
   color: #64748b;
   white-space: nowrap;
 }
@@ -1738,7 +1741,7 @@ function formatSize(size: number): string {
 
 .cli-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   flex-wrap: wrap;
 }
