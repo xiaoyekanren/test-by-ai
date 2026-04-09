@@ -1,258 +1,128 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, DocumentCopy, RefreshLeft } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Monitor, Setting, Document, DataAnalysis, Platform } from '@element-plus/icons-vue'
 
-const STORAGE_KEY = 'home-markdown-todos'
+const router = useRouter()
 
-const defaultMarkdown = `# Todo
-
-## 今天
-- [ ] 梳理要处理的问题
-- [ ] 标记优先级
-
-## 待确认
-- [ ] 补充负责人和截止时间
-
-## 记录
-> 这里可以直接写 Markdown，内容会自动保存在当前浏览器。
-`
-
-const markdown = ref(defaultMarkdown)
-
-const todoStats = computed(() => {
-  const total = markdown.value.match(/^- \[[ xX]\]/gm)?.length ?? 0
-  const done = markdown.value.match(/^- \[[xX]\]/gm)?.length ?? 0
-
-  return {
-    total,
-    done,
-    pending: total - done
-  }
-})
-
-const renderedMarkdown = computed(() => renderMarkdown(markdown.value))
-
-onMounted(() => {
-  const savedMarkdown = localStorage.getItem(STORAGE_KEY)
-
-  if (savedMarkdown) {
-    markdown.value = savedMarkdown
-  }
-})
-
-watch(markdown, (value) => {
-  localStorage.setItem(STORAGE_KEY, value)
-})
-
-const copyMarkdown = async () => {
-  try {
-    await navigator.clipboard.writeText(markdown.value)
-    ElMessage.success('已复制 Markdown')
-  } catch {
-    ElMessage.error('复制失败，请手动选择文本复制')
-  }
+const rootFeature = {
+  title: '服务器管理',
+  description: '统一维护 SSH 连接、认证信息和远程执行入口，是整个平台能力的起点。',
+  icon: Setting,
+  path: '/servers',
+  color: '#3b82f6'
 }
 
-const resetMarkdown = async () => {
-  try {
-    await ElMessageBox.confirm('会用默认 Todo 模板覆盖当前内容，确定继续吗？', '重置内容', {
-      confirmButtonText: '重置',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    markdown.value = defaultMarkdown
-    ElMessage.success('已重置为默认模板')
-  } catch {
-    // User cancelled.
+const branches = [
+  {
+    title: '系统监控',
+    description: '从服务器连接延伸到 CPU、内存、磁盘和进程监控。',
+    icon: Monitor,
+    path: '/monitor',
+    color: '#10b981',
+    eyebrow: '观测'
+  },
+  {
+    title: 'IoTDB可视化',
+    description: '基于已管理服务器连接 IoTDB，查看日志、配置和 CLI。',
+    icon: Platform,
+    path: '/iotdb',
+    color: '#ef4444',
+    eyebrow: '数据服务'
+  },
+  {
+    title: '工作流管理',
+    description: '把服务器操作编排成拖拽式工作流，沉淀自动化执行能力。',
+    icon: Document,
+    path: '/workflows',
+    color: '#f59e0b',
+    eyebrow: '自动化'
   }
+]
+
+const branchExtension = {
+  title: '运行分析',
+  description: '工作流执行后的历史、状态和性能分析，属于自动化链路的结果视图。',
+  icon: DataAnalysis,
+  path: '/executions',
+  color: '#8b5cf6'
 }
 
-const clearMarkdown = async () => {
-  try {
-    await ElMessageBox.confirm('会清空当前 Markdown 内容，确定继续吗？', '清空内容', {
-      confirmButtonText: '清空',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    markdown.value = ''
-    ElMessage.success('已清空')
-  } catch {
-    // User cancelled.
-  }
-}
-
-function renderMarkdown(source: string) {
-  const lines = source.split('\n')
-  const html: string[] = []
-  let listType: 'ul' | 'ol' | null = null
-  let inCodeBlock = false
-  const codeLines: string[] = []
-
-  const closeList = () => {
-    if (listType) {
-      html.push(`</${listType}>`)
-      listType = null
-    }
-  }
-
-  for (const line of lines) {
-    if (line.trim().startsWith('```')) {
-      closeList()
-
-      if (inCodeBlock) {
-        html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
-        codeLines.length = 0
-        inCodeBlock = false
-      } else {
-        inCodeBlock = true
-      }
-
-      continue
-    }
-
-    if (inCodeBlock) {
-      codeLines.push(line)
-      continue
-    }
-
-    const trimmed = line.trim()
-
-    if (!trimmed) {
-      closeList()
-      continue
-    }
-
-    const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed)
-    if (headingMatch) {
-      closeList()
-      const level = headingMatch[1].length
-      html.push(`<h${level}>${renderInline(headingMatch[2])}</h${level}>`)
-      continue
-    }
-
-    const todoMatch = /^- \[([ xX])\]\s+(.+)$/.exec(trimmed)
-    if (todoMatch) {
-      if (listType !== 'ul') {
-        closeList()
-        html.push('<ul>')
-        listType = 'ul'
-      }
-
-      const checked = todoMatch[1].toLowerCase() === 'x'
-      html.push(`<li class="todo-item"><input type="checkbox" disabled ${checked ? 'checked' : ''}> <span>${renderInline(todoMatch[2])}</span></li>`)
-      continue
-    }
-
-    const bulletMatch = /^[-*]\s+(.+)$/.exec(trimmed)
-    if (bulletMatch) {
-      if (listType !== 'ul') {
-        closeList()
-        html.push('<ul>')
-        listType = 'ul'
-      }
-
-      html.push(`<li>${renderInline(bulletMatch[1])}</li>`)
-      continue
-    }
-
-    const orderedMatch = /^\d+\.\s+(.+)$/.exec(trimmed)
-    if (orderedMatch) {
-      if (listType !== 'ol') {
-        closeList()
-        html.push('<ol>')
-        listType = 'ol'
-      }
-
-      html.push(`<li>${renderInline(orderedMatch[1])}</li>`)
-      continue
-    }
-
-    const quoteMatch = /^>\s+(.+)$/.exec(trimmed)
-    if (quoteMatch) {
-      closeList()
-      html.push(`<blockquote>${renderInline(quoteMatch[1])}</blockquote>`)
-      continue
-    }
-
-    closeList()
-    html.push(`<p>${renderInline(trimmed)}</p>`)
-  }
-
-  closeList()
-
-  if (inCodeBlock) {
-    html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
-  }
-
-  return html.join('')
-}
-
-function renderInline(source: string) {
-  return escapeHtml(source)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-}
-
-function escapeHtml(source: string) {
-  return source
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+const navigateTo = (path: string) => {
+  router.push(path)
 }
 </script>
 
 <template>
   <div class="home-view">
-    <section class="markdown-header">
-      <div>
-        <p class="eyebrow">Markdown Todo</p>
-        <h1>事项记录</h1>
-        <p class="description">直接编辑 Markdown，内容会自动保存在当前浏览器。</p>
+    <section class="mindmap">
+      <div class="mindmap-head">
+        <div class="mindmap-label">模块关系</div>
+        <p class="mindmap-desc">服务器管理是起点，向外分出监控、IoTDB 和工作流，工作流再延伸到运行分析。</p>
       </div>
 
-      <div class="toolbar">
-        <el-button :icon="DocumentCopy" @click="copyMarkdown">复制</el-button>
-        <el-button :icon="RefreshLeft" @click="resetMarkdown">重置模板</el-button>
-        <el-button :icon="Delete" type="danger" plain @click="clearMarkdown">清空</el-button>
-      </div>
-    </section>
+      <div class="mindmap-canvas">
+        <!-- 中心卡片 -->
+        <div class="center-card" @click="navigateTo(rootFeature.path)">
+          <div class="center-icon" :style="{ background: rootFeature.color }">
+            <el-icon :size="26"><component :is="rootFeature.icon" /></el-icon>
+          </div>
+          <div class="center-content">
+            <div class="center-title">{{ rootFeature.title }}</div>
+            <div class="center-desc">{{ rootFeature.description }}</div>
+          </div>
+        </div>
 
-    <section class="stats-row" aria-label="Todo 统计">
-      <div class="stat-card">
-        <span>全部事项</span>
-        <strong>{{ todoStats.total }}</strong>
-      </div>
-      <div class="stat-card">
-        <span>已完成</span>
-        <strong>{{ todoStats.done }}</strong>
-      </div>
-      <div class="stat-card">
-        <span>待处理</span>
-        <strong>{{ todoStats.pending }}</strong>
-      </div>
-    </section>
+        <!-- 主连接线 -->
+        <svg class="line-main" width="520" height="28" viewBox="0 0 520 28">
+          <line x1="260" y1="0" x2="260" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="100" y1="10" x2="420" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="100" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="260" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="420" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="100" y1="10" x2="100" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="260" y1="10" x2="260" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="420" y1="10" x2="420" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+        </svg>
 
-    <section class="editor-grid">
-      <div class="editor-panel">
-        <div class="panel-title">编辑</div>
-        <el-input
-          v-model="markdown"
-          type="textarea"
-          resize="none"
-          spellcheck="false"
-          placeholder="# Todo"
-          class="markdown-input"
-        />
-      </div>
+        <!-- 三个分支卡片 -->
+        <div class="branch-row">
+          <div
+            v-for="feature in branches"
+            :key="feature.path"
+            class="branch-card"
+            :style="{ borderColor: feature.color }"
+            @click="navigateTo(feature.path)"
+          >
+            <div class="branch-icon" :style="{ background: feature.color }">
+              <el-icon :size="18"><component :is="feature.icon" /></el-icon>
+            </div>
+            <div class="branch-content">
+              <div class="branch-eyebrow" :style="{ color: feature.color }">{{ feature.eyebrow }}</div>
+              <div class="branch-title">{{ feature.title }}</div>
+              <div class="branch-desc">{{ feature.description }}</div>
+            </div>
+          </div>
+        </div>
 
-      <div class="preview-panel">
-        <div class="panel-title">预览</div>
-        <article class="markdown-preview" v-html="renderedMarkdown"></article>
+        <!-- 工作流到运行分析的连接线 -->
+        <svg class="line-sub" width="520" height="24" viewBox="0 0 520 24">
+          <line x1="420" y1="0" x2="420" y2="24" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="420" cy="24" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
+        </svg>
+
+        <!-- 运行分析卡片 -->
+        <div class="sub-card-wrap">
+          <div class="sub-card" @click="navigateTo(branchExtension.path)">
+            <div class="sub-icon" :style="{ background: branchExtension.color }">
+              <el-icon :size="16"><component :is="branchExtension.icon" /></el-icon>
+            </div>
+            <div class="sub-content">
+              <div class="sub-eyebrow" :style="{ color: branchExtension.color }">分析</div>
+              <div class="sub-title">{{ branchExtension.title }}</div>
+              <div class="sub-desc">{{ branchExtension.description }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -261,243 +131,241 @@ function escapeHtml(source: string) {
 <style scoped>
 .home-view {
   min-height: 100%;
-  color: #303133;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px;
 }
 
-.markdown-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
+.mindmap {
+  width: 100%;
+  max-width: 1000px;
+}
+
+.mindmap-head {
+  text-align: center;
   margin-bottom: 20px;
 }
 
-.eyebrow {
-  margin-bottom: 6px;
-  font-size: 13px;
+.mindmap-label {
+  font-size: 11px;
   font-weight: 600;
-  color: #409eff;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
-.markdown-header h1 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.2;
+.mindmap-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
 }
 
-.description {
-  margin-top: 8px;
-  color: #606266;
-  line-height: 1.6;
-}
-
-.toolbar {
+.mindmap-canvas {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
+.center-card {
+  width: 280px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  border: 1px solid #e4e7ed;
+  gap: 16px;
+  padding: 16px 20px;
+  background: white;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
 }
 
-.stat-card span {
-  color: #606266;
-  font-size: 14px;
+.center-card:hover {
+  border-color: #3b82f6;
+  transform: translateY(-2px);
 }
 
-.stat-card strong {
-  color: #303133;
-  font-size: 24px;
-}
-
-.editor-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
-  min-height: 520px;
-}
-
-.editor-panel,
-.preview-panel {
+.center-icon {
+  width: 48px;
+  height: 48px;
   display: flex;
-  min-width: 0;
-  min-height: 520px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.center-content {
+  display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  background: #fff;
 }
 
-.panel-title {
-  padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f8fafc;
-  color: #606266;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.markdown-input {
-  flex: 1;
-}
-
-.markdown-input :deep(.el-textarea__inner) {
-  height: 100%;
-  min-height: 0 !important;
-  padding: 16px;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  color: #303133;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.markdown-preview {
-  flex: 1;
-  overflow: auto;
-  padding: 18px 20px 28px;
-  line-height: 1.7;
-}
-
-.markdown-preview :deep(h1),
-.markdown-preview :deep(h2),
-.markdown-preview :deep(h3),
-.markdown-preview :deep(h4) {
-  margin: 0 0 12px;
-  color: #303133;
-  line-height: 1.35;
-}
-
-.markdown-preview :deep(h1) {
-  font-size: 28px;
-}
-
-.markdown-preview :deep(h2) {
-  margin-top: 22px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 22px;
-}
-
-.markdown-preview :deep(h3) {
-  margin-top: 18px;
+.center-title {
   font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
-.markdown-preview :deep(h4) {
-  margin-top: 16px;
-  font-size: 16px;
+.center-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
-.markdown-preview :deep(p),
-.markdown-preview :deep(ul),
-.markdown-preview :deep(ol),
-.markdown-preview :deep(blockquote),
-.markdown-preview :deep(pre) {
-  margin: 0 0 14px;
+.line-main,
+.line-sub {
+  display: block;
 }
 
-.markdown-preview :deep(ul),
-.markdown-preview :deep(ol) {
-  padding-left: 24px;
+.branch-row {
+  display: flex;
+  gap: 16px;
 }
 
-.markdown-preview :deep(li) {
-  margin-bottom: 6px;
+.branch-card {
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 12px;
+  background: white;
+  border: 1px solid;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s;
 }
 
-.markdown-preview :deep(.todo-item) {
-  list-style: none;
-  margin-left: -22px;
+.branch-card:hover {
+  transform: translateY(-2px);
 }
 
-.markdown-preview :deep(.todo-item input) {
-  margin-right: 8px;
-}
-
-.markdown-preview :deep(blockquote) {
-  padding: 10px 14px;
-  border-left: 4px solid #409eff;
-  border-radius: 4px;
-  background: #f5f7fa;
-  color: #606266;
-}
-
-.markdown-preview :deep(code) {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #f0f2f5;
-  color: #c45656;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.92em;
-}
-
-.markdown-preview :deep(pre) {
-  overflow: auto;
-  padding: 14px;
+.branch-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
-  background: #1f2937;
+  color: white;
+  flex-shrink: 0;
 }
 
-.markdown-preview :deep(pre code) {
-  padding: 0;
-  background: transparent;
-  color: #f9fafb;
+.branch-content {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
 }
 
-.markdown-preview :deep(a) {
-  color: #409eff;
-  text-decoration: none;
+.branch-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
 }
 
-.markdown-preview :deep(a:hover) {
-  text-decoration: underline;
+.branch-title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
-@media (max-width: 960px) {
-  .markdown-header {
-    flex-direction: column;
-  }
+.branch-desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
 
-  .toolbar {
-    justify-content: flex-start;
-  }
+.sub-card-wrap {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: 520px;
+  padding-right: 10px;
+}
 
-  .editor-grid {
-    grid-template-columns: 1fr;
-  }
+.sub-card {
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid #8b5cf6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.sub-card:hover {
+  transform: translateY(-2px);
+}
+
+.sub-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.sub-content {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.sub-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sub-title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sub-desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 @media (max-width: 640px) {
-  .stats-row {
-    grid-template-columns: 1fr;
+  .branch-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
   }
 
-  .toolbar {
-    width: 100%;
+  .branch-card {
+    width: 180px;
   }
 
-  .toolbar .el-button {
-    flex: 1;
-    margin-left: 0;
+  .line-main {
+    display: none;
+  }
+
+  .line-sub {
+    display: none;
+  }
+
+  .sub-card-wrap {
+    justify-content: center;
+    padding-right: 0;
+  }
+
+  .sub-card {
+    width: 180px;
   }
 }
 </style>

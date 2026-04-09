@@ -27,6 +27,7 @@ class CLISessionRequest(BaseModel):
     rpc_port: Optional[int] = None
     username: Optional[str] = None
     cli_password: Optional[str] = None
+    sql_dialect: Optional[str] = "tree"
 
 
 class LogsListRequest(BaseModel):
@@ -166,9 +167,11 @@ def build_cli_command(
     host: Optional[str] = None,
     rpc_port: Optional[int] = None,
     username: Optional[str] = None,
-    cli_password: Optional[str] = None
+    cli_password: Optional[str] = None,
+    sql_dialect: Optional[str] = "tree"
 ) -> str:
     cli_script = posixpath.join(normalize_remote_path(iotdb_home), "sbin", "start-cli.sh")
+    normalized_sql_dialect = "table" if sql_dialect == "table" else "tree"
     command_parts = [ssh_service.quote(cli_script)]
     command_parts.extend(["-h", ssh_service.quote(host or DEFAULT_CLI_HOST)])
     command_parts.extend(["-p", str(rpc_port or DEFAULT_CLI_RPC_PORT)])
@@ -176,6 +179,7 @@ def build_cli_command(
         command_parts.extend(["-u", ssh_service.quote(username)])
     if cli_password:
         command_parts.extend(["-pw", ssh_service.quote(cli_password)])
+    command_parts.extend(["-sql_dialect", ssh_service.quote(normalized_sql_dialect)])
     return " ".join(command_parts)
 
 
@@ -198,7 +202,8 @@ async def cli_session(websocket: WebSocket, db: Session = Depends(get_db)):
                 host=session_request.host,
                 rpc_port=session_request.rpc_port,
                 username=session_request.username,
-                cli_password=session_request.cli_password
+                cli_password=session_request.cli_password,
+                sql_dialect=session_request.sql_dialect
             )
         except (ValidationError, HTTPException) as exc:
             detail = getattr(exc, "detail", str(exc))

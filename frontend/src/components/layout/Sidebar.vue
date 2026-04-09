@@ -101,7 +101,6 @@ onMounted(() => {
         <transition name="fade">
           <span v-show="!isCollapse" class="nav-label">首页</span>
         </transition>
-        <div class="nav-indicator"></div>
       </div>
 
       <!-- Groups -->
@@ -126,7 +125,6 @@ onMounted(() => {
           <transition name="fade">
             <span v-show="!isCollapse" class="nav-label">{{ item.title }}</span>
           </transition>
-          <div class="nav-indicator"></div>
         </div>
       </template>
     </nav>
@@ -173,7 +171,7 @@ onMounted(() => {
 
 /* Header */
 .sidebar-header {
-  padding: 10px 8px;
+  padding: 10px 4px 10px 14px;
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -225,7 +223,7 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 4px;
+  padding: 8px 4px 4px;
 }
 
 /* Nav Group */
@@ -256,7 +254,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px;
+  padding: 0 6px 0 10px;
   height: 34px;
   margin-bottom: 2px;
   border-radius: 6px;
@@ -290,11 +288,6 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.nav-item.is-active .nav-indicator {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
 /* Nav Icon */
 .nav-icon {
   display: flex;
@@ -314,20 +307,6 @@ onMounted(() => {
   color: var(--text-dim);
   white-space: nowrap;
   transition: color 0.15s ease;
-}
-
-/* Active Indicator */
-.nav-indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%) scaleY(0);
-  width: 3px;
-  height: 14px;
-  background: var(--accent);
-  border-radius: 0 3px 3px 0;
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 /* Footer */
