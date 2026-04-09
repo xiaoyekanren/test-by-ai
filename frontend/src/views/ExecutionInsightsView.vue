@@ -601,6 +601,21 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.panel {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+}
+
+.panel :deep(.el-card__header) {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.panel :deep(.el-card__body) {
+  padding: 12px 16px;
+}
+
 .panel-title {
   display: flex;
   justify-content: space-between;
@@ -728,20 +743,24 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 10px;
   width: 100%;
-  padding: 10px;
-  border-radius: 6px;
-  background: #f8fafc;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
 
 .timeline-item:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .timeline-item.active {
   background: #eff6ff;
+  border-color: #3b82f6;
 }
 
 .timeline-dot {

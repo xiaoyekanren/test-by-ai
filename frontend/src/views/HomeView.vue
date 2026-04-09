@@ -64,22 +64,24 @@ const navigateTo = (path: string) => {
         <!-- 中心卡片 -->
         <div class="center-card" @click="navigateTo(rootFeature.path)">
           <div class="center-icon" :style="{ background: rootFeature.color }">
-            <el-icon :size="20"><component :is="rootFeature.icon" /></el-icon>
+            <el-icon :size="26"><component :is="rootFeature.icon" /></el-icon>
           </div>
-          <div class="center-title">{{ rootFeature.title }}</div>
-          <div class="center-desc">起点模块</div>
+          <div class="center-content">
+            <div class="center-title">{{ rootFeature.title }}</div>
+            <div class="center-desc">{{ rootFeature.description }}</div>
+          </div>
         </div>
 
         <!-- 主连接线 -->
-        <svg class="line-main" width="140" height="32" viewBox="0 0 140 32">
-          <line x1="70" y1="0" x2="70" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="25" y1="12" x2="115" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="25" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="70" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="115" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="25" y1="12" x2="25" y2="32" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="70" y1="12" x2="70" y2="32" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="115" y1="12" x2="115" y2="32" stroke="#cbd5e1" stroke-width="1.5"/>
+        <svg class="line-main" width="520" height="28" viewBox="0 0 520 28">
+          <line x1="260" y1="0" x2="260" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="100" y1="10" x2="420" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="100" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="260" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="420" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="100" y1="10" x2="100" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="260" y1="10" x2="260" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="420" y1="10" x2="420" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
         </svg>
 
         <!-- 三个分支卡片 -->
@@ -91,22 +93,34 @@ const navigateTo = (path: string) => {
             :style="{ borderColor: feature.color }"
             @click="navigateTo(feature.path)"
           >
-            <div class="branch-eyebrow" :style="{ color: feature.color }">{{ feature.eyebrow }}</div>
-            <div class="branch-title">{{ feature.title }}</div>
+            <div class="branch-icon" :style="{ background: feature.color }">
+              <el-icon :size="18"><component :is="feature.icon" /></el-icon>
+            </div>
+            <div class="branch-content">
+              <div class="branch-eyebrow" :style="{ color: feature.color }">{{ feature.eyebrow }}</div>
+              <div class="branch-title">{{ feature.title }}</div>
+              <div class="branch-desc">{{ feature.description }}</div>
+            </div>
           </div>
         </div>
 
         <!-- 工作流到运行分析的连接线 -->
-        <svg class="line-sub" width="140" height="24" viewBox="0 0 140 24">
-          <line x1="115" y1="0" x2="115" y2="24" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="115" cy="24" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
+        <svg class="line-sub" width="520" height="24" viewBox="0 0 520 24">
+          <line x1="420" y1="0" x2="420" y2="24" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="420" cy="24" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
         </svg>
 
         <!-- 运行分析卡片 -->
         <div class="sub-card-wrap">
           <div class="sub-card" @click="navigateTo(branchExtension.path)">
-            <div class="sub-eyebrow" :style="{ color: branchExtension.color }">分析</div>
-            <div class="sub-title">{{ branchExtension.title }}</div>
+            <div class="sub-icon" :style="{ background: branchExtension.color }">
+              <el-icon :size="16"><component :is="branchExtension.icon" /></el-icon>
+            </div>
+            <div class="sub-content">
+              <div class="sub-eyebrow" :style="{ color: branchExtension.color }">分析</div>
+              <div class="sub-title">{{ branchExtension.title }}</div>
+              <div class="sub-desc">{{ branchExtension.description }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -125,7 +139,7 @@ const navigateTo = (path: string) => {
 
 .mindmap {
   width: 100%;
-  max-width: 480px;
+  max-width: 1000px;
 }
 
 .mindmap-head {
@@ -152,16 +166,18 @@ const navigateTo = (path: string) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .center-card {
-  width: 180px;
-  padding: 16px;
+  width: 280px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
   background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  text-align: center;
+  border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.2s, transform 0.2s;
 }
@@ -172,26 +188,32 @@ const navigateTo = (path: string) => {
 }
 
 .center-icon {
-  width: 40px;
-  height: 40px;
-  margin: 0 auto 10px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
   color: white;
+  flex-shrink: 0;
+}
+
+.center-content {
+  display: flex;
+  flex-direction: column;
 }
 
 .center-title {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   color: #1e293b;
 }
 
 .center-desc {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: #64748b;
+  line-height: 1.4;
 }
 
 .line-main,
@@ -201,16 +223,18 @@ const navigateTo = (path: string) => {
 
 .branch-row {
   display: flex;
-  gap: 12px;
+  gap: 16px;
 }
 
 .branch-card {
-  width: 80px;
-  padding: 12px 10px;
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 12px;
   background: white;
   border: 1px solid;
   border-radius: 6px;
-  text-align: center;
   cursor: pointer;
   transition: transform 0.2s;
 }
@@ -219,33 +243,59 @@ const navigateTo = (path: string) => {
   transform: translateY(-2px);
 }
 
+.branch-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.branch-content {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
 .branch-eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .branch-title {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 15px;
   font-weight: 600;
   color: #1e293b;
+}
+
+.branch-desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .sub-card-wrap {
   display: flex;
   justify-content: flex-end;
   width: 100%;
-  max-width: 280px;
-  padding-right: 30px;
+  max-width: 520px;
+  padding-right: 10px;
 }
 
 .sub-card {
-  width: 90px;
-  padding: 10px 12px;
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 14px;
   background: white;
   border: 1px solid #8b5cf6;
   border-radius: 6px;
-  text-align: center;
   cursor: pointer;
   transition: transform 0.2s;
 }
@@ -254,27 +304,51 @@ const navigateTo = (path: string) => {
   transform: translateY(-2px);
 }
 
+.sub-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.sub-content {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
 .sub-eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .sub-title {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 15px;
   font-weight: 600;
   color: #1e293b;
 }
 
-@media (max-width: 400px) {
+.sub-desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
   .branch-row {
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .branch-card {
-    width: 100px;
+    width: 180px;
   }
 
   .line-main {
@@ -288,6 +362,10 @@ const navigateTo = (path: string) => {
   .sub-card-wrap {
     justify-content: center;
     padding-right: 0;
+  }
+
+  .sub-card {
+    width: 180px;
   }
 }
 </style>

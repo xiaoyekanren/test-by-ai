@@ -14,7 +14,7 @@ import {
   ElTag,
   vLoading
 } from 'element-plus'
-import { Refresh, Platform } from '@element-plus/icons-vue'
+import { Refresh, Platform, Delete } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import { useIoTDBStore } from '@/stores/iotdb'
 import { iotdbApi } from '@/api'
@@ -25,6 +25,7 @@ const iotdbStore = useIoTDBStore()
 
 type IoTDBConnectionMode = 'standalone' | 'cluster'
 type IoTDBRestartScope = 'all' | 'cn' | 'dn'
+type IoTDBSqlDialect = 'tree' | 'table'
 
 interface SavedIoTDBNode {
   id: string
@@ -32,6 +33,10 @@ interface SavedIoTDBNode {
   restartScope: IoTDBRestartScope
   serverId: number
   iotdbHome: string
+}
+
+interface EditableSavedIoTDBNode extends Omit<SavedIoTDBNode, 'serverId'> {
+  serverId: number | null
 }
 
 interface SavedIoTDBTarget {
@@ -52,7 +57,7 @@ const manageTargetsDialogVisible = ref(false)
 const editingTargetId = ref('')
 const newTargetName = ref('')
 const newTargetMode = ref<IoTDBConnectionMode>('standalone')
-const newTargetNodes = ref<SavedIoTDBNode[]>([])
+const newTargetNodes = ref<EditableSavedIoTDBNode[]>([])
 const connectedNodes = ref<SavedIoTDBNode[]>([])
 const activeNodeId = ref('')
 const activeTab = ref('cli-session')
@@ -60,6 +65,7 @@ const LOG_TAIL_LINES = 100
 const MAX_LOG_VIEW_CHARS = 256 * 1024
 const connected = ref(false)
 const connecting = ref(false)
+const connectionError = ref('')
 const restarting = ref(false)
 const SAVED_TARGETS_STORAGE_KEY = 'iotdb-visualization-targets'
 const DEFAULT_CLI_HOST = '127.0.0.1'
@@ -70,6 +76,7 @@ const cliHostsByNode = ref<Record<string, string>>({})
 const cliPortsByNode = ref<Record<string, number | null>>({})
 const cliUsername = ref('')
 const cliPassword = ref('')
+const cliSqlDialect = ref<IoTDBSqlDialect>('tree')
 const persistentCliConnectedByNode = ref<Record<string, boolean>>({})
 const persistentCliConnectingByNode = ref<Record<string, boolean>>({})
 const cliDefaultsLoadingByNode = ref<Record<string, boolean>>({})
@@ -182,16 +189,13 @@ const activeCliDefaultsLoaded = computed(() => {
   return activeNode.value ? Boolean(cliDefaultsLoadedByNode.value[activeNode.value.id]) : false
 })
 
-const connectionReady = computed(() => {
-  return Boolean(connectedNodes.value.length || selectedSavedTarget.value)
+const activeCliConnectButtonLabel = computed(() => {
+  if (activeCliDefaultsLoading.value) return '读取 CLI 参数中'
+  return '连接 CLI'
 })
 
-const currentTargetLabel = computed(() => {
-  if (connectedNodes.value.length > 1) return `${connectedNodes.value.length} 节点分布式`
-  if (connectedNodes.value.length === 1) return getNodeDisplayName(connectedNodes.value[0])
-  if (selectedSavedTarget.value) return selectedSavedTarget.value.name
-  if (!selectedServerId.value || !iotdbHome.value.trim()) return ''
-  return getSavedTargetName(selectedServerId.value, normalizeIoTDBHome(iotdbHome.value))
+const connectionReady = computed(() => {
+  return Boolean(connectedNodes.value.length || selectedSavedTarget.value)
 })
 
 const targetDialogTitle = computed(() => {
@@ -255,6 +259,14 @@ function getNodeDisplayName(node: SavedIoTDBNode) {
 function getNodeTitle(node: SavedIoTDBNode) {
   const server = serversStore.servers.find(item => item.id === node.serverId)
   return node.name || server?.host || `Server ${node.serverId}`
+}
+
+function getSavedTargetMeta(target: SavedIoTDBTarget) {
+  return target.mode === 'cluster' ? `${target.nodes.length} 节点分布式` : '单机'
+}
+
+function getSavedTargetById(targetId: string) {
+  return savedTargets.value.find(target => target.id === targetId)
 }
 
 function normalizeRestartScope(value: unknown): IoTDBRestartScope {
@@ -353,17 +365,15 @@ function refreshSavedTargetNames() {
 
 function openCreateTargetDialog() {
   editingTargetId.value = ''
-  newTargetMode.value = connectedNodes.value.length > 1 ? 'cluster' : 'standalone'
+  newTargetMode.value = 'standalone'
   newTargetName.value = ''
-  newTargetNodes.value = connectedNodes.value.length > 0
-    ? connectedNodes.value.map(node => ({ ...node }))
-    : [{
-        id: '',
-        name: '节点 1',
-        restartScope: 'all',
-        serverId: selectedServerId.value || 0,
-        iotdbHome: iotdbHome.value
-      }]
+  newTargetNodes.value = [{
+    id: '',
+    name: '节点 1',
+    restartScope: 'all',
+    serverId: null,
+    iotdbHome: ''
+  }]
   createTargetDialogVisible.value = true
 }
 
@@ -381,7 +391,7 @@ function ensureNewTargetNodes() {
     id: '',
     name: '节点 1',
     restartScope: 'all',
-    serverId: 0,
+    serverId: null,
     iotdbHome: ''
   }]
 }
@@ -392,7 +402,7 @@ function addNewTargetNode() {
     id: '',
     name: `节点 ${newTargetNodes.value.length + 1}`,
     restartScope: 'all',
-    serverId: 0,
+    serverId: null,
     iotdbHome: ''
   })
 }
@@ -420,8 +430,10 @@ function applyTarget(target: SavedIoTDBTarget) {
 function createTargetFromDialog() {
   ensureNewTargetNodes()
   const validNodes = newTargetNodes.value
-    .filter(node => node.serverId && node.iotdbHome.trim())
-    .map((node, index) => {
+    .filter((node): node is EditableSavedIoTDBNode & { serverId: number } => {
+      return Number.isFinite(node.serverId) && Boolean(node.iotdbHome.trim())
+    })
+    .map<SavedIoTDBNode>((node, index) => {
       const home = normalizeIoTDBHome(node.iotdbHome)
       return {
         ...node,
@@ -471,24 +483,45 @@ function loadSavedTarget(target: SavedIoTDBTarget) {
   ElMessage.success('已加载连接，请按需连接或刷新')
 }
 
-function deleteSavedTarget(target: SavedIoTDBTarget) {
+async function deleteSavedTarget(target: SavedIoTDBTarget) {
   if (connected.value) {
     ElMessage.warning('请先断开连接再删除')
     return
   }
 
-  savedTargets.value = savedTargets.value.filter(item => item.id !== target.id)
-  if (selectedSavedTargetId.value === target.id) {
-    selectedSavedTargetId.value = ''
+  try {
+    await ElMessageBox.confirm(
+      `确定删除连接「${target.name}」吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    savedTargets.value = savedTargets.value.filter(item => item.id !== target.id)
+    if (selectedSavedTargetId.value === target.id) {
+      selectedSavedTargetId.value = ''
+    }
+    persistSavedTargets()
+    ElMessage.success('已删除连接')
+  } catch {
+    // 用户取消
   }
-  persistSavedTargets()
-  ElMessage.success('已删除连接')
 }
 
 async function connectSelectedOrCurrentTarget() {
+  connectionError.value = ''
   if (selectedSavedTarget.value) {
     loadSelectedTarget(false)
   }
+  await connectIoTDB()
+}
+
+async function autoConnectSelectedTarget(targetId: string) {
+  if (!targetId || !selectedSavedTarget.value || connecting.value) return
+  loadSelectedTarget(false)
   await connectIoTDB()
 }
 
@@ -734,6 +767,7 @@ onUnmounted(() => {
 // Watch connection target changes to clear stale state
 watch([selectedServerId, () => iotdbHome.value.trim()], () => {
   connected.value = false
+  connectionError.value = ''
   stopLogStream()
   closePersistentCliSession()
   disposePersistentTerminal()
@@ -745,6 +779,11 @@ watch([selectedServerId, () => iotdbHome.value.trim()], () => {
   cliPortsByNode.value = {}
   cliDefaultsLoadingByNode.value = {}
   cliDefaultsLoadedByNode.value = {}
+})
+
+watch(selectedSavedTargetId, (targetId) => {
+  if (!targetId) return
+  void autoConnectSelectedTarget(targetId)
 })
 
 watch(activeNodeId, () => {
@@ -854,6 +893,7 @@ async function connectIoTDB() {
   if (!connectionReady.value) return
 
   try {
+    connectionError.value = ''
     if (selectedSavedTarget.value && connectedNodes.value.length === 0) {
       applyTarget(selectedSavedTarget.value)
     }
@@ -863,12 +903,15 @@ async function connectIoTDB() {
     ElMessage.success('IoTDB 已连接')
   } catch (error) {
     connected.value = false
+    connectionError.value = getErrorMessage(error, '连接 IoTDB 失败')
     ElMessage.error(getErrorMessage(error, '连接 IoTDB 失败'))
   }
 }
 
 function disconnectIoTDB() {
   connected.value = false
+  selectedSavedTargetId.value = ''
+  connectionError.value = ''
   stopLogStream()
   closePersistentCliSession()
   disposePersistentTerminal()
@@ -927,7 +970,8 @@ async function connectPersistentCliSession() {
         host: (cliHostsByNode.value[node.id] || DEFAULT_CLI_HOST).trim() || undefined,
         rpc_port: Number.isFinite(rpcPort) && rpcPort > 0 ? rpcPort : undefined,
         username: cliUsername.value.trim() || undefined,
-        cli_password: cliPassword.value || undefined
+        cli_password: cliPassword.value || undefined,
+        sql_dialect: cliSqlDialect.value
       }))
     }
 
@@ -1185,32 +1229,30 @@ function formatSize(size: number): string {
         class="target-select"
         clearable
       >
+        <template #label="{ value }">
+          <div v-if="value && getSavedTargetById(String(value))" class="saved-target-option">
+            <span class="saved-target-option-name">{{ getSavedTargetById(String(value))?.name }}</span>
+            <span class="saved-target-option-meta">{{ getSavedTargetMeta(getSavedTargetById(String(value))!) }}</span>
+          </div>
+        </template>
         <ElOption
           v-for="target in savedTargets"
           :key="target.id"
           :label="target.name"
           :value="target.id"
-        />
+        >
+          <div class="saved-target-option">
+            <span class="saved-target-option-name">{{ target.name }}</span>
+            <span class="saved-target-option-meta">{{ getSavedTargetMeta(target) }}</span>
+          </div>
+        </ElOption>
       </ElSelect>
-
-      <ElButton
-        type="primary"
-        :loading="connecting"
-        :disabled="connected || (!connectionReady && !selectedSavedTarget)"
-        @click="connectSelectedOrCurrentTarget"
-      >
-        连接
-      </ElButton>
 
       <ElButton @click="manageTargetsDialogVisible = true">
         管理
       </ElButton>
 
       <div class="toolbar-spacer" />
-
-      <ElTag v-if="currentTargetLabel" type="info" size="small">
-        {{ currentTargetLabel }}
-      </ElTag>
 
       <ElButton
         v-if="connected"
@@ -1231,7 +1273,7 @@ function formatSize(size: number): string {
     </div>
 
     <!-- Connected Content -->
-    <div v-if="connected" class="content-area">
+    <div v-if="connectedNodes.length > 0" class="content-area" :class="{ 'is-disabled': !connected }">
       <!-- Node Tabs + Function Tabs -->
       <div class="tabs-header">
         <div class="tabs-row">
@@ -1290,14 +1332,7 @@ function formatSize(size: number): string {
         <!-- CLI Session -->
         <div v-show="activeTab === 'cli-session'" class="cli-panel">
           <div class="cli-params">
-            <ElButton size="small">切换模型（待实现）</ElButton>
             <div class="cli-actions">
-              <ElTag
-                :type="activePersistentCliConnected ? 'success' : (activeCliDefaultsLoading ? 'warning' : 'info')"
-                effect="plain"
-              >
-                {{ activePersistentCliConnected ? 'CLI 已连接' : (activeCliDefaultsLoading ? '读取 CLI 参数中' : 'CLI 未连接') }}
-              </ElTag>
               <ElButton
                 v-if="!activePersistentCliConnected"
                 type="primary"
@@ -1305,7 +1340,7 @@ function formatSize(size: number): string {
                 :disabled="!activeCliDefaultsLoaded"
                 @click="handleConnectPersistentCli"
               >
-                连接 CLI
+                {{ activeCliConnectButtonLabel }}
               </ElButton>
               <template v-else>
                 <ElButton type="danger" @click="closePersistentCliSession(true, activeNode?.id)">
@@ -1315,6 +1350,16 @@ function formatSize(size: number): string {
                   清空
                 </ElButton>
               </template>
+            </div>
+            <div class="cli-param">
+              <label>Model</label>
+              <ElSelect
+                v-model="cliSqlDialect"
+                :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
+              >
+                <ElOption label="树模型" value="tree" />
+                <ElOption label="表模型" value="table" />
+              </ElSelect>
             </div>
             <div class="cli-param">
               <label>Host</label>
@@ -1362,13 +1407,17 @@ function formatSize(size: number): string {
         </div>
 
         <!-- Logs -->
-        <div v-show="activeTab === 'logs'" class="file-panel">
+        <div
+          v-show="activeTab === 'logs'"
+          class="file-panel"
+          :style="{ height: `${logPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT + 42}px` }"
+        >
           <aside class="file-sidebar" v-loading="activeLogsLoading">
             <div class="sidebar-header">
               <span>日志文件</span>
               <ElButton size="small" :icon="Refresh" @click="refreshLogFiles()" :loading="activeLogsLoading" />
             </div>
-            <div class="file-list" :style="{ height: `${logPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }">
+            <div class="file-list">
               <button
                 v-for="file in activeLogFiles"
                 :key="file.path"
@@ -1419,13 +1468,17 @@ function formatSize(size: number): string {
         </div>
 
         <!-- Configs -->
-        <div v-show="activeTab === 'configs'" class="file-panel">
+        <div
+          v-show="activeTab === 'configs'"
+          class="file-panel"
+          :style="{ height: `${configPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT + 42}px` }"
+        >
           <aside class="file-sidebar" v-loading="activeConfigsLoading">
             <div class="sidebar-header">
               <span>配置文件</span>
               <ElButton size="small" :icon="Refresh" @click="refreshConfigFiles()" :loading="activeConfigsLoading" />
             </div>
-            <div class="file-list" :style="{ height: `${configPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }">
+            <div class="file-list">
               <button
                 v-for="file in activeConfigFiles"
                 :key="file.path"
@@ -1451,13 +1504,18 @@ function formatSize(size: number): string {
                   <ElButton v-else size="small" type="primary" @click="enterEditMode">编辑</ElButton>
                 </div>
               </div>
-              <ElInput
+              <div
                 v-if="configEditMode"
-                v-model="configEditorContent"
-                type="textarea"
-                class="config-editor"
-                :input-style="{ height: `${configPreviewHeight}px` }"
-              />
+                class="config-editor-shell"
+                :style="{ height: `${configPreviewHeight}px` }"
+              >
+                <ElInput
+                  v-model="configEditorContent"
+                  type="textarea"
+                  class="config-editor"
+                  :input-style="{ height: '100%' }"
+                />
+              </div>
               <pre
                 v-else
                 class="content-output"
@@ -1478,41 +1536,45 @@ function formatSize(size: number): string {
           </div>
         </div>
       </div>
+      <div v-if="!connected" class="content-mask">
+        <div class="content-mask-card">
+          <div class="content-mask-title">{{ connecting ? '连接中...' : (connectionError ? '连接失败' : '尚未连接') }}</div>
+          <div class="content-mask-desc">
+            {{ connecting ? '正在加载节点配置、日志和配置文件，请稍候。' : (connectionError || '请选择已保存连接，系统会自动发起连接。') }}
+          </div>
+          <ElButton
+            v-if="!connecting && selectedSavedTarget"
+            type="primary"
+            size="small"
+            class="content-mask-action"
+            @click="connectSelectedOrCurrentTarget"
+          >
+            重试连接
+          </ElButton>
+        </div>
+      </div>
     </div>
 
     <!-- Empty State -->
     <div v-else class="empty-state">
       <el-icon :size="48"><Platform /></el-icon>
-      <p>选择已保存连接后点击连接</p>
+      <p>选择已保存连接后会自动发起连接</p>
     </div>
 
     <!-- Create Target Dialog -->
     <ElDialog
       v-model="createTargetDialogVisible"
       :title="targetDialogTitle"
-      width="640px"
+      width="600px"
     >
       <div class="dialog-form">
         <div class="form-row">
           <label>连接名称</label>
           <ElInput v-model="newTargetName" placeholder="留空自动生成" clearable />
         </div>
-        <div class="form-row">
-          <label>模式</label>
-          <ElSelect v-model="newTargetMode" @change="ensureNewTargetNodes">
-            <ElOption label="单机" value="standalone" />
-            <ElOption label="分布式" value="cluster" />
-          </ElSelect>
-        </div>
         <div class="nodes-section">
-          <div v-for="(node, index) in newTargetNodes" :key="index" class="node-row">
-            <ElInput v-model="node.name" placeholder="节点名" class="node-name" clearable />
-            <ElSelect v-model="node.restartScope" class="node-scope">
-              <ElOption label="ALL" value="all" />
-              <ElOption label="CN" value="cn" />
-              <ElOption label="DN" value="dn" />
-            </ElSelect>
-            <ElSelect v-model="node.serverId" placeholder="选择服务器" class="node-server" clearable>
+          <div v-for="(node, index) in newTargetNodes" :key="index" class="node-row-simple">
+            <ElSelect v-model="node.serverId" placeholder="服务器" class="node-server-select" clearable>
               <ElOption
                 v-for="server in serversStore.servers"
                 :key="server.id"
@@ -1520,18 +1582,16 @@ function formatSize(size: number): string {
                 :value="server.id"
               />
             </ElSelect>
-            <ElInput v-model="node.iotdbHome" placeholder="IoTDB 路径" class="node-path" clearable />
+            <ElInput v-model="node.iotdbHome" placeholder="IoTDB 路径" clearable />
             <ElButton
+              v-if="newTargetNodes.length > 1"
               type="danger"
-              size="small"
-              :disabled="newTargetNodes.length <= 1"
+              :icon="Delete"
               @click="removeNewTargetNode(index)"
-            >
-              删除
-            </ElButton>
+            />
           </div>
         </div>
-        <ElButton v-if="newTargetMode === 'cluster'" type="primary" plain @click="addNewTargetNode">
+        <ElButton type="primary" plain size="small" @click="addNewTargetNode">
           添加节点
         </ElButton>
       </div>
@@ -1543,28 +1603,44 @@ function formatSize(size: number): string {
 
     <!-- Manage Targets Dialog -->
     <ElDialog v-model="manageTargetsDialogVisible" title="管理连接" width="600px">
-      <div class="manage-header">
-        <ElButton type="primary" @click="openCreateTargetDialog">新建连接</ElButton>
+      <div v-if="savedTargets.length === 0" class="manage-empty">
+        <el-icon :size="32"><Platform /></el-icon>
+        <p>暂无保存连接</p>
+        <span class="manage-empty-tip">点击下方按钮新建连接</span>
       </div>
-      <div v-if="savedTargets.length === 0" class="manage-empty">暂无保存连接</div>
       <div v-else class="target-list">
-        <div v-for="target in savedTargets" :key="target.id" class="target-item">
-          <div class="target-info">
-            <div class="target-name">
-              {{ target.name }}
-              <ElTag size="small" effect="plain">{{ target.mode === 'cluster' ? '分布式' : '单机' }}</ElTag>
+        <div
+          v-for="target in savedTargets"
+          :key="target.id"
+          class="target-card"
+          @click="loadSavedTarget(target)"
+        >
+          <div class="target-card-row">
+            <div class="target-card-icon">
+              <el-icon :size="16"><Platform /></el-icon>
             </div>
-            <div class="target-nodes">
-              {{ target.nodes.map(n => getNodeDisplayName(n)).join(', ') }}
+            <div class="target-card-info">
+              <div class="target-card-name">
+                <span>{{ target.name }}</span>
+                <ElTag size="small" effect="plain">{{ target.mode === 'cluster' ? '分布式' : '单机' }}</ElTag>
+              </div>
+              <div class="target-card-nodes">
+                <div v-for="node in target.nodes" :key="node.id" class="node-line">
+                  <span class="node-main">{{ node.name || getNodeTitle(node) }}</span>
+                  <span class="node-sub">{{ serversStore.servers.find(s => s.id === node.serverId)?.host || `Server ${node.serverId}` }} · {{ node.iotdbHome }}</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="target-actions">
-            <ElButton size="small" type="primary" @click="loadSavedTarget(target)">加载</ElButton>
-            <ElButton size="small" @click="openEditTargetDialog(target)">编辑</ElButton>
-            <ElButton size="small" type="danger" :disabled="connected" @click="deleteSavedTarget(target)">删除</ElButton>
+            <div class="target-card-actions">
+              <ElButton size="small" @click.stop="openEditTargetDialog(target)">编辑</ElButton>
+              <ElButton size="small" type="danger" :disabled="connected" @click.stop="deleteSavedTarget(target)">删除</ElButton>
+            </div>
           </div>
         </div>
       </div>
+      <template #footer>
+        <ElButton type="primary" @click="openCreateTargetDialog">新建连接</ElButton>
+      </template>
     </ElDialog>
   </div>
 </template>
@@ -1591,15 +1667,91 @@ function formatSize(size: number): string {
 }
 
 .target-select {
-  width: 240px;
+  width: 280px;
+}
+
+.saved-target-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.saved-target-option-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1e293b;
+}
+
+.saved-target-option-meta {
+  color: #94a3b8;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.target-select :deep(.el-select__selected-item) {
+  min-width: 0;
 }
 
 /* Content Area */
 .content-area {
+  position: relative;
   background: #ffffff;
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   overflow: hidden;
+}
+
+.content-area.is-disabled {
+  user-select: none;
+}
+
+.content-area.is-disabled .tabs-header,
+.content-area.is-disabled .tab-content {
+  pointer-events: none;
+  filter: grayscale(0.15);
+}
+
+.content-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(1px);
+}
+
+.content-mask-card {
+  max-width: 320px;
+  padding: 16px 18px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.content-mask-title {
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.content-mask-desc {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.content-mask-action {
+  margin-top: 12px;
 }
 
 /* Tabs Header */
@@ -1739,6 +1891,10 @@ function formatSize(size: number): string {
   width: 140px;
 }
 
+.cli-param :deep(.el-select) {
+  width: 140px;
+}
+
 .cli-actions {
   display: flex;
   gap: 4px;
@@ -1775,6 +1931,7 @@ function formatSize(size: number): string {
 .file-panel {
   display: grid;
   grid-template-columns: 300px 1fr;
+  align-items: start;
 }
 
 .file-sidebar {
@@ -1782,6 +1939,7 @@ function formatSize(size: number): string {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1797,6 +1955,7 @@ function formatSize(size: number): string {
 
 .file-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1880,12 +2039,16 @@ function formatSize(size: number): string {
 .content-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .content-actions :deep(.el-tag) {
   height: 28px;
   line-height: 26px;
+}
+
+.content-actions :deep(.el-button) {
+  margin: 0;
 }
 
 .content-output {
@@ -1908,12 +2071,32 @@ function formatSize(size: number): string {
   color: #d4d4d4;
 }
 
+.config-editor-shell {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .config-editor {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .config-editor :deep(.el-textarea) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   height: 100%;
+}
+
+.config-editor :deep(.el-textarea__inner) {
+  flex: 1;
+  min-height: 0;
+  height: 100% !important;
+  box-sizing: border-box;
 }
 
 .config-editor :deep(textarea) {
@@ -1967,19 +2150,20 @@ function formatSize(size: number): string {
 .dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .form-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .form-row label {
-  width: 80px;
-  font-size: 13px;
-  color: #64748b;
+  width: 90px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
 }
 
 .form-row :deep(.el-input),
@@ -1993,23 +2177,38 @@ function formatSize(size: number): string {
   gap: 8px;
 }
 
-.node-row {
-  display: grid;
-  grid-template-columns: 100px 80px 1fr 1fr auto;
+.node-row-simple {
+  display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.manage-header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
+.node-server-select {
+  width: 180px;
+}
+
+.node-row-simple :deep(.el-input) {
+  flex: 1;
 }
 
 .manage-empty {
-  padding: 32px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 20px;
   color: #94a3b8;
+}
+
+.manage-empty p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.manage-empty-tip {
+  font-size: 12px;
 }
 
 .target-list {
@@ -2018,39 +2217,79 @@ function formatSize(size: number): string {
   gap: 8px;
 }
 
-.target-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  background: #f8fafc;
+.target-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.target-info {
+.target-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.target-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.target-card-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 8px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.target-card-info {
+  flex: 1;
   min-width: 0;
 }
 
-.target-name {
+.target-card-name {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.target-card-nodes {
+  margin-top: 6px;
+}
+
+.node-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.node-main {
+  font-size: 13px;
   font-weight: 500;
   color: #1e293b;
-  margin-bottom: 4px;
 }
 
-.target-nodes {
-  font-size: 12px;
+.node-sub {
+  font-size: 11px;
   color: #64748b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
 }
 
-.target-actions {
+.target-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Empty State */
@@ -2091,8 +2330,13 @@ function formatSize(size: number): string {
     width: 120px;
   }
 
-  .node-row {
-    grid-template-columns: 1fr 1fr;
+  .node-card-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .node-field-large {
+    flex: none;
   }
 }
 </style>
