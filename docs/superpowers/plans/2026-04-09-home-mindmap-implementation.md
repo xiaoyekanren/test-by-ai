@@ -1,57 +1,36 @@
-<script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { Monitor, Setting, Document, DataAnalysis, Platform } from '@element-plus/icons-vue'
+# 首页思维导图重设计 Implementation Plan
 
-const router = useRouter()
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-const rootFeature = {
-  title: '服务器管理',
-  description: '统一维护 SSH 连接、认证信息和远程执行入口，是整个平台能力的起点。',
-  icon: Setting,
-  path: '/servers',
-  color: '#3b82f6'
-}
+**Goal:** 将首页从 Hero+Flow Map 结构重构为纯思维导图式垂直树形布局，扁平简约风格。
 
-const branches = [
-  {
-    title: '系统监控',
-    description: '从服务器连接延伸到 CPU、内存、磁盘和进程监控。',
-    icon: Monitor,
-    path: '/monitor',
-    color: '#10b981',
-    eyebrow: '观测'
-  },
-  {
-    title: 'IoTDB可视化',
-    description: '基于已管理服务器连接 IoTDB，查看日志、配置和 CLI。',
-    icon: Platform,
-    path: '/iotdb',
-    color: '#ef4444',
-    eyebrow: '数据服务'
-  },
-  {
-    title: '工作流管理',
-    description: '把服务器操作编排成拖拽式工作流，沉淀自动化执行能力。',
-    icon: Document,
-    path: '/workflows',
-    color: '#f59e0b',
-    eyebrow: '自动化'
-  }
-]
+**Architecture:** 单文件 Vue 组件重写，移除 Hero 和底部信息区，用 SVG 绘制连接线，垂直树形结构展示模块关系。
 
-const branchExtension = {
-  title: '运行分析',
-  description: '工作流执行后的历史、状态和性能分析，属于自动化链路的结果视图。',
-  icon: DataAnalysis,
-  path: '/executions',
-  color: '#8b5cf6'
-}
+**Tech Stack:** Vue 3 + Element Plus + SVG
 
-const navigateTo = (path: string) => {
-  router.push(path)
-}
-</script>
+---
 
+## Files
+
+- Modify: `frontend/src/views/HomeView.vue` — 完整重写模板和样式
+- Spec: `docs/superpowers/specs/2026-04-09-home-redesign-mindmap-design.md`
+
+---
+
+### Task 1: 重写 HomeView.vue 模板结构
+
+**Files:**
+- Modify: `frontend/src/views/HomeView.vue`
+
+- [ ] **Step 1: 移除 Hero Section 和 quick-info，保留脚本部分**
+
+保留现有 script setup 中的数据定义（rootFeature, branches, branchExtension, quickLinks 可移除，navigateTo 保留）。
+
+模板只保留一个 `.home-view` 容器，内部为 `.mindmap` 区域。
+
+- [ ] **Step 2: 编写新的模板结构**
+
+```vue
 <template>
   <div class="home-view">
     <section class="mindmap">
@@ -113,7 +92,76 @@ const navigateTo = (path: string) => {
     </section>
   </div>
 </template>
+```
 
+- [ ] **Step 3: 清理 script setup，移除 quickLinks**
+
+```vue
+<script setup lang="ts">
+import { useRouter } from 'vue-router'
+import { Monitor, Setting, Document, DataAnalysis, Platform } from '@element-plus/icons-vue'
+
+const router = useRouter()
+
+const rootFeature = {
+  title: '服务器管理',
+  description: '统一维护 SSH 连接、认证信息和远程执行入口，是整个平台能力的起点。',
+  icon: Setting,
+  path: '/servers',
+  color: '#3b82f6'
+}
+
+const branches = [
+  {
+    title: '系统监控',
+    description: '从服务器连接延伸到 CPU、内存、磁盘和进程监控。',
+    icon: Monitor,
+    path: '/monitor',
+    color: '#10b981',
+    eyebrow: '观测'
+  },
+  {
+    title: 'IoTDB可视化',
+    description: '基于已管理服务器连接 IoTDB，查看日志、配置和 CLI。',
+    icon: Platform,
+    path: '/iotdb',
+    color: '#ef4444',
+    eyebrow: '数据服务'
+  },
+  {
+    title: '工作流管理',
+    description: '把服务器操作编排成拖拽式工作流，沉淀自动化执行能力。',
+    icon: Document,
+    path: '/workflows',
+    color: '#f59e0b',
+    eyebrow: '自动化'
+  }
+]
+
+const branchExtension = {
+  title: '运行分析',
+  description: '工作流执行后的历史、状态和性能分析，属于自动化链路的结果视图。',
+  icon: DataAnalysis,
+  path: '/executions',
+  color: '#8b5cf6'
+}
+
+const navigateTo = (path: string) => {
+  router.push(path)
+}
+</script>
+```
+
+---
+
+### Task 2: 编写扁平简约样式
+
+**Files:**
+- Modify: `frontend/src/views/HomeView.vue`
+
+- [ ] **Step 1: 编写完整样式**
+
+```vue
 <style scoped>
 .home-view {
   min-height: 100%;
@@ -291,3 +339,40 @@ const navigateTo = (path: string) => {
   }
 }
 </style>
+```
+
+---
+
+### Task 3: 验证并提交
+
+**Files:**
+- Modify: `frontend/src/views/HomeView.vue`
+
+- [ ] **Step 1: 启动前端开发服务器验证**
+
+Run: `cd /Users/zzm/Desktop/test-by-ai/frontend && npm run dev`
+Expected: 页面正常显示，无报错
+
+- [ ] **Step 2: 浏览器检查**
+
+打开首页，验证：
+- Hero Section 已移除
+- 底部信息区已移除
+- 垂直树形布局正确显示
+- 连接线 SVG 正常渲染
+- 卡片点击导航正常
+- hover 效果正常
+
+- [ ] **Step 3: 提交更改**
+
+```bash
+git add frontend/src/views/HomeView.vue docs/superpowers/specs/2026-04-09-home-redesign-mindmap-design.md
+git commit -m "refactor: redesign home page with mindmap layout
+
+- Remove Hero section and bottom info area
+- Use vertical tree structure with flat/minimal style
+- SVG connecting lines with thin gray lines and small nodes
+- All card levels use unified flat style
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
