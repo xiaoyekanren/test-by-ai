@@ -81,8 +81,16 @@ const streamingLog = ref(false)
 const logFilesByNode = ref<Record<string, IoTDBFileInfo[]>>({})
 const logContentByNode = ref<Record<string, string>>({})
 const logsLoadingByNode = ref<Record<string, boolean>>({})
+const LOG_PREVIEW_DEFAULT_HEIGHT = 720
+const LOG_PREVIEW_MIN_HEIGHT = 360
+const LOG_PREVIEW_MAX_HEIGHT = 1200
+const LOG_RESIZE_HANDLE_HEIGHT = 18
+const logPreviewHeight = ref(LOG_PREVIEW_DEFAULT_HEIGHT)
+const resizingLogPreview = ref(false)
 const logContentLoadingByNode = ref<Record<string, boolean>>({})
 const logOutputRef = ref<HTMLElement | null>(null)
+let logPreviewResizeStartY = 0
+let logPreviewResizeStartHeight = LOG_PREVIEW_DEFAULT_HEIGHT
 
 // Config state
 const selectedConfigFile = ref('')
@@ -92,6 +100,10 @@ const configFilesByNode = ref<Record<string, IoTDBFileInfo[]>>({})
 const configContentByNode = ref<Record<string, string>>({})
 const configsLoadingByNode = ref<Record<string, boolean>>({})
 const configSavingByNode = ref<Record<string, boolean>>({})
+const configPreviewHeight = ref(LOG_PREVIEW_DEFAULT_HEIGHT)
+const resizingConfigPreview = ref(false)
+let configPreviewResizeStartY = 0
+let configPreviewResizeStartHeight = LOG_PREVIEW_DEFAULT_HEIGHT
 
 // Computed
 const selectedSavedTarget = computed(() => {
@@ -505,6 +517,62 @@ function stopLogStream() {
   streamingLog.value = false
 }
 
+function clampLogPreviewHeight(height: number) {
+  return Math.min(LOG_PREVIEW_MAX_HEIGHT, Math.max(LOG_PREVIEW_MIN_HEIGHT, height))
+}
+
+function handleLogPreviewResizeMove(event: PointerEvent) {
+  if (!resizingLogPreview.value) return
+  const deltaY = event.clientY - logPreviewResizeStartY
+  logPreviewHeight.value = clampLogPreviewHeight(logPreviewResizeStartHeight + deltaY)
+}
+
+function stopLogPreviewResize() {
+  if (!resizingLogPreview.value) return
+  resizingLogPreview.value = false
+  document.body.classList.remove('is-resizing-log-preview')
+  window.removeEventListener('pointermove', handleLogPreviewResizeMove)
+  window.removeEventListener('pointerup', stopLogPreviewResize)
+  window.removeEventListener('pointercancel', stopLogPreviewResize)
+}
+
+function startLogPreviewResize(event: PointerEvent) {
+  event.preventDefault()
+  resizingLogPreview.value = true
+  logPreviewResizeStartY = event.clientY
+  logPreviewResizeStartHeight = logPreviewHeight.value
+  document.body.classList.add('is-resizing-log-preview')
+  window.addEventListener('pointermove', handleLogPreviewResizeMove)
+  window.addEventListener('pointerup', stopLogPreviewResize)
+  window.addEventListener('pointercancel', stopLogPreviewResize)
+}
+
+function handleConfigPreviewResizeMove(event: PointerEvent) {
+  if (!resizingConfigPreview.value) return
+  const deltaY = event.clientY - configPreviewResizeStartY
+  configPreviewHeight.value = clampLogPreviewHeight(configPreviewResizeStartHeight + deltaY)
+}
+
+function stopConfigPreviewResize() {
+  if (!resizingConfigPreview.value) return
+  resizingConfigPreview.value = false
+  document.body.classList.remove('is-resizing-config-preview')
+  window.removeEventListener('pointermove', handleConfigPreviewResizeMove)
+  window.removeEventListener('pointerup', stopConfigPreviewResize)
+  window.removeEventListener('pointercancel', stopConfigPreviewResize)
+}
+
+function startConfigPreviewResize(event: PointerEvent) {
+  event.preventDefault()
+  resizingConfigPreview.value = true
+  configPreviewResizeStartY = event.clientY
+  configPreviewResizeStartHeight = configPreviewHeight.value
+  document.body.classList.add('is-resizing-config-preview')
+  window.addEventListener('pointermove', handleConfigPreviewResizeMove)
+  window.addEventListener('pointerup', stopConfigPreviewResize)
+  window.addEventListener('pointercancel', stopConfigPreviewResize)
+}
+
 function getActiveNodeId() {
   return activeNode.value?.id || ''
 }
@@ -658,6 +726,8 @@ onMounted(async () => {
 onUnmounted(() => {
   stopLogStream()
   closePersistentCliSession()
+  stopLogPreviewResize()
+  stopConfigPreviewResize()
   disposePersistentTerminal()
 })
 
@@ -1222,10 +1292,17 @@ function formatSize(size: number): string {
           <div class="cli-params">
             <ElButton size="small">切换模型（待实现）</ElButton>
             <div class="cli-actions">
+              <ElTag
+                :type="activePersistentCliConnected ? 'success' : (activeCliDefaultsLoading ? 'warning' : 'info')"
+                effect="plain"
+              >
+                {{ activePersistentCliConnected ? 'CLI 已连接' : (activeCliDefaultsLoading ? '读取 CLI 参数中' : 'CLI 未连接') }}
+              </ElTag>
               <ElButton
                 v-if="!activePersistentCliConnected"
                 type="primary"
-                :loading="activePersistentCliConnecting"
+                :loading="activePersistentCliConnecting || activeCliDefaultsLoading"
+                :disabled="!activeCliDefaultsLoaded"
                 @click="handleConnectPersistentCli"
               >
                 连接 CLI
@@ -1244,7 +1321,7 @@ function formatSize(size: number): string {
               <ElInput
                 v-model="activeCliHost"
                 placeholder="127.0.0.1"
-                :disabled="activePersistentCliConnected || activePersistentCliConnecting"
+                :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
               />
             </div>
             <div class="cli-param">
@@ -1252,7 +1329,7 @@ function formatSize(size: number): string {
               <ElInput
                 v-model.number="activeCliPort"
                 placeholder="6667"
-                :disabled="activePersistentCliConnected || activePersistentCliConnecting"
+                :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
               />
             </div>
             <div class="cli-param">
@@ -1275,9 +1352,12 @@ function formatSize(size: number): string {
             </div>
           </div>
           <div
-            :ref="element => setPersistentTerminalRef(element, activeNode?.id)"
+            v-for="node in connectedNodes"
+            v-show="activeNodeId === node.id"
+            :key="node.id"
+            :ref="element => setPersistentTerminalRef(element, node.id)"
             class="cli-terminal"
-            @click="focusPersistentTerminal(activeNode?.id)"
+            @click="focusPersistentTerminal(node.id)"
           ></div>
         </div>
 
@@ -1288,7 +1368,7 @@ function formatSize(size: number): string {
               <span>日志文件</span>
               <ElButton size="small" :icon="Refresh" @click="refreshLogFiles()" :loading="activeLogsLoading" />
             </div>
-            <div class="file-list">
+            <div class="file-list" :style="{ height: `${logPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }">
               <button
                 v-for="file in activeLogFiles"
                 :key="file.path"
@@ -1318,7 +1398,21 @@ function formatSize(size: number): string {
                   </ElButton>
                 </div>
               </div>
-              <pre ref="logOutputRef" class="content-output">{{ activeLogContent || '等待日志...' }}</pre>
+              <pre
+                ref="logOutputRef"
+                class="content-output log-output"
+                :style="{ height: `${logPreviewHeight}px` }"
+              >{{ activeLogContent || '等待日志...' }}</pre>
+              <button
+                type="button"
+                class="log-resize-handle"
+                :class="{ active: resizingLogPreview }"
+                aria-label="拖拽调整日志预览高度"
+                title="拖拽调整日志预览高度"
+                @pointerdown="startLogPreviewResize"
+              >
+                <span />
+              </button>
             </div>
             <div v-else class="content-placeholder">选择日志文件</div>
           </div>
@@ -1331,7 +1425,7 @@ function formatSize(size: number): string {
               <span>配置文件</span>
               <ElButton size="small" :icon="Refresh" @click="refreshConfigFiles()" :loading="activeConfigsLoading" />
             </div>
-            <div class="file-list">
+            <div class="file-list" :style="{ height: `${configPreviewHeight + LOG_RESIZE_HANDLE_HEIGHT}px` }">
               <button
                 v-for="file in activeConfigFiles"
                 :key="file.path"
@@ -1362,8 +1456,23 @@ function formatSize(size: number): string {
                 v-model="configEditorContent"
                 type="textarea"
                 class="config-editor"
+                :input-style="{ height: `${configPreviewHeight}px` }"
               />
-              <pre v-else class="content-output">{{ activeConfigContent }}</pre>
+              <pre
+                v-else
+                class="content-output"
+                :style="{ height: `${configPreviewHeight}px` }"
+              >{{ activeConfigContent }}</pre>
+              <button
+                type="button"
+                class="config-resize-handle"
+                :class="{ active: resizingConfigPreview }"
+                aria-label="拖拽调整配置预览高度"
+                title="拖拽调整配置预览高度"
+                @pointerdown="startConfigPreviewResize"
+              >
+                <span />
+              </button>
             </div>
             <div v-else class="content-placeholder">选择配置文件</div>
           </div>
@@ -1630,13 +1739,25 @@ function formatSize(size: number): string {
 .cli-actions {
   display: flex;
   gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .cli-terminal {
-  height: 500px;
+  position: relative;
+  border: 1px solid #303743;
+  border-radius: 4px;
+  height: 720px;
+  min-height: 360px;
   background: #1e293b;
-  padding: 12px;
+  padding: 8px;
   overflow: hidden;
+  outline: none;
+}
+
+.cli-terminal:focus-within {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
 }
 
 .cli-terminal :deep(.xterm) {
@@ -1651,7 +1772,6 @@ function formatSize(size: number): string {
 .file-panel {
   display: grid;
   grid-template-columns: 300px 1fr;
-  height: 600px;
 }
 
 .file-sidebar {
@@ -1766,8 +1886,6 @@ function formatSize(size: number): string {
 }
 
 .content-output {
-  flex: 1;
-  min-height: 0;
   padding: 12px;
   margin: 0;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -1780,6 +1898,11 @@ function formatSize(size: number): string {
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 100%;
+}
+
+.log-output {
+  background: #1e1e1e;
+  color: #d4d4d4;
 }
 
 .config-editor {
@@ -1797,6 +1920,35 @@ function formatSize(size: number): string {
   background: #f8fafc;
   height: 100% !important;
   resize: none;
+}
+
+.log-resize-handle,
+.config-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 18px;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+  cursor: ns-resize;
+  padding: 0;
+}
+
+.log-resize-handle span,
+.config-resize-handle span {
+  width: 52px;
+  height: 4px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.log-resize-handle.active span,
+.config-resize-handle.active span,
+.log-resize-handle:hover span,
+.config-resize-handle:hover span {
+  background: #94a3b8;
 }
 
 .content-placeholder {
