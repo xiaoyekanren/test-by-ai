@@ -243,43 +243,45 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px 20px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
   background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 .toolbar-title h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
 }
 
 .toolbar-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
 }
 
 .settings-card {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-size: 12px;
 }
 
 .unit {
-  margin-left: 8px;
-  color: #909399;
+  margin-left: 6px;
+  color: #94a3b8;
+  font-size: 10px;
 }
 
 .hint {
-  margin-left: 12px;
-  color: #909399;
-  font-size: 12px;
+  margin-left: 10px;
+  color: #94a3b8;
+  font-size: 10px;
 }
 </style>
