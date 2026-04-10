@@ -55,11 +55,6 @@ const navigateTo = (path: string) => {
 <template>
   <div class="home-view">
     <section class="mindmap">
-      <div class="mindmap-head">
-        <div class="mindmap-label">模块关系</div>
-        <p class="mindmap-desc">服务器管理是起点，向外分出监控、IoTDB 和工作流，工作流再延伸到运行分析。</p>
-      </div>
-
       <div class="mindmap-canvas">
         <!-- 中心卡片 -->
         <div class="center-card" @click="navigateTo(rootFeature.path)">
@@ -73,15 +68,15 @@ const navigateTo = (path: string) => {
         </div>
 
         <!-- 主连接线 -->
-        <svg class="line-main" width="520" height="28" viewBox="0 0 520 28">
-          <line x1="260" y1="0" x2="260" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="100" y1="10" x2="420" y2="10" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="100" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="260" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="420" cy="10" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="100" y1="10" x2="100" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="260" y1="10" x2="260" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="420" y1="10" x2="420" y2="28" stroke="#cbd5e1" stroke-width="1.5"/>
+        <svg class="line-main" width="716" height="36" viewBox="0 0 716 36">
+          <line x1="358" y1="0" x2="358" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="110" y1="12" x2="606" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="110" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="358" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="606" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="110" y1="12" x2="110" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="358" y1="12" x2="358" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="606" y1="12" x2="606" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
         </svg>
 
         <!-- 三个分支卡片 -->
@@ -105,9 +100,9 @@ const navigateTo = (path: string) => {
         </div>
 
         <!-- 工作流到运行分析的连接线 -->
-        <svg class="line-sub" width="520" height="24" viewBox="0 0 520 24">
-          <line x1="420" y1="0" x2="420" y2="24" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="420" cy="24" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
+        <svg class="line-sub" width="716" height="30" viewBox="0 0 716 30">
+          <line x1="606" y1="0" x2="606" y2="30" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="606" cy="30" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
         </svg>
 
         <!-- 运行分析卡片 -->
@@ -130,72 +125,58 @@ const navigateTo = (path: string) => {
 
 <style scoped>
 .home-view {
-  min-height: 100%;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 20px;
+  justify-content: center;
+  padding: 8px 20px 24px;
 }
 
 .mindmap {
   width: 100%;
-  max-width: 1000px;
-}
-
-.mindmap-head {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.mindmap-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.mindmap-desc {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.5;
+  max-width: 1120px;
+  display: flex;
+  justify-content: center;
 }
 
 .mindmap-canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
 }
 
 .center-card {
-  width: 280px;
+  width: 348px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  gap: 18px;
+  padding: 20px 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #93c5fd;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(59, 130, 246, 0.12);
   cursor: pointer;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .center-card:hover {
   border-color: #3b82f6;
-  transform: translateY(-2px);
+  box-shadow: 0 22px 46px rgba(59, 130, 246, 0.18);
+  transform: translateY(-3px);
 }
 
 .center-icon {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 14px;
   color: white;
   flex-shrink: 0;
+  box-shadow: 0 12px 28px rgba(59, 130, 246, 0.2);
 }
 
 .center-content {
@@ -204,16 +185,16 @@ const navigateTo = (path: string) => {
 }
 
 .center-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: #1e293b;
 }
 
 .center-desc {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 13px;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.55;
 }
 
 .line-main,
@@ -223,24 +204,26 @@ const navigateTo = (path: string) => {
 
 .branch-row {
   display: flex;
-  gap: 16px;
+  gap: 28px;
 }
 
 .branch-card {
-  width: 160px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 12px;
+  padding: 18px 16px;
   background: white;
   border: 1px solid;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .branch-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
 }
 
 .branch-icon {
@@ -273,35 +256,36 @@ const navigateTo = (path: string) => {
 }
 
 .branch-desc {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .sub-card-wrap {
   display: flex;
   justify-content: flex-end;
   width: 100%;
-  max-width: 520px;
-  padding-right: 10px;
+  max-width: 716px;
 }
 
 .sub-card {
-  width: 160px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 14px;
+  padding: 16px 16px;
   background: white;
   border: 1px solid #8b5cf6;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.08);
 }
 
 .sub-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 32px rgba(139, 92, 246, 0.14);
 }
 
 .sub-icon {
@@ -334,21 +318,26 @@ const navigateTo = (path: string) => {
 }
 
 .sub-desc {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 @media (max-width: 640px) {
+  .home-view {
+    min-height: auto;
+    justify-content: flex-start;
+  }
+
   .branch-row {
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
   }
 
   .branch-card {
-    width: 180px;
+    width: 240px;
   }
 
   .line-main {
@@ -365,7 +354,7 @@ const navigateTo = (path: string) => {
   }
 
   .sub-card {
-    width: 180px;
+    width: 240px;
   }
 }
 </style>
