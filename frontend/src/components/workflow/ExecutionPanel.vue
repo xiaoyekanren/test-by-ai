@@ -231,19 +231,8 @@ onUnmounted(() => {
     </div>
 
     <!-- Execution Controls -->
-    <div class="execution-controls">
+    <div v-if="canStop" class="execution-controls">
       <ElButton
-        type="success"
-        :icon="VideoPlay"
-        :loading="isStarting"
-        :disabled="!canRun"
-        @click="handleRun"
-      >
-        {{ isStarting ? 'Starting...' : 'Run Workflow' }}
-      </ElButton>
-
-      <ElButton
-        v-if="canStop"
         type="danger"
         :icon="VideoPause"
         :loading="isStopping"
