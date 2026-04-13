@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -59,6 +59,7 @@ const draggedType = ref<NodeType | null>(null)
 // Execution panel state
 const showExecutionPanel = ref(false)
 const executionRunRequestId = ref(0)
+const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
 const configDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
@@ -374,6 +375,12 @@ const handleExecutionCompleted = (execution: Execution) => {
     ElMessage.info('Workflow execution completed with partial results')
   }
 }
+
+const handleExecutionStatusDblclick = async (nodeId: string) => {
+  showExecutionPanel.value = true
+  await nextTick()
+  executionPanelRef.value?.openLogsForNode(nodeId)
+}
 </script>
 
 <template>
@@ -431,6 +438,7 @@ const handleExecutionCompleted = (execution: Execution) => {
               :execution-status="nodeExecutionStatusById.get(nodeProps.id) || null"
               @click="handleNodeClick(nodeProps.id)"
               @dblclick="handleNodeDoubleClick(nodeProps.id)"
+              @execution-status-dblclick="handleExecutionStatusDblclick"
             />
           </template>
         </VueFlow>
@@ -446,6 +454,7 @@ const handleExecutionCompleted = (execution: Execution) => {
       <!-- Execution Panel (right side, toggleable) -->
       <ExecutionPanel
         v-if="showExecutionPanel"
+        ref="executionPanelRef"
         :workflow-id="workflowId"
         :run-request-id="executionRunRequestId"
         @execution-started="handleExecutionStarted"
