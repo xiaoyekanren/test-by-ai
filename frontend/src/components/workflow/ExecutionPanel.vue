@@ -25,6 +25,7 @@ import type { Execution, ExecutionStatus } from '@/types'
 
 const props = defineProps<{
   workflowId: number | null
+  runRequestId?: number
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +40,7 @@ const isStarting = ref(false)
 const isStopping = ref(false)
 const logsExpanded = ref(['logs'])
 const selectedNodeFilter = ref<string | null>(null)
+const handledRunRequestId = ref(0)
 
 // Polling timer
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -48,6 +50,9 @@ const currentExecution = computed(() => executionsStore.currentExecution)
 const nodeExecutions = computed(() => executionsStore.nodeExecutions)
 
 const executionStatus = computed(() => currentExecution.value?.status || null)
+const displayExecutionStatus = computed(() => executionStatus.value || (isStarting.value ? 'running' : null))
+const displayDuration = computed(() => currentExecution.value?.duration ?? null)
+const hasExecutionView = computed(() => Boolean(currentExecution.value) || isStarting.value)
 
 const isRunning = computed(() =>
   executionStatus.value === 'running' || executionStatus.value === 'pending'
@@ -108,9 +113,13 @@ const getNodeStatusInfo = (status: string) => {
 
 // Run workflow
 const handleRun = async () => {
-  if (!props.workflowId) return
+  if (!props.workflowId || !canRun.value) return
 
   isStarting.value = true
+  selectedNodeFilter.value = null
+  stopPolling()
+  executionsStore.clearCurrentExecution()
+
   try {
     const execution = await executionsStore.createExecution({
       workflow_id: props.workflowId,
@@ -185,6 +194,14 @@ const filteredNodeExecutions = computed(() => {
   return nodeExecutions.value.filter(ne => ne.node_id === selectedNodeFilter.value)
 })
 
+watch(() => props.runRequestId, (requestId) => {
+  const nextRequestId = requestId ?? 0
+  if (nextRequestId <= handledRunRequestId.value) return
+
+  handledRunRequestId.value = nextRequestId
+  void handleRun()
+}, { immediate: true })
+
 // Watch workflow ID changes
 watch(() => props.workflowId, () => {
   handleClear()
@@ -237,7 +254,7 @@ onUnmounted(() => {
     </div>
 
     <!-- No Execution State -->
-    <div v-if="!currentExecution" class="no-execution">
+    <div v-if="!hasExecutionView" class="no-execution">
       <ElEmpty description="No execution running">
         <template #image>
           <ElIcon :size="48" color="#c0c4cc">
@@ -253,18 +270,18 @@ onUnmounted(() => {
       <!-- Status Header -->
       <div class="status-header">
         <div class="status-badge" :style="{
-          backgroundColor: getStatusInfo(executionStatus || 'pending').bgColor,
-          color: getStatusInfo(executionStatus || 'pending').color
+          backgroundColor: getStatusInfo(displayExecutionStatus || 'pending').bgColor,
+          color: getStatusInfo(displayExecutionStatus || 'pending').color
         }">
-          <ElIcon class="status-icon" :class="{ 'is-loading': executionStatus === 'running' }">
-            <component :is="getStatusInfo(executionStatus || 'pending').icon" />
+          <ElIcon class="status-icon" :class="{ 'is-loading': displayExecutionStatus === 'running' }">
+            <component :is="getStatusInfo(displayExecutionStatus || 'pending').icon" />
           </ElIcon>
-          <span>{{ getStatusInfo(executionStatus || 'pending').label }}</span>
+          <span>{{ isStarting && !currentExecution ? 'Starting' : getStatusInfo(displayExecutionStatus || 'pending').label }}</span>
         </div>
 
         <div class="execution-time">
           <ElIcon><Timer /></ElIcon>
-          <span>{{ formatDuration(currentExecution.duration) }}</span>
+          <span>{{ formatDuration(displayDuration) }}</span>
         </div>
       </div>
 
@@ -276,7 +293,7 @@ onUnmounted(() => {
         </div>
         <ElProgress
           :percentage="progressPercent"
-          :status="executionStatus === 'failed' ? 'exception' : executionStatus === 'completed' ? 'success' : undefined"
+          :status="displayExecutionStatus === 'failed' ? 'exception' : displayExecutionStatus === 'completed' ? 'success' : undefined"
           :stroke-width="8"
         />
       </div>
@@ -366,7 +383,7 @@ onUnmounted(() => {
       </ElCollapse>
 
       <!-- Execution Result Summary -->
-      <div v-if="currentExecution.result" class="result-summary">
+      <div v-if="currentExecution?.result" class="result-summary">
         <div class="result-header">
           <ElIcon :size="20" :color="currentExecution.result === 'passed' ? '#67C23A' : '#F56C6C'">
             <component :is="currentExecution.result === 'passed' ? CircleCheck : CircleClose" />
@@ -383,6 +400,9 @@ onUnmounted(() => {
 <style scoped>
 .execution-panel {
   height: 100%;
+  width: 380px;
+  min-width: 380px;
+  flex: 0 0 380px;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -510,6 +530,7 @@ onUnmounted(() => {
 
 .node-list {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -590,12 +611,13 @@ onUnmounted(() => {
 }
 
 .logs-content {
-  max-height: 200px;
+  height: 200px;
   border-top: 1px solid #e4e7ed;
+  overflow: hidden;
 }
 
 .logs-scroll {
-  height: 100%;
+  height: 200px;
 }
 
 .no-logs {

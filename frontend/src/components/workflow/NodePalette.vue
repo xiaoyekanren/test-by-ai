@@ -131,6 +131,8 @@ const getIcon = (iconName: string) => {
 <style scoped>
 .node-palette {
   width: 280px;
+  min-width: 280px;
+  flex: 0 0 280px;
   height: 100%;
   background: #fff;
   border-right: 1px solid #dcdfe6;
@@ -152,6 +154,7 @@ const getIcon = (iconName: string) => {
 
 .palette-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
