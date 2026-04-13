@@ -107,18 +107,41 @@ const getNodeStatusInfo = (status: string) => {
   return nodeStatusConfig[status] || nodeStatusConfig.pending
 }
 
+const normalizeLogText = (value: string): string => {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+}
+
 const formatLogData = (value: unknown): string => {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return normalizeLogText(value)
 
   if (typeof value === 'object' && !Array.isArray(value)) {
-    const entries = Object.entries(value as Record<string, unknown>)
+    const record = value as Record<string, unknown>
+    const logSections: string[] = []
+
+    if (typeof record.stdout === 'string' && record.stdout) {
+      logSections.push(normalizeLogText(record.stdout))
+    }
+    if (typeof record.stderr === 'string' && record.stderr) {
+      logSections.push(`stderr:\n${normalizeLogText(record.stderr)}`)
+    }
+    if (typeof record.error === 'string' && record.error) {
+      logSections.push(`error:\n${normalizeLogText(record.error)}`)
+    }
+    if (logSections.length > 0) {
+      return logSections.join('\n\n')
+    }
+
+    const entries = Object.entries(record)
     if (entries.length === 1 && typeof entries[0][1] === 'string') {
-      return entries[0][1]
+      return normalizeLogText(entries[0][1])
     }
   }
 
-  return JSON.stringify(value, null, 2)
+  return normalizeLogText(JSON.stringify(value, null, 2))
 }
 
 // Run workflow
