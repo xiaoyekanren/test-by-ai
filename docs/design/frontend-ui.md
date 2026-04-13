@@ -1,0 +1,80 @@
+# 前端 UI 设计
+
+## 概述
+
+本文档记录前端 UI 设计规范和关键技术决策。
+
+## 布局架构
+
+### 主布局结构
+
+采用 Element Plus 的 Container 布局组件：
+
+```
+┌─────────────────────────────────────────────┐
+│ Sidebar (aside) │  Header (56px)            │
+│                 │────────────────────────────│
+│  180px / 52px   │  Main (flex-1)             │
+│  (可折叠)       │    padding: 12px           │
+│                 │    overflow-y: auto        │
+└─────────────────────────────────────────────┘
+```
+
+### 高度计算
+
+视口高度分配：
+
+| 区域 | 高度 |
+|------|------|
+| Header | 56px |
+| Main padding-top | 12px |
+| Main padding-bottom | 12px |
+| **总计占用** | **80px** |
+
+页面内容可用高度：`calc(100vh - 80px)`
+
+### 首页布局
+
+首页 (`HomeView.vue`) 采用居中卡片式脑图布局：
+
+- 使用 `min-height: calc(100vh - 80px)` 确保内容不超出视口
+- `justify-content: center` 使内容垂直居中
+- 响应式设计：小屏幕时取消连接线，改为垂直堆叠
+
+## 设计决策
+
+### CSS 高度计算修正 (2026-04-13)
+
+**问题**: 首页出现滚动条
+
+**原因**: `HomeView.vue` 使用 `min-height: calc(100vh - 48px)`，但实际布局占用 80px（Header 56px + Main padding 24px），导致高度溢出约 32px。
+
+**解决**: 将计算值修正为 `calc(100vh - 80px)`，与实际布局匹配。
+
+### 主题色系
+
+采用 Element Plus 默认主题 + 自定义 refinement：
+
+- 主色: `#3b82f6` (蓝色)
+- 成功: `#10b981` (绿色)
+- 警告: `#f59e0b` (橙色)
+- 错误: `#ef4444` (红色)
+- 信息: `#64748b` (灰色)
+
+详见 `frontend/src/styles/main.css`。
+
+### 滚动条样式
+
+自定义滚动条样式，宽度 6px，圆角设计：
+
+```css
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; }
+```
+
+## 未来规划
+
+- [ ] 添加暗色主题支持
+- [ ] 统一卡片间距规范
+- [ ] 响应式断点细化

@@ -125,7 +125,7 @@ const navigateTo = (path: string) => {
 
 <style scoped>
 .home-view {
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
   align-items: center;

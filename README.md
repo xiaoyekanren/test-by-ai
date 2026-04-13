@@ -193,6 +193,17 @@ cd frontend
 npm run build
 ```
 
+## 开发规范
+
+### 文档更新要求
+
+**每次更新代码时，必须同步更新相关文档：**
+
+1. **说明文档** - 更新功能说明、使用方法等（`README.md` 或 `docs/` 目录）
+2. **设计文档** - 更新架构设计、技术决策等（`docs/design/` 目录，没有则创建）
+
+详见 [CLAUDE.md](./CLAUDE.md)。
+
 ## License
 
 MIT
