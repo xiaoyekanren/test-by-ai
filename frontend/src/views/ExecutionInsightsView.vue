@@ -154,6 +154,47 @@ function stringifyData(value: unknown) {
   }
 }
 
+function normalizeLogText(value: string): string {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+}
+
+function formatRawOutput(value: unknown): string {
+  if (value === null || value === undefined) return 'N/A'
+  if (typeof value === 'string') return normalizeLogText(value)
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    const logSections: string[] = []
+
+    if (typeof record.stdout === 'string' && record.stdout) {
+      logSections.push(normalizeLogText(record.stdout))
+    }
+    if (typeof record.stderr === 'string' && record.stderr) {
+      logSections.push(`stderr:\n${normalizeLogText(record.stderr)}`)
+    }
+    if (typeof record.error === 'string' && record.error) {
+      logSections.push(`error:\n${normalizeLogText(record.error)}`)
+    }
+    if (logSections.length > 0) {
+      return logSections.join('\n\n')
+    }
+
+    const entries = Object.entries(record)
+    if (entries.length === 1 && typeof entries[0][1] === 'string') {
+      return normalizeLogText(entries[0][1])
+    }
+  }
+
+  try {
+    return normalizeLogText(JSON.stringify(value, null, 2))
+  } catch {
+    return normalizeLogText(String(value))
+  }
+}
+
 function formatDate(value: string | null) {
   if (!value) return '-'
   return new Date(value).toLocaleString()
@@ -552,7 +593,7 @@ onUnmounted(() => {
 
               <div class="raw-block">
                 <div class="raw-label">Output</div>
-                <pre class="raw-pre">{{ stringifyData(selectedNodeExecution.output_data) }}</pre>
+                <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution.output_data) }}</pre>
               </div>
             </template>
           </ElCard>
