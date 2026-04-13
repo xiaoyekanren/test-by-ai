@@ -417,12 +417,14 @@ onUnmounted(() => {
         <ElCard v-if="currentExecution" class="panel" shadow="never">
           <template #header>
             <div class="panel-title">
-              <span>执行概览</span>
-              <div class="panel-actions">
-                <ElButton size="small" :icon="Edit" @click="goToWorkflowEditor">编辑工作流</ElButton>
+              <div class="panel-title-main">
+                <span>执行概览</span>
                 <ElTag :type="getStatusTone(currentExecution.status)" effect="dark">
                   {{ displayExecutionStatus }}
                 </ElTag>
+              </div>
+              <div class="panel-actions">
+                <ElButton size="small" :icon="Edit" @click="goToWorkflowEditor">编辑工作流</ElButton>
               </div>
             </div>
           </template>
@@ -635,6 +637,12 @@ onUnmounted(() => {
 
 .panel-actions {
   display: flex;
+  gap: 8px;
+}
+
+.panel-title-main {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
