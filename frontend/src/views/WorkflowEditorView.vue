@@ -18,6 +18,7 @@ import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
+import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { NODE_CONFIGS } from '@/types'
 import type { Execution, NodeType } from '@/types'
@@ -25,6 +26,7 @@ import type { Execution, NodeType } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const workflowsStore = useWorkflowsStore()
+const executionsStore = useExecutionsStore()
 
 // Vue Flow instance
 const {
@@ -68,6 +70,26 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+
+const nodeExecutionStatusById = computed(() => {
+  const statusById = new Map<string, 'running' | 'passed' | 'failed'>()
+
+  if (!executionsStore.currentExecution) {
+    return statusById
+  }
+
+  executionsStore.nodeExecutions.forEach(nodeExecution => {
+    if (nodeExecution.status === 'running') {
+      statusById.set(nodeExecution.node_id, 'running')
+    } else if (['completed', 'success', 'passed'].includes(nodeExecution.status)) {
+      statusById.set(nodeExecution.node_id, 'passed')
+    } else if (['failed', 'error'].includes(nodeExecution.status)) {
+      statusById.set(nodeExecution.node_id, 'failed')
+    }
+  })
+
+  return statusById
+})
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -406,6 +428,7 @@ const handleExecutionCompleted = (execution: Execution) => {
               :id="nodeProps.id"
               :data="nodeProps.data"
               :selected="nodeProps.selected"
+              :execution-status="nodeExecutionStatusById.get(nodeProps.id) || null"
               @click="handleNodeClick(nodeProps.id)"
               @dblclick="handleNodeDoubleClick(nodeProps.id)"
             />

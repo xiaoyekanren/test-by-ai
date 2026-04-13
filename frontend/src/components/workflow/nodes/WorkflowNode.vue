@@ -15,8 +15,10 @@ import {
   Timer,
   Grid,
   CircleCheck,
+  CircleClose,
   DataAnalysis,
-  Bell
+  Bell,
+  Loading
 } from '@element-plus/icons-vue'
 import type { NodeType, NodeTypeConfig } from '@/types'
 import { NODE_CONFIGS } from '@/types'
@@ -29,6 +31,7 @@ const props = defineProps<{
     config: Record<string, unknown>
   }
   selected?: boolean
+  executionStatus?: 'running' | 'passed' | 'failed' | null
 }>()
 
 const emit = defineEmits<{
@@ -65,6 +68,19 @@ const iconComponent = computed(() => {
   return iconMap[nodeConfig.value.icon] || Monitor
 })
 
+const executionStatusConfig = computed(() => {
+  if (props.executionStatus === 'running') {
+    return { icon: Loading, label: 'Running' }
+  }
+  if (props.executionStatus === 'passed') {
+    return { icon: CircleCheck, label: 'Passed' }
+  }
+  if (props.executionStatus === 'failed') {
+    return { icon: CircleClose, label: 'Failed' }
+  }
+  return null
+})
+
 // Handle positions for condition node (2 outputs)
 const getOutputHandles = computed(() => {
   const outputs = nodeConfig.value.outputs
@@ -93,11 +109,27 @@ const handleDoubleClick = () => {
 <template>
   <div
     class="workflow-node"
-    :class="{ selected: selected }"
+    :class="[
+      { selected: selected },
+      executionStatus ? `execution-${executionStatus}` : ''
+    ]"
     :style="{ borderColor: nodeConfig.color }"
     @click="handleClick"
     @dblclick.stop="handleDoubleClick"
   >
+    <div
+      v-if="executionStatusConfig"
+      class="execution-badge"
+      :class="`execution-badge-${executionStatus}`"
+    >
+      <component
+        :is="executionStatusConfig.icon"
+        class="execution-badge-icon"
+        :class="{ 'is-loading': executionStatus === 'running' }"
+      />
+      <span>{{ executionStatusConfig.label }}</span>
+    </div>
+
     <!-- Input Handle -->
     <Handle
       v-if="hasInput"
@@ -141,6 +173,7 @@ const handleDoubleClick = () => {
 
 <style scoped>
 .workflow-node {
+  position: relative;
   background: #fff;
   border: 2px solid #dcdfe6;
   border-radius: 8px;
@@ -157,6 +190,63 @@ const handleDoubleClick = () => {
 .workflow-node.selected {
   border-width: 2px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.workflow-node.execution-running {
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.18), 0 4px 12px rgba(64, 158, 255, 0.2);
+}
+
+.workflow-node.execution-passed {
+  box-shadow: 0 0 0 3px rgba(103, 194, 58, 0.18), 0 4px 12px rgba(103, 194, 58, 0.18);
+}
+
+.workflow-node.execution-failed {
+  box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.2), 0 4px 12px rgba(245, 108, 108, 0.22);
+}
+
+.execution-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid #fff;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+}
+
+.execution-badge-running {
+  background: #409eff;
+}
+
+.execution-badge-passed {
+  background: #67c23a;
+}
+
+.execution-badge-failed {
+  background: #f56c6c;
+}
+
+.execution-badge-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.execution-badge-icon.is-loading {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .node-header {
