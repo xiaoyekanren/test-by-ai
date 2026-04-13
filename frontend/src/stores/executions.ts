@@ -43,6 +43,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     try {
       const execution = await executionsApi.create(data)
       executions.value.unshift(execution)
+      currentExecution.value = execution
       return execution
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to create execution'

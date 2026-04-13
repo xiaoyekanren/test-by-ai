@@ -56,6 +56,7 @@ const draggedType = ref<NodeType | null>(null)
 
 // Execution panel state
 const showExecutionPanel = ref(false)
+const executionRunRequestId = ref(0)
 const configDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
@@ -271,8 +272,10 @@ const handleSave = async (silent = false) => {
     if (!silent) {
       ElMessage.success('Workflow saved successfully')
     }
+    return true
   } catch {
     ElMessage.error('Failed to save workflow')
+    return false
   }
 }
 
@@ -322,12 +325,14 @@ const handleRun = async () => {
           }
         )
         // Save first then run
-        await handleSave(false)
+        const saved = await handleSave(false)
+        if (!saved) return
       } catch {
         return
       }
     }
-    // Show execution panel
+    // Ask the panel to start a run as soon as it opens.
+    executionRunRequestId.value += 1
     showExecutionPanel.value = true
   }
 }
@@ -419,6 +424,7 @@ const handleExecutionCompleted = (execution: Execution) => {
       <ExecutionPanel
         v-if="showExecutionPanel"
         :workflow-id="workflowId"
+        :run-request-id="executionRunRequestId"
         @execution-started="handleExecutionStarted"
         @execution-completed="handleExecutionCompleted"
       />
@@ -472,6 +478,7 @@ const handleExecutionCompleted = (execution: Execution) => {
 
 .flow-canvas {
   flex: 1;
+  min-width: 0;
   position: relative;
   background: #fff;
 }

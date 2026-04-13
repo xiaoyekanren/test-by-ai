@@ -1,13 +1,28 @@
+# file-system
 __pycache__
+.DS_Store
+venv
+
+
+# ide
 .idea
 .vscode
-venv
+
+
+# ai
 .kiro
 .claude
 .trae
+
 .superpowers/
-.DS_Store
+.playwright-cli
+
+
+
+# program
 data/logs/
 data/pids/
 data/deps/
 data/app.db
+
+

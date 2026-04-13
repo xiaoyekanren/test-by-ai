@@ -746,6 +746,7 @@ const isListField = (field: string): boolean => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .node-name-section {
@@ -785,6 +786,7 @@ const isListField = (field: string): boolean => {
 
 .settings-form {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
