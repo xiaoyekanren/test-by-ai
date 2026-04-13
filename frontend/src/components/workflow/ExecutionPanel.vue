@@ -18,8 +18,8 @@ import {
   Loading,
   Timer
 } from '@element-plus/icons-vue'
-import { useExecutionsStore } from '@/stores/executions'
-import type { Execution, ExecutionStatus } from '@/types'
+import { executionsApi } from '@/api'
+import type { Execution, ExecutionStatus, NodeExecution } from '@/types'
 
 const props = defineProps<{
   workflowId: number | null
@@ -29,9 +29,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'executionStarted', execution: Execution): void
   (e: 'executionCompleted', execution: Execution): void
+  (e: 'executionCleared'): void
+  (e: 'nodeExecutionsUpdated', nodeExecutions: NodeExecution[]): void
 }>()
-
-const executionsStore = useExecutionsStore()
 
 // Local state
 const isStarting = ref(false)
@@ -39,13 +39,11 @@ const isStopping = ref(false)
 const logDialogVisible = ref(false)
 const selectedLogNodeId = ref<string | null>(null)
 const handledRunRequestId = ref(0)
+const currentExecution = ref<Execution | null>(null)
+const nodeExecutions = ref<NodeExecution[]>([])
 
 // Polling timer
 let pollTimer: ReturnType<typeof setInterval> | null = null
-
-// Computed
-const currentExecution = computed(() => executionsStore.currentExecution)
-const nodeExecutions = computed(() => executionsStore.nodeExecutions)
 
 const executionStatus = computed(() => currentExecution.value?.status || null)
 const displayExecutionStatus = computed(() => executionStatus.value || (isStarting.value ? 'running' : null))
@@ -116,16 +114,18 @@ const handleRun = async () => {
   isStarting.value = true
   selectedLogNodeId.value = null
   stopPolling()
-  executionsStore.clearCurrentExecution()
+  clearExecutionState()
 
   try {
-    const execution = await executionsStore.createExecution({
+    const execution = await executionsApi.create({
       workflow_id: props.workflowId,
       trigger_type: 'manual'
     })
+    currentExecution.value = execution
 
     // Fetch node executions
-    await executionsStore.fetchNodeExecutions(execution.id)
+    nodeExecutions.value = await executionsApi.getNodes(execution.id)
+    emit('nodeExecutionsUpdated', nodeExecutions.value)
 
     // Start polling
     startPolling(execution.id)
@@ -144,7 +144,7 @@ const handleStop = async () => {
 
   isStopping.value = true
   try {
-    await executionsStore.stopExecution(currentExecution.value.id)
+    currentExecution.value = await executionsApi.stop(currentExecution.value.id)
     stopPolling()
   } catch (error) {
     console.error('Failed to stop execution:', error)
@@ -158,8 +158,10 @@ const startPolling = (executionId: number) => {
   stopPolling()
   pollTimer = setInterval(async () => {
     try {
-      const execution = await executionsStore.fetchExecution(executionId)
-      await executionsStore.fetchNodeExecutions(executionId)
+      const execution = await executionsApi.get(executionId)
+      currentExecution.value = execution
+      nodeExecutions.value = await executionsApi.getNodes(executionId)
+      emit('nodeExecutionsUpdated', nodeExecutions.value)
 
       // Check if execution is finished
       if (execution.status === 'completed' || execution.status === 'failed') {
@@ -180,12 +182,19 @@ const stopPolling = () => {
   }
 }
 
+const clearExecutionState = () => {
+  currentExecution.value = null
+  nodeExecutions.value = []
+  emit('nodeExecutionsUpdated', [])
+}
+
 // Clear execution
 const handleClear = () => {
   stopPolling()
   logDialogVisible.value = false
   selectedLogNodeId.value = null
-  executionsStore.clearCurrentExecution()
+  clearExecutionState()
+  emit('executionCleared')
 }
 
 const openLogsForNode = (nodeId: string | null = null) => {
