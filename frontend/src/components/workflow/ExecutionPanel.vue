@@ -3,8 +3,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   ElButton,
   ElProgress,
-  ElCollapse,
-  ElCollapseItem,
+  ElDialog,
   ElTag,
   ElEmpty,
   ElIcon,
@@ -17,37 +16,39 @@ import {
   CircleClose,
   Clock,
   Loading,
-  Document,
   Timer
 } from '@element-plus/icons-vue'
-import { useExecutionsStore } from '@/stores/executions'
-import type { Execution, ExecutionStatus } from '@/types'
+import { executionsApi } from '@/api'
+import type { Execution, ExecutionStatus, NodeExecution } from '@/types'
 
 const props = defineProps<{
   workflowId: number | null
+  runRequestId?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'executionStarted', execution: Execution): void
   (e: 'executionCompleted', execution: Execution): void
+  (e: 'executionCleared'): void
+  (e: 'nodeExecutionsUpdated', nodeExecutions: NodeExecution[]): void
 }>()
-
-const executionsStore = useExecutionsStore()
 
 // Local state
 const isStarting = ref(false)
 const isStopping = ref(false)
-const logsExpanded = ref(['logs'])
-const selectedNodeFilter = ref<string | null>(null)
+const logDialogVisible = ref(false)
+const selectedLogNodeId = ref<string | null>(null)
+const handledRunRequestId = ref(0)
+const currentExecution = ref<Execution | null>(null)
+const nodeExecutions = ref<NodeExecution[]>([])
 
 // Polling timer
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-// Computed
-const currentExecution = computed(() => executionsStore.currentExecution)
-const nodeExecutions = computed(() => executionsStore.nodeExecutions)
-
 const executionStatus = computed(() => currentExecution.value?.status || null)
+const displayExecutionStatus = computed(() => executionStatus.value || (isStarting.value ? 'running' : null))
+const displayDuration = computed(() => currentExecution.value?.duration ?? null)
+const hasExecutionView = computed(() => Boolean(currentExecution.value) || isStarting.value)
 
 const isRunning = computed(() =>
   executionStatus.value === 'running' || executionStatus.value === 'pending'
@@ -106,19 +107,62 @@ const getNodeStatusInfo = (status: string) => {
   return nodeStatusConfig[status] || nodeStatusConfig.pending
 }
 
+const normalizeLogText = (value: string): string => {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+}
+
+const formatLogData = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return normalizeLogText(value)
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    const logSections: string[] = []
+
+    if (typeof record.stdout === 'string' && record.stdout) {
+      logSections.push(normalizeLogText(record.stdout))
+    }
+    if (typeof record.stderr === 'string' && record.stderr) {
+      logSections.push(`stderr:\n${normalizeLogText(record.stderr)}`)
+    }
+    if (typeof record.error === 'string' && record.error) {
+      logSections.push(`error:\n${normalizeLogText(record.error)}`)
+    }
+    if (logSections.length > 0) {
+      return logSections.join('\n\n')
+    }
+
+    const entries = Object.entries(record)
+    if (entries.length === 1 && typeof entries[0][1] === 'string') {
+      return normalizeLogText(entries[0][1])
+    }
+  }
+
+  return normalizeLogText(JSON.stringify(value, null, 2))
+}
+
 // Run workflow
 const handleRun = async () => {
-  if (!props.workflowId) return
+  if (!props.workflowId || !canRun.value) return
 
   isStarting.value = true
+  selectedLogNodeId.value = null
+  stopPolling()
+  clearExecutionState()
+
   try {
-    const execution = await executionsStore.createExecution({
+    const execution = await executionsApi.create({
       workflow_id: props.workflowId,
       trigger_type: 'manual'
     })
+    currentExecution.value = execution
 
     // Fetch node executions
-    await executionsStore.fetchNodeExecutions(execution.id)
+    nodeExecutions.value = await executionsApi.getNodes(execution.id)
+    emit('nodeExecutionsUpdated', nodeExecutions.value)
 
     // Start polling
     startPolling(execution.id)
@@ -137,7 +181,7 @@ const handleStop = async () => {
 
   isStopping.value = true
   try {
-    await executionsStore.stopExecution(currentExecution.value.id)
+    currentExecution.value = await executionsApi.stop(currentExecution.value.id)
     stopPolling()
   } catch (error) {
     console.error('Failed to stop execution:', error)
@@ -151,8 +195,10 @@ const startPolling = (executionId: number) => {
   stopPolling()
   pollTimer = setInterval(async () => {
     try {
-      const execution = await executionsStore.fetchExecution(executionId)
-      await executionsStore.fetchNodeExecutions(executionId)
+      const execution = await executionsApi.get(executionId)
+      currentExecution.value = execution
+      nodeExecutions.value = await executionsApi.getNodes(executionId)
+      emit('nodeExecutionsUpdated', nodeExecutions.value)
 
       // Check if execution is finished
       if (execution.status === 'completed' || execution.status === 'failed') {
@@ -173,17 +219,46 @@ const stopPolling = () => {
   }
 }
 
+const clearExecutionState = () => {
+  currentExecution.value = null
+  nodeExecutions.value = []
+  emit('nodeExecutionsUpdated', [])
+}
+
 // Clear execution
 const handleClear = () => {
   stopPolling()
-  executionsStore.clearCurrentExecution()
+  logDialogVisible.value = false
+  selectedLogNodeId.value = null
+  clearExecutionState()
+  emit('executionCleared')
 }
 
-// Filter logs
-const filteredNodeExecutions = computed(() => {
-  if (!selectedNodeFilter.value) return nodeExecutions.value
-  return nodeExecutions.value.filter(ne => ne.node_id === selectedNodeFilter.value)
+const openLogsForNode = (nodeId: string | null = null) => {
+  selectedLogNodeId.value = nodeId
+  logDialogVisible.value = true
+}
+
+const logDialogNodeExecutions = computed(() => {
+  if (!selectedLogNodeId.value) return nodeExecutions.value
+  return nodeExecutions.value.filter(ne => ne.node_id === selectedLogNodeId.value)
 })
+
+const logDialogTitle = computed(() => {
+  if (!selectedLogNodeId.value) return 'Execution Logs'
+  const nodeExecution = nodeExecutions.value.find(ne => ne.node_id === selectedLogNodeId.value)
+  return `Execution Logs - ${nodeExecution?.node_type || selectedLogNodeId.value}`
+})
+
+defineExpose({ openLogsForNode })
+
+watch(() => props.runRequestId, (requestId) => {
+  const nextRequestId = requestId ?? 0
+  if (nextRequestId <= handledRunRequestId.value) return
+
+  handledRunRequestId.value = nextRequestId
+  void handleRun()
+}, { immediate: true })
 
 // Watch workflow ID changes
 watch(() => props.workflowId, () => {
@@ -214,19 +289,8 @@ onUnmounted(() => {
     </div>
 
     <!-- Execution Controls -->
-    <div class="execution-controls">
+    <div v-if="canStop" class="execution-controls">
       <ElButton
-        type="success"
-        :icon="VideoPlay"
-        :loading="isStarting"
-        :disabled="!canRun"
-        @click="handleRun"
-      >
-        {{ isStarting ? 'Starting...' : 'Run Workflow' }}
-      </ElButton>
-
-      <ElButton
-        v-if="canStop"
         type="danger"
         :icon="VideoPause"
         :loading="isStopping"
@@ -237,14 +301,14 @@ onUnmounted(() => {
     </div>
 
     <!-- No Execution State -->
-    <div v-if="!currentExecution" class="no-execution">
+    <div v-if="!hasExecutionView" class="no-execution">
       <ElEmpty description="No execution running">
         <template #image>
           <ElIcon :size="48" color="#c0c4cc">
             <VideoPlay />
           </ElIcon>
         </template>
-        <p class="hint">Click "Run Workflow" to start execution</p>
+        <p class="hint">Use the toolbar Run button to start execution</p>
       </ElEmpty>
     </div>
 
@@ -253,18 +317,18 @@ onUnmounted(() => {
       <!-- Status Header -->
       <div class="status-header">
         <div class="status-badge" :style="{
-          backgroundColor: getStatusInfo(executionStatus || 'pending').bgColor,
-          color: getStatusInfo(executionStatus || 'pending').color
+          backgroundColor: getStatusInfo(displayExecutionStatus || 'pending').bgColor,
+          color: getStatusInfo(displayExecutionStatus || 'pending').color
         }">
-          <ElIcon class="status-icon" :class="{ 'is-loading': executionStatus === 'running' }">
-            <component :is="getStatusInfo(executionStatus || 'pending').icon" />
+          <ElIcon class="status-icon" :class="{ 'is-loading': displayExecutionStatus === 'running' }">
+            <component :is="getStatusInfo(displayExecutionStatus || 'pending').icon" />
           </ElIcon>
-          <span>{{ getStatusInfo(executionStatus || 'pending').label }}</span>
+          <span>{{ isStarting && !currentExecution ? 'Starting' : getStatusInfo(displayExecutionStatus || 'pending').label }}</span>
         </div>
 
         <div class="execution-time">
           <ElIcon><Timer /></ElIcon>
-          <span>{{ formatDuration(currentExecution.duration) }}</span>
+          <span>{{ formatDuration(displayDuration) }}</span>
         </div>
       </div>
 
@@ -276,7 +340,7 @@ onUnmounted(() => {
         </div>
         <ElProgress
           :percentage="progressPercent"
-          :status="executionStatus === 'failed' ? 'exception' : executionStatus === 'completed' ? 'success' : undefined"
+          :status="displayExecutionStatus === 'failed' ? 'exception' : displayExecutionStatus === 'completed' ? 'success' : undefined"
           :stroke-width="8"
         />
       </div>
@@ -286,6 +350,7 @@ onUnmounted(() => {
         <div class="section-header">
           <h4>Node Executions</h4>
           <span class="count">{{ nodeExecutions.length }} nodes</span>
+          <span class="section-hint">Double-click for logs</span>
         </div>
 
         <ElScrollbar class="node-list">
@@ -293,8 +358,8 @@ onUnmounted(() => {
             v-for="nodeExec in nodeExecutions"
             :key="nodeExec.id"
             class="node-item"
-            :class="{ active: selectedNodeFilter === nodeExec.node_id }"
-            @click="selectedNodeFilter = selectedNodeFilter === nodeExec.node_id ? null : nodeExec.node_id"
+            :class="{ active: selectedLogNodeId === nodeExec.node_id }"
+            @dblclick.stop="openLogsForNode(nodeExec.node_id)"
           >
             <div class="node-info">
               <ElIcon
@@ -319,54 +384,8 @@ onUnmounted(() => {
         </ElScrollbar>
       </div>
 
-      <!-- Execution Logs -->
-      <ElCollapse v-model="logsExpanded" class="logs-collapse">
-        <ElCollapseItem name="logs">
-          <template #title>
-            <div class="logs-title">
-              <ElIcon><Document /></ElIcon>
-              <span>Execution Logs</span>
-            </div>
-          </template>
-
-          <div class="logs-content">
-            <ElScrollbar class="logs-scroll">
-              <div v-if="filteredNodeExecutions.length === 0" class="no-logs">
-                No logs available
-              </div>
-              <div v-else class="log-entries">
-                <div
-                  v-for="nodeExec in filteredNodeExecutions"
-                  :key="nodeExec.id"
-                  class="log-entry"
-                >
-                  <div class="log-header">
-                    <span class="log-node">{{ nodeExec.node_type }}</span>
-                    <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'">
-                      {{ nodeExec.status }}
-                    </ElTag>
-                  </div>
-                  <div v-if="nodeExec.input_data" class="log-section">
-                    <span class="log-label">Input:</span>
-                    <pre class="log-data">{{ JSON.stringify(nodeExec.input_data, null, 2) }}</pre>
-                  </div>
-                  <div v-if="nodeExec.output_data" class="log-section">
-                    <span class="log-label">Output:</span>
-                    <pre class="log-data">{{ JSON.stringify(nodeExec.output_data, null, 2) }}</pre>
-                  </div>
-                  <div v-if="nodeExec.error_message" class="log-section error">
-                    <span class="log-label">Error:</span>
-                    <pre class="log-data error">{{ nodeExec.error_message }}</pre>
-                  </div>
-                </div>
-              </div>
-            </ElScrollbar>
-          </div>
-        </ElCollapseItem>
-      </ElCollapse>
-
       <!-- Execution Result Summary -->
-      <div v-if="currentExecution.result" class="result-summary">
+      <div v-if="currentExecution?.result" class="result-summary">
         <div class="result-header">
           <ElIcon :size="20" :color="currentExecution.result === 'passed' ? '#67C23A' : '#F56C6C'">
             <component :is="currentExecution.result === 'passed' ? CircleCheck : CircleClose" />
@@ -377,12 +396,57 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <ElDialog
+      v-model="logDialogVisible"
+      :title="logDialogTitle"
+      width="760px"
+      top="8vh"
+      append-to-body
+    >
+      <div class="logs-dialog-content">
+        <ElScrollbar class="logs-dialog-scroll">
+          <div v-if="logDialogNodeExecutions.length === 0" class="no-logs">
+            No logs available
+          </div>
+          <div v-else class="log-entries">
+            <div
+              v-for="nodeExec in logDialogNodeExecutions"
+              :key="nodeExec.id"
+              class="log-entry"
+            >
+              <div class="log-header">
+                <span class="log-node">{{ nodeExec.node_type }}</span>
+                <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'">
+                  {{ nodeExec.status }}
+                </ElTag>
+              </div>
+              <div v-if="nodeExec.input_data" class="log-section">
+                <span class="log-label">Input:</span>
+                <pre class="log-data">{{ formatLogData(nodeExec.input_data) }}</pre>
+              </div>
+              <div v-if="nodeExec.output_data" class="log-section">
+                <span class="log-label">Output:</span>
+                <pre class="log-data">{{ formatLogData(nodeExec.output_data) }}</pre>
+              </div>
+              <div v-if="nodeExec.error_message" class="log-section error">
+                <span class="log-label">Error:</span>
+                <pre class="log-data error">{{ nodeExec.error_message }}</pre>
+              </div>
+            </div>
+          </div>
+        </ElScrollbar>
+      </div>
+    </ElDialog>
   </div>
 </template>
 
 <style scoped>
 .execution-panel {
   height: 100%;
+  width: 380px;
+  min-width: 380px;
+  flex: 0 0 380px;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -508,8 +572,15 @@ onUnmounted(() => {
   color: #909399;
 }
 
+.section-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #909399;
+}
+
 .node-list {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -560,41 +631,12 @@ onUnmounted(() => {
   color: #909399;
 }
 
-.logs-collapse {
-  border: none;
-  margin-top: auto;
+.logs-dialog-content {
+  height: min(60vh, 560px);
+  overflow: hidden;
 }
 
-.logs-collapse :deep(.el-collapse-item__header) {
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 0 16px;
-  height: 40px;
-}
-
-.logs-collapse :deep(.el-collapse-item__wrap) {
-  border: none;
-}
-
-.logs-collapse :deep(.el-collapse-item__content) {
-  padding: 0;
-}
-
-.logs-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #606266;
-}
-
-.logs-content {
-  max-height: 200px;
-  border-top: 1px solid #e4e7ed;
-}
-
-.logs-scroll {
+.logs-dialog-scroll {
   height: 100%;
 }
 

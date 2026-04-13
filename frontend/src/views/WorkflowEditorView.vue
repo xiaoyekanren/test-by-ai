@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -20,7 +20,7 @@ import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { NODE_CONFIGS } from '@/types'
-import type { Execution, NodeType } from '@/types'
+import type { Execution, NodeExecution, NodeType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,6 +56,9 @@ const draggedType = ref<NodeType | null>(null)
 
 // Execution panel state
 const showExecutionPanel = ref(false)
+const executionRunRequestId = ref(0)
+const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
+const editorNodeExecutions = ref<NodeExecution[]>([])
 const configDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
@@ -67,6 +70,22 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+
+const nodeExecutionStatusById = computed(() => {
+  const statusById = new Map<string, 'running' | 'passed' | 'failed'>()
+
+  editorNodeExecutions.value.forEach(nodeExecution => {
+    if (nodeExecution.status === 'running') {
+      statusById.set(nodeExecution.node_id, 'running')
+    } else if (['completed', 'success', 'passed'].includes(nodeExecution.status)) {
+      statusById.set(nodeExecution.node_id, 'passed')
+    } else if (['failed', 'error'].includes(nodeExecution.status)) {
+      statusById.set(nodeExecution.node_id, 'failed')
+    }
+  })
+
+  return statusById
+})
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -271,8 +290,10 @@ const handleSave = async (silent = false) => {
     if (!silent) {
       ElMessage.success('Workflow saved successfully')
     }
+    return true
   } catch {
     ElMessage.error('Failed to save workflow')
+    return false
   }
 }
 
@@ -322,12 +343,14 @@ const handleRun = async () => {
           }
         )
         // Save first then run
-        await handleSave(false)
+        const saved = await handleSave(false)
+        if (!saved) return
       } catch {
         return
       }
     }
-    // Show execution panel
+    // Ask the panel to start a run as soon as it opens.
+    executionRunRequestId.value += 1
     showExecutionPanel.value = true
   }
 }
@@ -346,6 +369,20 @@ const handleExecutionCompleted = (execution: Execution) => {
   } else {
     ElMessage.info('Workflow execution completed with partial results')
   }
+}
+
+const handleNodeExecutionsUpdated = (nodeExecutions: NodeExecution[]) => {
+  editorNodeExecutions.value = nodeExecutions
+}
+
+const handleExecutionCleared = () => {
+  editorNodeExecutions.value = []
+}
+
+const handleExecutionStatusDblclick = async (nodeId: string) => {
+  showExecutionPanel.value = true
+  await nextTick()
+  executionPanelRef.value?.openLogsForNode(nodeId)
 }
 </script>
 
@@ -401,8 +438,10 @@ const handleExecutionCompleted = (execution: Execution) => {
               :id="nodeProps.id"
               :data="nodeProps.data"
               :selected="nodeProps.selected"
+              :execution-status="nodeExecutionStatusById.get(nodeProps.id) || null"
               @click="handleNodeClick(nodeProps.id)"
               @dblclick="handleNodeDoubleClick(nodeProps.id)"
+              @execution-status-dblclick="handleExecutionStatusDblclick"
             />
           </template>
         </VueFlow>
@@ -418,9 +457,13 @@ const handleExecutionCompleted = (execution: Execution) => {
       <!-- Execution Panel (right side, toggleable) -->
       <ExecutionPanel
         v-if="showExecutionPanel"
+        ref="executionPanelRef"
         :workflow-id="workflowId"
+        :run-request-id="executionRunRequestId"
         @execution-started="handleExecutionStarted"
         @execution-completed="handleExecutionCompleted"
+        @execution-cleared="handleExecutionCleared"
+        @node-executions-updated="handleNodeExecutionsUpdated"
       />
     </div>
 
@@ -472,6 +515,7 @@ const handleExecutionCompleted = (execution: Execution) => {
 
 .flow-canvas {
   flex: 1;
+  min-width: 0;
   position: relative;
   background: #fff;
 }

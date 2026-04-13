@@ -33,13 +33,12 @@ import {
   Loading,
   Timer
 } from '@element-plus/icons-vue'
+import { executionsApi } from '@/api'
 import { useWorkflowsStore } from '@/stores/workflows'
-import { useExecutionsStore } from '@/stores/executions'
-import type { Workflow } from '@/types'
+import type { Execution, NodeExecution, Workflow } from '@/types'
 
 const router = useRouter()
 const workflowsStore = useWorkflowsStore()
-const executionsStore = useExecutionsStore()
 
 // Dialog state
 const createDialogVisible = ref(false)
@@ -59,10 +58,19 @@ const isCreating = ref(false)
 // Execution dialog state
 const executionDialogVisible = ref(false)
 const currentExecutionWorkflow = ref<Workflow | null>(null)
+const currentDialogExecution = ref<Execution | null>(null)
+const dialogNodeExecutions = ref<NodeExecution[]>([])
 let executionPollTimer: ReturnType<typeof setInterval> | null = null
 
 // Computed
 const isEmpty = computed(() => workflowsStore.workflows.length === 0 && !workflowsStore.loading)
+const dialogExecutionProgress = computed(() => {
+  if (dialogNodeExecutions.value.length === 0) return 0
+  const completed = dialogNodeExecutions.value.filter(
+    ne => ne.status === 'completed' || ne.status === 'failed' || ne.status === 'skipped'
+  ).length
+  return Math.round((completed / dialogNodeExecutions.value.length) * 100)
+})
 
 // Methods
 const fetchWorkflows = async () => {
@@ -164,17 +172,18 @@ const handleExecute = async (row: Workflow) => {
     )
 
     // Create execution
-    const execution = await executionsStore.createExecution({
+    const execution = await executionsApi.create({
       workflow_id: row.id,
       trigger_type: 'manual'
     })
 
     // Show execution dialog
+    currentDialogExecution.value = execution
     currentExecutionWorkflow.value = row
     executionDialogVisible.value = true
 
     // Fetch node executions
-    await executionsStore.fetchNodeExecutions(execution.id)
+    dialogNodeExecutions.value = await executionsApi.getNodes(execution.id)
 
     // Start polling for updates
     startExecutionPolling(execution.id)
@@ -192,8 +201,9 @@ const startExecutionPolling = (executionId: number) => {
   stopExecutionPolling()
   executionPollTimer = setInterval(async () => {
     try {
-      const execution = await executionsStore.fetchExecution(executionId)
-      await executionsStore.fetchNodeExecutions(executionId)
+      const execution = await executionsApi.get(executionId)
+      currentDialogExecution.value = execution
+      dialogNodeExecutions.value = await executionsApi.getNodes(executionId)
 
       // Stop polling if execution is finished
       if (execution.status === 'completed' || execution.status === 'failed') {
@@ -220,10 +230,10 @@ const stopExecutionPolling = () => {
 
 // Stop execution
 const handleStopExecution = async () => {
-  if (!executionsStore.currentExecution) return
+  if (!currentDialogExecution.value) return
 
   try {
-    await executionsStore.stopExecution(executionsStore.currentExecution.id)
+    currentDialogExecution.value = await executionsApi.stop(currentDialogExecution.value.id)
     stopExecutionPolling()
     ElMessage.info('Execution stopped')
   } catch (error) {
@@ -234,14 +244,15 @@ const handleStopExecution = async () => {
 // Close execution dialog
 const handleCloseExecutionDialog = () => {
   stopExecutionPolling()
-  executionsStore.clearCurrentExecution()
   executionDialogVisible.value = false
   currentExecutionWorkflow.value = null
+  currentDialogExecution.value = null
+  dialogNodeExecutions.value = []
 }
 
 const openExecutionInsights = () => {
-  if (!executionsStore.currentExecution) return
-  router.push(`/executions?executionId=${executionsStore.currentExecution.id}`)
+  if (!currentDialogExecution.value) return
+  router.push(`/executions?executionId=${currentDialogExecution.value.id}`)
 }
 
 // Format duration helper
@@ -433,23 +444,23 @@ onUnmounted(() => {
       <div class="execution-content">
         <!-- Status Header -->
         <div class="execution-status-header">
-          <div class="status-badge" :class="executionsStore.currentExecution?.status || 'pending'">
-            <ElIcon :class="{ 'is-loading': executionsStore.currentExecution?.status === 'running' }">
-              <component :is="executionsStore.currentExecution?.status === 'completed' ? CircleCheck : executionsStore.currentExecution?.status === 'failed' ? CircleClose : executionsStore.currentExecution?.status === 'running' ? Loading : Clock" />
+          <div class="status-badge" :class="currentDialogExecution?.status || 'pending'">
+            <ElIcon :class="{ 'is-loading': currentDialogExecution?.status === 'running' }">
+              <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'running' ? Loading : Clock" />
             </ElIcon>
-            <span>{{ executionsStore.currentExecution?.status || 'pending' }}</span>
+            <span>{{ currentDialogExecution?.status || 'pending' }}</span>
           </div>
           <div class="execution-time">
             <ElIcon><Timer /></ElIcon>
-            <span>{{ formatDuration(executionsStore.currentExecution?.duration ?? null) }}</span>
+            <span>{{ formatDuration(currentDialogExecution?.duration ?? null) }}</span>
           </div>
         </div>
 
         <!-- Progress -->
         <div class="execution-progress">
           <ElProgress
-            :percentage="Math.round((executionsStore.nodeExecutions.filter(ne => ne.status === 'completed' || ne.status === 'failed' || ne.status === 'skipped').length / Math.max(executionsStore.nodeExecutions.length, 1)) * 100)"
-            :status="executionsStore.currentExecution?.status === 'failed' ? 'exception' : executionsStore.currentExecution?.status === 'completed' ? 'success' : undefined"
+            :percentage="dialogExecutionProgress"
+            :status="currentDialogExecution?.status === 'failed' ? 'exception' : currentDialogExecution?.status === 'completed' ? 'success' : undefined"
             :stroke-width="10"
           />
         </div>
@@ -459,7 +470,7 @@ onUnmounted(() => {
           <h4>Node Executions</h4>
           <ElScrollbar class="node-executions-list">
             <div
-              v-for="nodeExec in executionsStore.nodeExecutions"
+              v-for="nodeExec in dialogNodeExecutions"
               :key="nodeExec.id"
               class="node-exec-item"
             >
@@ -489,13 +500,13 @@ onUnmounted(() => {
 
       <template #footer>
         <ElButton
-          v-if="executionsStore.currentExecution"
+          v-if="currentDialogExecution"
           @click="openExecutionInsights"
         >
           View Analysis
         </ElButton>
         <ElButton
-          v-if="executionsStore.currentExecution?.status === 'running' || executionsStore.currentExecution?.status === 'pending'"
+          v-if="currentDialogExecution?.status === 'running' || currentDialogExecution?.status === 'pending'"
           type="danger"
           :icon="VideoPause"
           @click="handleStopExecution"
