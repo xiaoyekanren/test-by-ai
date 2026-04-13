@@ -19,7 +19,8 @@ import {
   Delete as DeleteIcon,
   Refresh,
   Clock,
-  Monitor
+  Monitor,
+  Back
 } from '@element-plus/icons-vue'
 import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
@@ -185,6 +186,10 @@ function getServerLabel(serverId: unknown) {
   return serverNameMap.value.get(serverId) || `Server #${serverId}`
 }
 
+function goToWorkflowManagement() {
+  router.push('/workflows')
+}
+
 async function loadExecution(executionId: number, syncRoute = true) {
   loadingDetail.value = true
   try {
@@ -325,6 +330,7 @@ onUnmounted(() => {
 <template>
   <div class="execution-insights-page">
     <div class="toolbar">
+      <ElButton :icon="Back" @click="goToWorkflowManagement">工作流管理</ElButton>
       <ElButton type="primary" :icon="Refresh" @click="refreshPage">刷新</ElButton>
 
       <ElSelect v-model="workflowFilter" clearable placeholder="筛选工作流" class="toolbar-select">

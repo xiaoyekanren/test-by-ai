@@ -18,15 +18,13 @@ import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
-import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { NODE_CONFIGS } from '@/types'
-import type { Execution, NodeType } from '@/types'
+import type { Execution, NodeExecution, NodeType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const workflowsStore = useWorkflowsStore()
-const executionsStore = useExecutionsStore()
 
 // Vue Flow instance
 const {
@@ -60,6 +58,7 @@ const draggedType = ref<NodeType | null>(null)
 const showExecutionPanel = ref(false)
 const executionRunRequestId = ref(0)
 const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
+const editorNodeExecutions = ref<NodeExecution[]>([])
 const configDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
@@ -75,11 +74,7 @@ const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#40
 const nodeExecutionStatusById = computed(() => {
   const statusById = new Map<string, 'running' | 'passed' | 'failed'>()
 
-  if (!executionsStore.currentExecution) {
-    return statusById
-  }
-
-  executionsStore.nodeExecutions.forEach(nodeExecution => {
+  editorNodeExecutions.value.forEach(nodeExecution => {
     if (nodeExecution.status === 'running') {
       statusById.set(nodeExecution.node_id, 'running')
     } else if (['completed', 'success', 'passed'].includes(nodeExecution.status)) {
@@ -376,6 +371,14 @@ const handleExecutionCompleted = (execution: Execution) => {
   }
 }
 
+const handleNodeExecutionsUpdated = (nodeExecutions: NodeExecution[]) => {
+  editorNodeExecutions.value = nodeExecutions
+}
+
+const handleExecutionCleared = () => {
+  editorNodeExecutions.value = []
+}
+
 const handleExecutionStatusDblclick = async (nodeId: string) => {
   showExecutionPanel.value = true
   await nextTick()
@@ -459,6 +462,8 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
         :run-request-id="executionRunRequestId"
         @execution-started="handleExecutionStarted"
         @execution-completed="handleExecutionCompleted"
+        @execution-cleared="handleExecutionCleared"
+        @node-executions-updated="handleNodeExecutionsUpdated"
       />
     </div>
 
