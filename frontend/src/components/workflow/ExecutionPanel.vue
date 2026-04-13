@@ -107,6 +107,20 @@ const getNodeStatusInfo = (status: string) => {
   return nodeStatusConfig[status] || nodeStatusConfig.pending
 }
 
+const formatLogData = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 1 && typeof entries[0][1] === 'string') {
+      return entries[0][1]
+    }
+  }
+
+  return JSON.stringify(value, null, 2)
+}
+
 // Run workflow
 const handleRun = async () => {
   if (!props.workflowId || !canRun.value) return
@@ -386,11 +400,11 @@ onUnmounted(() => {
               </div>
               <div v-if="nodeExec.input_data" class="log-section">
                 <span class="log-label">Input:</span>
-                <pre class="log-data">{{ JSON.stringify(nodeExec.input_data, null, 2) }}</pre>
+                <pre class="log-data">{{ formatLogData(nodeExec.input_data) }}</pre>
               </div>
               <div v-if="nodeExec.output_data" class="log-section">
                 <span class="log-label">Output:</span>
-                <pre class="log-data">{{ JSON.stringify(nodeExec.output_data, null, 2) }}</pre>
+                <pre class="log-data">{{ formatLogData(nodeExec.output_data) }}</pre>
               </div>
               <div v-if="nodeExec.error_message" class="log-section error">
                 <span class="log-label">Error:</span>
