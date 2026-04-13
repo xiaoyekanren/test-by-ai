@@ -130,9 +130,9 @@ const getIcon = (iconName: string) => {
 
 <style scoped>
 .node-palette {
-  width: 280px;
-  min-width: 280px;
-  flex: 0 0 280px;
+  width: 240px;
+  min-width: 240px;
+  flex: 0 0 240px;
   height: 100%;
   background: #fff;
   border-right: 1px solid #dcdfe6;
@@ -141,13 +141,13 @@ const getIcon = (iconName: string) => {
 }
 
 .palette-header {
-  padding: 12px 16px;
+  padding: 9px 12px;
   border-bottom: 1px solid #dcdfe6;
   background: #f5f7fa;
 }
 
 .palette-header .title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #303133;
 }
@@ -163,24 +163,24 @@ const getIcon = (iconName: string) => {
 }
 
 .category-collapse :deep(.el-collapse-item__header) {
-  padding: 0 16px;
-  height: 40px;
+  padding: 0 12px;
+  height: 32px;
   background: #fafafa;
   border-bottom: 1px solid #ebeef5;
 }
 
 .category-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #606266;
 }
 
 .category-count {
-  margin-left: 8px;
-  font-size: 12px;
+  margin-left: 6px;
+  font-size: 11px;
   color: #909399;
   background: #f0f2f5;
-  padding: 1px 6px;
+  padding: 0 5px;
   border-radius: 10px;
 }
 
@@ -193,14 +193,14 @@ const getIcon = (iconName: string) => {
 }
 
 .node-list {
-  padding: 8px;
+  padding: 6px;
 }
 
 .node-item {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
-  margin-bottom: 6px;
+  padding: 7px 8px;
+  margin-bottom: 4px;
   background: #fff;
   border: 1px solid #e4e7ed;
   border-radius: 6px;
@@ -219,9 +219,9 @@ const getIcon = (iconName: string) => {
 }
 
 .node-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,13 +229,13 @@ const getIcon = (iconName: string) => {
 }
 
 .node-icon .icon {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   color: #fff;
 }
 
 .node-info {
-  margin-left: 10px;
+  margin-left: 8px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -243,7 +243,7 @@ const getIcon = (iconName: string) => {
 }
 
 .node-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #303133;
   white-space: nowrap;
@@ -252,11 +252,11 @@ const getIcon = (iconName: string) => {
 }
 
 .node-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: #909399;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 </style>
