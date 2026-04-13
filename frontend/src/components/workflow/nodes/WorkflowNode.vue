@@ -37,6 +37,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'click', id: string): void
   (e: 'dblclick', id: string): void
+  (e: 'executionStatusDblclick', id: string): void
 }>()
 
 // Get node configuration
@@ -104,6 +105,10 @@ const handleClick = () => {
 const handleDoubleClick = () => {
   emit('dblclick', props.id)
 }
+
+const handleExecutionStatusDoubleClick = () => {
+  emit('executionStatusDblclick', props.id)
+}
 </script>
 
 <template>
@@ -121,6 +126,7 @@ const handleDoubleClick = () => {
       v-if="executionStatusConfig"
       class="execution-badge"
       :class="`execution-badge-${executionStatus}`"
+      @dblclick.stop="handleExecutionStatusDoubleClick"
     >
       <component
         :is="executionStatusConfig.icon"

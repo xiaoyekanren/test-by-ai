@@ -3,8 +3,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   ElButton,
   ElProgress,
-  ElCollapse,
-  ElCollapseItem,
+  ElDialog,
   ElTag,
   ElEmpty,
   ElIcon,
@@ -17,7 +16,6 @@ import {
   CircleClose,
   Clock,
   Loading,
-  Document,
   Timer
 } from '@element-plus/icons-vue'
 import { useExecutionsStore } from '@/stores/executions'
@@ -38,8 +36,8 @@ const executionsStore = useExecutionsStore()
 // Local state
 const isStarting = ref(false)
 const isStopping = ref(false)
-const logsExpanded = ref(['logs'])
-const selectedNodeFilter = ref<string | null>(null)
+const logDialogVisible = ref(false)
+const selectedLogNodeId = ref<string | null>(null)
 const handledRunRequestId = ref(0)
 
 // Polling timer
@@ -116,7 +114,7 @@ const handleRun = async () => {
   if (!props.workflowId || !canRun.value) return
 
   isStarting.value = true
-  selectedNodeFilter.value = null
+  selectedLogNodeId.value = null
   stopPolling()
   executionsStore.clearCurrentExecution()
 
@@ -185,14 +183,28 @@ const stopPolling = () => {
 // Clear execution
 const handleClear = () => {
   stopPolling()
+  logDialogVisible.value = false
+  selectedLogNodeId.value = null
   executionsStore.clearCurrentExecution()
 }
 
-// Filter logs
-const filteredNodeExecutions = computed(() => {
-  if (!selectedNodeFilter.value) return nodeExecutions.value
-  return nodeExecutions.value.filter(ne => ne.node_id === selectedNodeFilter.value)
+const openLogsForNode = (nodeId: string | null = null) => {
+  selectedLogNodeId.value = nodeId
+  logDialogVisible.value = true
+}
+
+const logDialogNodeExecutions = computed(() => {
+  if (!selectedLogNodeId.value) return nodeExecutions.value
+  return nodeExecutions.value.filter(ne => ne.node_id === selectedLogNodeId.value)
 })
+
+const logDialogTitle = computed(() => {
+  if (!selectedLogNodeId.value) return 'Execution Logs'
+  const nodeExecution = nodeExecutions.value.find(ne => ne.node_id === selectedLogNodeId.value)
+  return `Execution Logs - ${nodeExecution?.node_type || selectedLogNodeId.value}`
+})
+
+defineExpose({ openLogsForNode })
 
 watch(() => props.runRequestId, (requestId) => {
   const nextRequestId = requestId ?? 0
@@ -250,7 +262,7 @@ onUnmounted(() => {
             <VideoPlay />
           </ElIcon>
         </template>
-        <p class="hint">Click "Run Workflow" to start execution</p>
+        <p class="hint">Use the toolbar Run button to start execution</p>
       </ElEmpty>
     </div>
 
@@ -292,6 +304,7 @@ onUnmounted(() => {
         <div class="section-header">
           <h4>Node Executions</h4>
           <span class="count">{{ nodeExecutions.length }} nodes</span>
+          <span class="section-hint">Double-click for logs</span>
         </div>
 
         <ElScrollbar class="node-list">
@@ -299,8 +312,8 @@ onUnmounted(() => {
             v-for="nodeExec in nodeExecutions"
             :key="nodeExec.id"
             class="node-item"
-            :class="{ active: selectedNodeFilter === nodeExec.node_id }"
-            @click="selectedNodeFilter = selectedNodeFilter === nodeExec.node_id ? null : nodeExec.node_id"
+            :class="{ active: selectedLogNodeId === nodeExec.node_id }"
+            @dblclick.stop="openLogsForNode(nodeExec.node_id)"
           >
             <div class="node-info">
               <ElIcon
@@ -325,52 +338,6 @@ onUnmounted(() => {
         </ElScrollbar>
       </div>
 
-      <!-- Execution Logs -->
-      <ElCollapse v-model="logsExpanded" class="logs-collapse">
-        <ElCollapseItem name="logs">
-          <template #title>
-            <div class="logs-title">
-              <ElIcon><Document /></ElIcon>
-              <span>Execution Logs</span>
-            </div>
-          </template>
-
-          <div class="logs-content">
-            <ElScrollbar class="logs-scroll">
-              <div v-if="filteredNodeExecutions.length === 0" class="no-logs">
-                No logs available
-              </div>
-              <div v-else class="log-entries">
-                <div
-                  v-for="nodeExec in filteredNodeExecutions"
-                  :key="nodeExec.id"
-                  class="log-entry"
-                >
-                  <div class="log-header">
-                    <span class="log-node">{{ nodeExec.node_type }}</span>
-                    <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'">
-                      {{ nodeExec.status }}
-                    </ElTag>
-                  </div>
-                  <div v-if="nodeExec.input_data" class="log-section">
-                    <span class="log-label">Input:</span>
-                    <pre class="log-data">{{ JSON.stringify(nodeExec.input_data, null, 2) }}</pre>
-                  </div>
-                  <div v-if="nodeExec.output_data" class="log-section">
-                    <span class="log-label">Output:</span>
-                    <pre class="log-data">{{ JSON.stringify(nodeExec.output_data, null, 2) }}</pre>
-                  </div>
-                  <div v-if="nodeExec.error_message" class="log-section error">
-                    <span class="log-label">Error:</span>
-                    <pre class="log-data error">{{ nodeExec.error_message }}</pre>
-                  </div>
-                </div>
-              </div>
-            </ElScrollbar>
-          </div>
-        </ElCollapseItem>
-      </ElCollapse>
-
       <!-- Execution Result Summary -->
       <div v-if="currentExecution?.result" class="result-summary">
         <div class="result-header">
@@ -383,6 +350,48 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <ElDialog
+      v-model="logDialogVisible"
+      :title="logDialogTitle"
+      width="760px"
+      top="8vh"
+      append-to-body
+    >
+      <div class="logs-dialog-content">
+        <ElScrollbar class="logs-dialog-scroll">
+          <div v-if="logDialogNodeExecutions.length === 0" class="no-logs">
+            No logs available
+          </div>
+          <div v-else class="log-entries">
+            <div
+              v-for="nodeExec in logDialogNodeExecutions"
+              :key="nodeExec.id"
+              class="log-entry"
+            >
+              <div class="log-header">
+                <span class="log-node">{{ nodeExec.node_type }}</span>
+                <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'">
+                  {{ nodeExec.status }}
+                </ElTag>
+              </div>
+              <div v-if="nodeExec.input_data" class="log-section">
+                <span class="log-label">Input:</span>
+                <pre class="log-data">{{ JSON.stringify(nodeExec.input_data, null, 2) }}</pre>
+              </div>
+              <div v-if="nodeExec.output_data" class="log-section">
+                <span class="log-label">Output:</span>
+                <pre class="log-data">{{ JSON.stringify(nodeExec.output_data, null, 2) }}</pre>
+              </div>
+              <div v-if="nodeExec.error_message" class="log-section error">
+                <span class="log-label">Error:</span>
+                <pre class="log-data error">{{ nodeExec.error_message }}</pre>
+              </div>
+            </div>
+          </div>
+        </ElScrollbar>
+      </div>
+    </ElDialog>
   </div>
 </template>
 
@@ -517,6 +526,12 @@ onUnmounted(() => {
   color: #909399;
 }
 
+.section-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #909399;
+}
+
 .node-list {
   flex: 1;
   min-height: 0;
@@ -570,43 +585,13 @@ onUnmounted(() => {
   color: #909399;
 }
 
-.logs-collapse {
-  border: none;
-  margin-top: auto;
-}
-
-.logs-collapse :deep(.el-collapse-item__header) {
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 0 16px;
-  height: 40px;
-}
-
-.logs-collapse :deep(.el-collapse-item__wrap) {
-  border: none;
-}
-
-.logs-collapse :deep(.el-collapse-item__content) {
-  padding: 0;
-}
-
-.logs-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #606266;
-}
-
-.logs-content {
-  height: 200px;
-  border-top: 1px solid #e4e7ed;
+.logs-dialog-content {
+  height: min(60vh, 560px);
   overflow: hidden;
 }
 
-.logs-scroll {
-  height: 200px;
+.logs-dialog-scroll {
+  height: 100%;
 }
 
 .no-logs {
