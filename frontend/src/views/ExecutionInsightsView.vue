@@ -20,7 +20,7 @@ import {
   Refresh,
   Clock,
   Monitor,
-  Back
+  Edit
 } from '@element-plus/icons-vue'
 import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
@@ -186,8 +186,9 @@ function getServerLabel(serverId: unknown) {
   return serverNameMap.value.get(serverId) || `Server #${serverId}`
 }
 
-function goToWorkflowManagement() {
-  router.push('/workflows')
+function goToWorkflowEditor() {
+  if (!currentExecution.value) return
+  router.push(`/workflows/${currentExecution.value.workflow_id}/edit`)
 }
 
 async function loadExecution(executionId: number, syncRoute = true) {
@@ -330,7 +331,6 @@ onUnmounted(() => {
 <template>
   <div class="execution-insights-page">
     <div class="toolbar">
-      <ElButton :icon="Back" @click="goToWorkflowManagement">工作流管理</ElButton>
       <ElButton type="primary" :icon="Refresh" @click="refreshPage">刷新</ElButton>
 
       <ElSelect v-model="workflowFilter" clearable placeholder="筛选工作流" class="toolbar-select">
@@ -419,6 +419,7 @@ onUnmounted(() => {
             <div class="panel-title">
               <span>执行概览</span>
               <div class="panel-actions">
+                <ElButton size="small" :icon="Edit" @click="goToWorkflowEditor">编辑工作流</ElButton>
                 <ElTag :type="getStatusTone(currentExecution.status)" effect="dark">
                   {{ displayExecutionStatus }}
                 </ElTag>
