@@ -18,8 +18,17 @@ class Server(Base):
     description = Column(Text)
     tags = Column(String(200))
     status = Column(String(20), default="offline")  # 'online' | 'offline'
+    region = Column(String(20), default="私有云", server_default="私有云")  # 区域字段: 私有云 | 公司-上层 | 公司 | Fit楼 | 公有云 | 异构
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __init__(self, **kwargs):
+        # Set default values for Python instance creation
+        if "region" not in kwargs:
+            kwargs["region"] = "私有云"
+        if "status" not in kwargs:
+            kwargs["status"] = "offline"
+        super().__init__(**kwargs)
 
 class Workflow(Base):
     __tablename__ = "workflows"
