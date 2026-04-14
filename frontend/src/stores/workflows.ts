@@ -24,7 +24,9 @@ const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
   iotdb_config: ['server_id', 'region', 'node_role', 'iotdb_home', 'rpc_port', 'file_path', 'config_items'],
   iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
-  iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes']
+  iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes'],
+  iot_benchmark_start: ['server_id', 'region', 'target_host', 'rpc_port'],
+  iot_benchmark_wait: ['server_id', 'region']
 }
 
 const DEFAULT_IOTDB_CLUSTER_NAME = 'defaultCluster'
@@ -338,6 +340,10 @@ export const useWorkflowsStore = defineStore('workflows', () => {
 
     if (field === 'file_path' && !isEmptyInheritedValue(sourceOutput.conf_path)) {
       return cloneValue(sourceOutput.conf_path)
+    }
+
+    if (field === 'target_host' && !isEmptyInheritedValue(sourceOutput.host)) {
+      return cloneValue(sourceOutput.host)
     }
 
     return undefined

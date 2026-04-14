@@ -72,6 +72,14 @@ const nodeHelpText = computed(() => {
     return 'This node runs show cluster against the first DataNode and can execute extra validation SQL statements afterward.'
   }
 
+  if (selectedNode.value.data.nodeType === 'iot_benchmark_start') {
+    return 'Start one IoT Benchmark run in the background. Later nodes can continue while Wait IoT Benchmark polls the remote process.'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iot_benchmark_wait') {
+    return 'Wait for the benchmark_run produced by Start IoT Benchmark, then return the tail of its output log.'
+  }
+
   return ''
 })
 
@@ -82,12 +90,6 @@ const serverOptions = computed(() => {
     label: `${server.name} (${server.host})`,
     region: server.region || '私有云'
   }))
-})
-
-const filteredServerOptions = computed(() => {
-  const region = getConfigValue('region')
-  if (!region) return serverOptions.value
-  return serverOptions.value.filter(server => server.region === region)
 })
 
 // Fetch servers on mount
@@ -161,17 +163,8 @@ const updateServerConfig = (value: number | string | null | undefined) => {
 
 const updateRegionConfig = (value: string | null | undefined) => {
   if (!selectedNode.value) return
-  const currentServerId = getConfigValue('server_id')
-  const currentServer = serversStore.servers.find(server => server.id === Number(currentServerId))
-  const shouldClearServer = Boolean(
-    value &&
-    currentServer &&
-    (currentServer.region || '私有云') !== value
-  )
-
   workflowsStore.updateNodeConfig(selectedNode.value.id, {
-    region: value,
-    ...(shouldClearServer ? { server_id: null } : {})
+    region: value
   })
 }
 
@@ -353,6 +346,43 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Stop nodes gracefully before forcing' },
       { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
     ],
+    iot_benchmark_start: [
+      { field: 'server_id', label: 'Benchmark Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'benchmark_home', label: 'Benchmark Home', type: 'text', placeholder: '/opt/iot-benchmark-iotdb-2.0' },
+      { field: 'target_host', label: 'Target Host', type: 'text', placeholder: 'IoTDB host, inherited when possible' },
+      { field: 'rpc_port', label: 'Target RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'db_switch', label: 'DB Switch', type: 'select', options: [
+        { value: 'IoTDB-200-SESSION_BY_TABLET', label: 'IoTDB 2.0 Session Tablet' },
+        { value: 'IoTDB-200-SESSION_BY_RECORD', label: 'IoTDB 2.0 Session Record' },
+        { value: 'IoTDB-200-SESSION_BY_RECORDS', label: 'IoTDB 2.0 Session Records' },
+        { value: 'IoTDB-200-JDBC', label: 'IoTDB 2.0 JDBC' },
+        { value: 'IoTDB-200-REST', label: 'IoTDB 2.0 REST' }
+      ]},
+      { field: 'dialect', label: 'Dialect', type: 'select', options: [
+        { value: 'tree', label: 'Tree' },
+        { value: 'table', label: 'Table' }
+      ]},
+      { field: 'username', label: 'Username', type: 'text', placeholder: 'root' },
+      { field: 'password', label: 'Password', type: 'text', placeholder: 'root' },
+      { field: 'db_name', label: 'DB Name', type: 'text', placeholder: 'test' },
+      { field: 'work_mode', label: 'Work Mode', type: 'select', options: [
+        { value: 'testWithDefaultPath', label: 'Default Test' },
+        { value: 'generateDataMode', label: 'Generate Data' },
+        { value: 'verificationWriteMode', label: 'Verification Write' },
+        { value: 'verificationQueryMode', label: 'Verification Query' }
+      ]},
+      { field: 'loop', label: 'Loop', type: 'number', min: 1, max: 100000000 },
+      { field: 'operation_proportion', label: 'Operation Proportion', type: 'text', placeholder: '1:0:0:0:0:0:0:0:0:0:0:0' },
+      { field: 'config_items', label: 'Extra Config Items', type: 'keyValue', placeholder: 'Override config.properties item' },
+      { field: 'timeout', label: 'Start Timeout (seconds)', type: 'number', min: 1, max: 600 }
+    ],
+    iot_benchmark_wait: [
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 86400 },
+      { field: 'poll_interval_seconds', label: 'Poll Interval (seconds)', type: 'number', min: 1, max: 300 },
+      { field: 'tail_lines', label: 'Tail Lines', type: 'number', min: 1, max: 5000 },
+      { field: 'kill_on_timeout', label: 'Kill On Timeout', type: 'checkbox', placeholder: 'Try to kill the remote benchmark process if waiting times out' }
+    ],
 
     // Control nodes
     condition: [
@@ -424,11 +454,13 @@ const fieldSectionTitles: Record<string, string> = {
 }
 
 const getFieldSection = (field: FieldDefinition) => {
-  if (['server_id', 'host', 'username', 'password', 'region'].includes(field.field)) return 'connection'
+  if (['server_id', 'host', 'target_host', 'username', 'password', 'region'].includes(field.field)) return 'connection'
+  if (['db_switch', 'dialect', 'db_name'].includes(field.field)) return 'connection'
   if (['artifact_local_path', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
-  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir'].includes(field.field)) return 'paths'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'benchmark_home'].includes(field.field)) return 'paths'
   if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
-  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write'].includes(field.field)) return 'configuration'
+  if (['poll_interval_seconds', 'tail_lines', 'kill_on_timeout', 'loop'].includes(field.field)) return 'runtime'
+  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write', 'work_mode', 'operation_proportion'].includes(field.field)) return 'configuration'
   if (['command', 'commands', 'sqls', 'validation_sqls', 'expression', 'condition'].includes(field.field)) return 'command'
   if (['assert_type', 'params', 'expected', 'iterations', 'interval', 'max_concurrent'].includes(field.field)) return 'checks'
   if (['recipient', 'template'].includes(field.field)) return 'notification'
@@ -628,7 +660,7 @@ const isListField = (field: string): boolean => {
                 @update:model-value="updateServerConfig($event)"
               >
                 <ElOption
-                  v-for="option in filteredServerOptions"
+                  v-for="option in serverOptions"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"

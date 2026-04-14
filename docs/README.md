@@ -7,10 +7,10 @@
 | 分类 | 文档 | 内容 |
 |------|------|------|
 | 开发规范 | [../CLAUDE.md](../CLAUDE.md) | Claude Code 调用的项目规范入口，保留在仓库根目录 |
-| 设计文档 | [design/README.md](design/README.md) | 后端、前端、执行引擎、工作流编辑器、IoTDB、监控等设计索引 |
+| 设计文档 | [design/README.md](design/README.md) | 按页面入口组织的设计索引，包含共享架构和调研文档 |
 | 测试文档 | [testing/backend-tests-summary.md](testing/backend-tests-summary.md) | 后端测试文件和覆盖范围汇总 |
 | 待办事项 | [todos/workflow-editor.md](todos/workflow-editor.md) | 工作流编辑器交互、逻辑和可靠性待办 |
-| 待办事项 | [todos/iotdb-cli.md](todos/iotdb-cli.md) | IoTDB CLI、终端体验、日志分屏和前端包体积待办 |
+| 待办事项 | [todos/iotdb-cli.md](todos/iotdb-cli.md) | IoTDB CLI、终端体验和日志分屏待办 |
 | 待办事项 | [todos/frontend-build.md](todos/frontend-build.md) | 前端构建 chunk size 警告和优化建议 |
 | 实施计划 | [superpowers/plans/](superpowers/plans/) | 历史实施计划和任务拆解 |
 | 规格设计 | [superpowers/specs/](superpowers/specs/) | 历史规格与 UI/功能设计稿 |
@@ -21,6 +21,14 @@
 docs/
 ├── README.md
 ├── design/
+│   ├── pages/
+│   │   ├── app-shell/
+│   │   ├── iotdb/
+│   │   ├── monitoring/
+│   │   ├── servers/
+│   │   └── workflows/
+│   ├── research/
+│   ├── shared/
 │   └── README.md
 ├── testing/
 │   └── backend-tests-summary.md
@@ -35,7 +43,7 @@ docs/
 
 ## 维护规则
 
-- 新增设计文档放入 `docs/design/`，并同步更新 [design/README.md](design/README.md)。
+- 新增页面相关设计文档放入 `docs/design/pages/{page}/`，跨页面架构放入 `docs/design/shared/`，调研对照放入 `docs/design/research/`，并同步更新 [design/README.md](design/README.md)。
 - 新增测试说明放入 `docs/testing/`。
 - 新增待办记录放入 `docs/todos/`。
 - 新增实施计划或规格文档放入 `docs/superpowers/plans/` 或 `docs/superpowers/specs/`。
@@ -43,4 +51,4 @@ docs/
 
 ---
 
-最后更新: 2026-04-14
+最后更新: 2026-04-15

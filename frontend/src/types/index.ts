@@ -249,6 +249,49 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     inputs: 1,
     outputs: 1
   },
+  iot_benchmark_start: {
+    type: 'iot_benchmark_start',
+    label: 'Start IoT Benchmark',
+    category: 'iotdb',
+    icon: 'DataAnalysis',
+    color: '#D35400',
+    description: 'Start IoT Benchmark in background',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      benchmark_home: '/opt/iot-benchmark-iotdb-2.0',
+      target_host: '',
+      rpc_port: 6667,
+      db_switch: 'IoTDB-200-SESSION_BY_TABLET',
+      dialect: 'tree',
+      username: 'root',
+      password: 'root',
+      db_name: 'test',
+      work_mode: 'testWithDefaultPath',
+      loop: 100,
+      operation_proportion: '1:0:0:0:0:0:0:0:0:0:0:0',
+      config_items: {},
+      timeout: 60
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iot_benchmark_wait: {
+    type: 'iot_benchmark_wait',
+    label: 'Wait IoT Benchmark',
+    category: 'iotdb',
+    icon: 'Timer',
+    color: '#BA4A00',
+    description: 'Wait for background IoT Benchmark',
+    defaultConfig: {
+      timeout_seconds: 3600,
+      poll_interval_seconds: 5,
+      tail_lines: 200,
+      kill_on_timeout: false
+    },
+    inputs: 1,
+    outputs: 1
+  },
 
   // Control nodes
   condition: {
@@ -440,6 +483,8 @@ export type NodeType =
   | "iotdb_cluster_start"
   | "iotdb_cluster_check"
   | "iotdb_cluster_stop"
+  | "iot_benchmark_start"
+  | "iot_benchmark_wait"
   | "condition"
   | "loop"
   | "wait"
