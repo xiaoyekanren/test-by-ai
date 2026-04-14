@@ -70,7 +70,8 @@
 │   ├── package.json
 │   └── vite.config.ts
 │
-└── README.md
+├── docs/                         # 项目文档中心
+└── README.md                     # 项目入口与快速开始
 ```
 
 ## 快速开始
@@ -199,10 +200,10 @@ npm run build
 
 **每次更新代码时，必须同步更新相关文档：**
 
-1. **说明文档** - 更新功能说明、使用方法等（`README.md` 或 `docs/` 目录）
+1. **说明文档** - 更新功能说明、使用方法等（优先放在 `docs/` 目录；根 `README.md` 仅保留项目入口）
 2. **设计文档** - 更新架构设计、技术决策等（`docs/design/` 目录，没有则创建）
 
-详见 [CLAUDE.md](./CLAUDE.md)。
+详见 [CLAUDE.md](./CLAUDE.md) 和 [docs/README.md](./docs/README.md)。
 
 ## License
 

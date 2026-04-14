@@ -14,6 +14,7 @@
 | [工作流编辑器设计](workflow-editor.md) | Vue Flow 集成、节点类型、配置继承、撤销/重做 | 2026-04-13 |
 | [IoTDB 可视化设计](iotdb-integration.md) | WebSocket CLI、日志管理、配置编辑 | 2026-04-13 |
 | [系统监控设计](monitoring-service.md) | 本地/远程监控、进程管理、自动刷新 | 2026-04-13 |
+| [Node-RED 差距分析](node-red-gap-analysis.md) | 对照 Node-RED 梳理工作流平台差距与路线图 | 2026-04-14 |
 
 ## 文档模板
 
