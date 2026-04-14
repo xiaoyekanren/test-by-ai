@@ -18,12 +18,15 @@ import {
   ElCollapseItem,
   ElRadioGroup,
   ElRadioButton,
+  ElSelect,
+  ElOption,
   type FormInstance,
   type FormRules
 } from 'element-plus'
 import { Refresh, Plus, Edit, Delete, Connection, Promotion, CollectionTag, List } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import type { Server, ServerCreate, ServerUpdate } from '@/types'
+import { REGION_OPTIONS } from '@/types'
 
 const serversStore = useServersStore()
 
@@ -43,7 +46,8 @@ const formData = reactive<ServerCreate & { password?: string }>({
   username: '',
   password: '',
   description: '',
-  tags: ''
+  tags: '',
+  region: '私有云'
 })
 
 const formRules: FormRules = {
@@ -212,7 +216,8 @@ function openEditDialog(server: Server) {
     username: server.username || '',
     password: '',
     description: server.description || '',
-    tags: server.tags || ''
+    tags: server.tags || '',
+    region: server.region || '私有云'
   })
   dialogVisible.value = true
 }
@@ -226,7 +231,8 @@ function resetForm() {
     username: '',
     password: '',
     description: '',
-    tags: ''
+    tags: '',
+    region: '私有云'
   })
   formRef.value?.clearValidate()
 }
@@ -247,7 +253,8 @@ async function submitForm() {
           username: formData.username || null,
           password: formData.password || null,
           description: formData.description || null,
-          tags: formData.tags || null
+          tags: formData.tags || null,
+          region: formData.region
         })
         dialogVisible.value = false
         // Auto test connection after creating server
@@ -259,7 +266,8 @@ async function submitForm() {
           port: formData.port,
           username: formData.username || null,
           description: formData.description || null,
-          tags: formData.tags || null
+          tags: formData.tags || null,
+          region: formData.region
         }
         if (formData.password) {
           updateData.password = formData.password
@@ -416,6 +424,12 @@ function parseTags(tags: string | null): string[] {
           </template>
         </ElTableColumn>
 
+        <ElTableColumn prop="region" label="Region" width="100" align="center">
+          <template #default="{ row }">
+            <ElTag size="small" type="info">{{ row.region || '私有云' }}</ElTag>
+          </template>
+        </ElTableColumn>
+
         <ElTableColumn label="Tags" width="180">
           <template #default="{ row }">
             <div class="tags-container">
@@ -430,6 +444,14 @@ function parseTags(tags: string | null): string[] {
               </ElTag>
               <span v-if="!parseTags(row.tags).length" class="no-tags">-</span>
             </div>
+          </template>
+        </ElTableColumn>
+
+        <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
+          <template #default="{ row }">
+            <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
+              {{ row.is_busy ? '繁忙' : '空闲' }}
+            </span>
           </template>
         </ElTableColumn>
 
@@ -523,6 +545,20 @@ function parseTags(tags: string | null): string[] {
                   <span v-if="getServerStatus(row) === 'loading'" class="status-icon spinning">◐</span>
                   <span v-else>●</span>
                   {{ getServerStatus(row) }}
+                </span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn prop="region" label="Region" width="100" align="center">
+              <template #default="{ row }">
+                <ElTag size="small" type="info">{{ row.region || '私有云' }}</ElTag>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
+              <template #default="{ row }">
+                <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
+                  {{ row.is_busy ? '繁忙' : '空闲' }}
                 </span>
               </template>
             </ElTableColumn>
@@ -621,6 +657,17 @@ function parseTags(tags: string | null): string[] {
             v-model="formData.tags"
             placeholder="Comma separated tags (e.g. production, web)"
           />
+        </ElFormItem>
+
+        <ElFormItem label="Region" prop="region">
+          <ElSelect v-model="formData.region" placeholder="Select region" size="small" style="width: 100%">
+            <ElOption
+              v-for="region in REGION_OPTIONS"
+              :key="region"
+              :label="region"
+              :value="region"
+            />
+          </ElSelect>
         </ElFormItem>
 
       </ElForm>
@@ -817,6 +864,27 @@ function parseTags(tags: string | null): string[] {
 .status-tag.loading {
   background: rgba(245, 158, 11, 0.1);
   color: #d97706;
+}
+
+.busy-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 18px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.busy-tag.busy {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.busy-tag.idle {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
 }
 
 .status-icon {
