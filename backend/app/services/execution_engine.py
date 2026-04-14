@@ -100,7 +100,8 @@ class ExecutionEngine:
             for node in nodes:
                 node_id = node.get("id")
                 node_type = node.get("type", "shell")
-                config = node.get("config", {}) or {}
+                # Copy config to avoid mutating original workflow definition
+                config = dict(node.get("config", {}) or {})
 
                 # Resolve server for server-dependent nodes without explicit server_id
                 if self._node_requires_server(node_type):
@@ -1185,21 +1186,27 @@ class ExecutionEngine:
 
     def _compute_busy_server_ids(self) -> List[int]:
         """Get IDs of servers currently being used in running executions."""
-        running_executions = self.db.query(Execution).filter(
+        # Find all running executions
+        running_executions = self.db.query(Execution.id).filter(
             Execution.status == "running"
+        ).all()
+        running_exec_ids = [e.id for e in running_executions]
+
+        if not running_exec_ids:
+            return []
+
+        # Single query with .in_() filter for all running node_executions
+        running_node_execs = self.db.query(NodeExecution).filter(
+            NodeExecution.execution_id.in_(running_exec_ids),
+            NodeExecution.status == "running"
         ).all()
 
         busy_ids: List[int] = []
-        for execution in running_executions:
-            node_executions = self.db.query(NodeExecution).filter(
-                NodeExecution.execution_id == execution.id,
-                NodeExecution.status == "running"
-            ).all()
-            for ne in node_executions:
-                if ne.input_data and isinstance(ne.input_data, dict):
-                    server_id = ne.input_data.get("server_id")
-                    if server_id is not None:
-                        busy_ids.append(int(server_id))
+        for ne in running_node_execs:
+            if ne.input_data and isinstance(ne.input_data, dict):
+                server_id = ne.input_data.get("server_id")
+                if server_id is not None:
+                    busy_ids.append(int(server_id))
 
         return list(set(busy_ids))
 

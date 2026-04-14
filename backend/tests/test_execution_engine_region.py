@@ -181,11 +181,20 @@ class TestComputeBusyServerIds:
             Execution(id=1, workflow_id=1, status="running"),
             Execution(id=2, workflow_id=2, status="running"),
         ]
-        db_session.query.return_value.filter.return_value.all.side_effect = [
-            mock_executions,
-            [NodeExecution(execution_id=1, node_id="n1", status="running", input_data={"server_id": 1})],
-            [NodeExecution(execution_id=2, node_id="n2", status="running", input_data={"server_id": 2})],
+        # New implementation uses single query with .in_() filter
+        mock_node_executions = [
+            NodeExecution(execution_id=1, node_id="n1", status="running", input_data={"server_id": 1}),
+            NodeExecution(execution_id=2, node_id="n2", status="running", input_data={"server_id": 2}),
         ]
+        # Mock the query chain for execution IDs
+        mock_query = db_session.query.return_value
+        mock_filter = mock_query.filter.return_value
+        mock_filter.all.return_value = mock_executions
+
+        # Mock the query chain for node_executions with .in_() filter
+        mock_ne_query = db_session.query.return_value
+        mock_ne_filter = mock_ne_query.filter.return_value
+        mock_ne_filter.all.return_value = mock_node_executions
 
         result = engine._compute_busy_server_ids()
 
