@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import {
-  ElCard,
   ElTable,
   ElTableColumn,
   ElButton,
@@ -16,22 +15,17 @@ import {
   ElTooltip,
   ElCollapse,
   ElCollapseItem,
-  ElRadioGroup,
-  ElRadioButton,
   ElSelect,
   ElOption,
   type FormInstance,
   type FormRules
 } from 'element-plus'
-import { Refresh, Plus, Edit, Delete, Connection, Promotion, CollectionTag, List } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete, Connection, Promotion } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import type { Server, ServerCreate, ServerUpdate } from '@/types'
 import { REGION_OPTIONS } from '@/types'
 
 const serversStore = useServersStore()
-
-// View mode: 'group' for tags grouping, 'list' for flat list
-const viewMode = ref<'group' | 'list'>('list')
 
 // Form related
 const formRef = ref<FormInstance>()
@@ -46,7 +40,6 @@ const formData = reactive<ServerCreate & { password?: string }>({
   username: '',
   password: '',
   description: '',
-  tags: '',
   region: '私有云'
 })
 
@@ -77,68 +70,45 @@ const pendingStatusChecks = ref(0)
 const statusCheckRunId = ref(0)
 const isStatusChecking = computed(() => pendingStatusChecks.value > 0)
 
-// Table sorting - default to host:port ascending
-const sortProp = ref('host')
-const sortOrder = ref('ascending')
-
 // Sort servers by host:port
 const sortedServers = computed(() => {
   const servers = [...serversStore.servers]
-  if (sortProp.value && sortOrder.value) {
-    servers.sort((a, b) => {
-      let aVal: string | number
-      let bVal: string | number
-      if (sortProp.value === 'host') {
-        // Sort by host:port combination
-        aVal = `${a.host}:${a.port}`
-        bVal = `${b.host}:${b.port}`
-      } else {
-        aVal = a[sortProp.value as keyof Server] as string | number
-        bVal = b[sortProp.value as keyof Server] as string | number
-      }
-      if (aVal === bVal) return 0
-      const comparison = aVal < bVal ? -1 : 1
-      return sortOrder.value === 'ascending' ? comparison : -comparison
-    })
-  }
+  servers.sort((a, b) => `${a.host}:${a.port}`.localeCompare(`${b.host}:${b.port}`))
   return servers
 })
 
-// Group servers by tags
+// Group servers by region
 const groupedServers = computed(() => {
   const groups: Record<string, Server[]> = {}
-  const untagged: Server[] = []
 
   sortedServers.value.forEach(server => {
-    const tags = parseTags(server.tags)
-    if (tags.length === 0) {
-      untagged.push(server)
-    } else {
-      tags.forEach(tag => {
-        if (!groups[tag]) {
-          groups[tag] = []
-        }
-        groups[tag].push(server)
-      })
+    const region = server.region || '私有云'
+    if (!groups[region]) {
+      groups[region] = []
     }
+    groups[region].push(server)
   })
 
-  // Sort groups by tag name
-  const sortedGroups = Object.keys(groups).sort().map(tag => ({
-    tag,
-    servers: groups[tag]
+  // Keep configured regions in their declared order, then append any custom region names.
+  return Object.keys(groups).sort((a, b) => {
+    const aIndex = REGION_OPTIONS.indexOf(a)
+    const bIndex = REGION_OPTIONS.indexOf(b)
+    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b)
+    if (aIndex === -1) return 1
+    if (bIndex === -1) return -1
+    return aIndex - bIndex
+  }).map(region => ({
+    region,
+    servers: groups[region]
   }))
-
-  // Add untagged group at the end if there are any
-  if (untagged.length > 0) {
-    sortedGroups.push({
-      tag: 'Untagged',
-      servers: untagged
-    })
-  }
-
-  return sortedGroups
 })
+
+const activeRegionGroups = ref<string[]>([])
+const groupedRegionKey = computed(() => groupedServers.value.map(group => group.region).join('|'))
+
+watch(groupedRegionKey, (key) => {
+  activeRegionGroups.value = key ? key.split('|') : []
+}, { immediate: true })
 
 // Load servers on mount
 onMounted(async () => {
@@ -187,16 +157,6 @@ function getServerStatus(server: Server) {
   return serversStore.isTestingServer(server.id) ? 'loading' : server.status
 }
 
-function handleSortChange({ prop, order }: { prop: string; order: string | null }) {
-  sortProp.value = prop || 'host'
-  sortOrder.value = order || 'ascending'
-}
-
-// Switch view mode
-function handleViewModeChange() {
-  // View mode changed, no additional action needed
-}
-
 // Open create dialog
 function openCreateDialog() {
   dialogMode.value = 'create'
@@ -216,7 +176,6 @@ function openEditDialog(server: Server) {
     username: server.username || '',
     password: '',
     description: server.description || '',
-    tags: server.tags || '',
     region: server.region || '私有云'
   })
   dialogVisible.value = true
@@ -231,7 +190,6 @@ function resetForm() {
     username: '',
     password: '',
     description: '',
-    tags: '',
     region: '私有云'
   })
   formRef.value?.clearValidate()
@@ -253,7 +211,6 @@ async function submitForm() {
           username: formData.username || null,
           password: formData.password || null,
           description: formData.description || null,
-          tags: formData.tags || null,
           region: formData.region
         })
         dialogVisible.value = false
@@ -266,7 +223,6 @@ async function submitForm() {
           port: formData.port,
           username: formData.username || null,
           description: formData.description || null,
-          tags: formData.tags || null,
           region: formData.region
         }
         if (formData.password) {
@@ -354,11 +310,6 @@ async function executeCommand() {
   }
 }
 
-// Parse tags string to array
-function parseTags(tags: string | null): string[] {
-  if (!tags) return []
-  return tags.split(',').map(t => t.trim()).filter(t => t)
-}
 </script>
 
 <template>
@@ -371,10 +322,6 @@ function parseTags(tags: string | null): string[] {
         <span class="refresh-info">{{ serversStore.loading ? '加载中' : isStatusChecking ? `检查中 ${pendingStatusChecks} 台` : '按 Host:Port 排序' }}</span>
       </div>
       <div class="toolbar-actions">
-        <ElRadioGroup v-model="viewMode" size="small" @change="handleViewModeChange">
-          <ElRadioButton value="list" :icon="List">List</ElRadioButton>
-          <ElRadioButton value="group" :icon="CollectionTag">By Tags</ElRadioButton>
-        </ElRadioGroup>
         <ElButton @click="loadServers()" :icon="Refresh" :loading="serversStore.loading" size="small">
           刷新
         </ElButton>
@@ -384,132 +331,17 @@ function parseTags(tags: string | null): string[] {
       </div>
     </div>
 
-    <!-- List View -->
-    <ElCard v-if="viewMode === 'list'" shadow="hover" class="servers-card">
-      <ElTable
-        :data="sortedServers"
-        v-loading="serversStore.loading"
-        stripe
-        style="width: 100%"
-        class="server-table"
-        @sort-change="handleSortChange"
-        :default-sort="{ prop: 'host', order: 'ascending' }"
-        :fit="false"
-      >
-        <ElTableColumn prop="name" label="Name" sortable="custom" width="220" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="server-info">
-              <ElTag type="info" size="small" class="server-type-tag">SSH</ElTag>
-              <div class="server-name">
-                <span class="name-text">{{ row.name }}</span>
-                <span v-if="row.description" class="description">{{ row.description }}</span>
-              </div>
-            </div>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn label="Host:Port" prop="host" sortable="custom" width="220" show-overflow-tooltip>
-          <template #default="{ row }">
-            <code class="host-port">{{ row.host }}:{{ row.port }}</code>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn prop="status" label="Status" sortable="custom" width="90" align="center">
-          <template #default="{ row }">
-            <span class="status-tag" :class="getServerStatus(row)">
-              <span v-if="getServerStatus(row) === 'loading'" class="status-icon spinning">◐</span>
-              <span v-else>●</span>
-              {{ getServerStatus(row) }}
-            </span>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn prop="region" label="Region" width="100" align="center">
-          <template #default="{ row }">
-            <ElTag size="small" type="info">{{ row.region || '私有云' }}</ElTag>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn label="Tags" width="180">
-          <template #default="{ row }">
-            <div class="tags-container">
-              <ElTag
-                v-for="tag in parseTags(row.tags)"
-                :key="tag"
-                size="small"
-                type="info"
-                class="tag-item"
-              >
-                {{ tag }}
-              </ElTag>
-              <span v-if="!parseTags(row.tags).length" class="no-tags">-</span>
-            </div>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
-          <template #default="{ row }">
-            <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
-              {{ row.is_busy ? '繁忙' : '空闲' }}
-            </span>
-          </template>
-        </ElTableColumn>
-
-        <ElTableColumn label="Actions" width="150" align="center">
-          <template #default="{ row }">
-            <div class="action-buttons">
-              <ElTooltip content="Test Connection" placement="top">
-                <ElButton
-                  size="small"
-                  :icon="Connection"
-                  @click="testConnection(row)"
-                  :loading="serversStore.isTestingServer(row.id)"
-                  link
-                />
-              </ElTooltip>
-              <ElTooltip content="Execute Command" placement="top">
-                <ElButton
-                  size="small"
-                  :icon="Promotion"
-                  @click="openCommandDialog(row)"
-                  link
-                />
-              </ElTooltip>
-              <ElTooltip content="Edit" placement="top">
-                <ElButton
-                  size="small"
-                  type="primary"
-                  :icon="Edit"
-                  @click="openEditDialog(row)"
-                  link
-                />
-              </ElTooltip>
-              <ElTooltip content="Delete" placement="top">
-                <ElButton
-                  size="small"
-                  type="danger"
-                  :icon="Delete"
-                  @click="deleteServer(row)"
-                  link
-                />
-              </ElTooltip>
-            </div>
-          </template>
-        </ElTableColumn>
-      </ElTable>
-    </ElCard>
-
-    <!-- Grouped View by Tags -->
-    <div v-else class="grouped-view">
-      <ElCollapse v-if="groupedServers.length > 0" accordion>
+    <!-- Grouped View by Region -->
+    <div class="grouped-view">
+      <ElCollapse v-if="groupedServers.length > 0" v-model="activeRegionGroups">
         <ElCollapseItem
           v-for="group in groupedServers"
-          :key="group.tag"
-          :name="group.tag"
+          :key="group.region"
+          :name="group.region"
         >
           <template #title>
             <div class="group-header">
-              <ElTag size="small" type="info">{{ group.tag }}</ElTag>
+              <ElTag size="small" type="info">{{ group.region }}</ElTag>
               <span class="group-count">{{ group.servers.length }} servers</span>
             </div>
           </template>
@@ -563,7 +395,7 @@ function parseTags(tags: string | null): string[] {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="120" align="center">
+            <ElTableColumn label="Actions" width="150" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <ElTooltip content="Test Connection" placement="top">
@@ -572,6 +404,14 @@ function parseTags(tags: string | null): string[] {
                       :icon="Connection"
                       @click="testConnection(row)"
                       :loading="serversStore.isTestingServer(row.id)"
+                      link
+                    />
+                  </ElTooltip>
+                  <ElTooltip content="Execute Command" placement="top">
+                    <ElButton
+                      size="small"
+                      :icon="Promotion"
+                      @click="openCommandDialog(row)"
                       link
                     />
                   </ElTooltip>
@@ -649,13 +489,6 @@ function parseTags(tags: string | null): string[] {
             type="textarea"
             :rows="2"
             placeholder="Server description (optional)"
-          />
-        </ElFormItem>
-
-        <ElFormItem label="Tags" prop="tags">
-          <ElInput
-            v-model="formData.tags"
-            placeholder="Comma separated tags (e.g. production, web)"
           />
         </ElFormItem>
 
@@ -767,11 +600,6 @@ function parseTags(tags: string | null): string[] {
   display: flex;
   gap: 6px;
   align-items: center;
-}
-
-.servers-card {
-  width: 100%;
-  margin: 0;
 }
 
 .server-table :deep(.el-table__cell) {
@@ -904,21 +732,6 @@ function parseTags(tags: string | null): string[] {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag-item {
-  margin: 0;
-}
-
-.no-tags {
-  color: #94a3b8;
-  font-size: 12px;
 }
 
 .action-buttons {

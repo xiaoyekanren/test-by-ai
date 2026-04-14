@@ -3,7 +3,6 @@
 ## Interaction
 
 - Status: TODO
-- Add undo and redo for workflow editing so users can recover from accidental graph changes.
 - Add a minimap when workflows become large enough that navigation is cumbersome.
 
 ## Logic

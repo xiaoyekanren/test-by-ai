@@ -7,8 +7,8 @@ from datetime import datetime
 NODE_TYPE = Literal[
     "shell", "upload", "download", "config", "log_view", "iotdb_deploy", "iotdb_start",
     "iotdb_stop", "iotdb_cli", "iotdb_config", "iotdb_cluster_deploy", "iotdb_cluster_start",
-    "iotdb_cluster_check", "iotdb_cluster_stop", "condition", "loop", "wait",
-    "parallel", "assert", "report", "summary", "notify"
+    "iotdb_cluster_check", "iotdb_cluster_stop", "iot_benchmark_start", "iot_benchmark_wait",
+    "condition", "loop", "wait", "parallel", "assert", "report", "summary", "notify"
 ]
 
 class NodeDefinition(BaseModel):

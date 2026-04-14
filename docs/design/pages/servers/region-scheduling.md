@@ -70,14 +70,17 @@
 
 ### ServersView
 
-- 表格新增 Region 列（Tag 展示）
+- 服务器列表按 Region 默认分组展示
+- 表格保留 Region 列
 - 表格新增繁忙状态列（空闲/繁忙）
 - 新增/编辑弹窗新增 Region 下拉框
+- Tags UI 已移除，原 Tags 分组逻辑并入 Region 分组
 
 ### NodeConfigPanel
 
 - 需服务器的节点配置新增 Region 下拉框
-- Region 选择不影响显式 Server 选择
+- 选择 Server 后自动回填该服务器的 Region
+- 手动修改 Region 不清空显式 Server 选择
 
 ## 测试策略
 

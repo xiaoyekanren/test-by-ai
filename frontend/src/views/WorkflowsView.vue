@@ -438,6 +438,7 @@ onUnmounted(() => {
         :model="createForm"
         :rules="createFormRules"
         label-position="top"
+        @submit.prevent="handleCreate"
       >
         <ElFormItem label="Name" prop="name">
           <ElInput
@@ -482,6 +483,7 @@ onUnmounted(() => {
         :model="renameForm"
         :rules="renameFormRules"
         label-position="top"
+        @submit.prevent="handleRename"
       >
         <ElFormItem label="Name" prop="name">
           <ElInput

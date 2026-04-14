@@ -70,6 +70,7 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
 const nodeExecutionStatusById = computed(() => {
   const statusById = new Map<string, 'running' | 'passed' | 'failed'>()
@@ -200,7 +201,7 @@ onNodeDragStop((event) => {
 
 // Handle pane ready (fit view on init)
 onPaneReady(() => {
-  fitView({ padding: 0.2 })
+  fitView(fitViewOptions)
 })
 
 // Handle pane click (deselect node)
@@ -324,7 +325,7 @@ const handleZoomOut = () => {
 
 // Handle fit view
 const handleFitView = () => {
-  fitView({ padding: 0.2 })
+  fitView(fitViewOptions)
 }
 
 // Handle run workflow
@@ -422,7 +423,6 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
           v-model:nodes="workflowsStore.editorNodes"
           v-model:edges="workflowsStore.editorEdges"
           :edges-selectable="true"
-          fit-view-on-init
           :min-zoom="0.2"
           :max-zoom="4"
           snap-to-grid
