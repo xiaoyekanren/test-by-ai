@@ -35,8 +35,8 @@ def migrate_add_region_column(engine: Engine) -> None:
             conn.commit()
 
         conn.close()
-    except Exception:
-        # Table might not exist yet, which is fine
+    except sqlite3.OperationalError:
+        # Table doesn't exist yet - will be created by create_all()
         pass
 
 
