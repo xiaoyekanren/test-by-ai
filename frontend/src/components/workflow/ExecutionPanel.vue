@@ -399,39 +399,61 @@ onUnmounted(() => {
 
     <ElDialog
       v-model="logDialogVisible"
-      :title="logDialogTitle"
-      width="760px"
+      width="800px"
       top="8vh"
       append-to-body
+      class="logs-dialog-enhanced"
     >
-      <div class="logs-dialog-content">
-        <ElScrollbar class="logs-dialog-scroll">
-          <div v-if="logDialogNodeExecutions.length === 0" class="no-logs">
-            No logs available
+      <template #header>
+        <div class="logs-dialog-header-enhanced">
+          <div class="logs-dialog-accent"></div>
+          <div class="logs-dialog-icon-wrapper">
+            <div class="logs-dialog-icon">
+              <ElIcon :size="20"><Timer /></ElIcon>
+            </div>
           </div>
-          <div v-else class="log-entries">
+          <div class="logs-dialog-title-block">
+            <h3 class="logs-dialog-title">{{ logDialogTitle }}</h3>
+            <p class="logs-dialog-subtitle">节点执行日志详情</p>
+          </div>
+        </div>
+      </template>
+      <div class="logs-dialog-content-enhanced">
+        <ElScrollbar class="logs-dialog-scroll-enhanced">
+          <div v-if="logDialogNodeExecutions.length === 0" class="no-logs-enhanced">
+            <ElIcon :size="32"><Clock /></ElIcon>
+            <p>暂无日志数据</p>
+          </div>
+          <div v-else class="log-entries-enhanced">
             <div
               v-for="nodeExec in logDialogNodeExecutions"
               :key="nodeExec.id"
-              class="log-entry"
+              class="log-entry-enhanced"
             >
-              <div class="log-header">
-                <span class="log-node">{{ nodeExec.node_type }}</span>
-                <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'">
+              <div class="log-header-enhanced">
+                <div class="log-node-info">
+                  <div class="log-node-icon" :class="nodeExec.status">
+                    <ElIcon>
+                      <component :is="nodeExec.status === 'completed' ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
+                    </ElIcon>
+                  </div>
+                  <span class="log-node-enhanced">{{ nodeExec.node_type }}</span>
+                </div>
+                <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'" effect="plain">
                   {{ nodeExec.status }}
                 </ElTag>
               </div>
-              <div v-if="nodeExec.input_data" class="log-section">
-                <span class="log-label">Input:</span>
-                <pre class="log-data">{{ formatLogData(nodeExec.input_data) }}</pre>
+              <div v-if="nodeExec.input_data" class="log-section-enhanced">
+                <span class="log-label-enhanced">Input</span>
+                <pre class="log-data-enhanced">{{ formatLogData(nodeExec.input_data) }}</pre>
               </div>
-              <div v-if="nodeExec.output_data" class="log-section">
-                <span class="log-label">Output:</span>
-                <pre class="log-data">{{ formatLogData(nodeExec.output_data) }}</pre>
+              <div v-if="nodeExec.output_data" class="log-section-enhanced">
+                <span class="log-label-enhanced">Output</span>
+                <pre class="log-data-enhanced">{{ formatLogData(nodeExec.output_data) }}</pre>
               </div>
-              <div v-if="nodeExec.error_message" class="log-section error">
-                <span class="log-label">Error:</span>
-                <pre class="log-data error">{{ nodeExec.error_message }}</pre>
+              <div v-if="nodeExec.error_message" class="log-section-enhanced error">
+                <span class="log-label-enhanced">Error</span>
+                <pre class="log-data-enhanced error">{{ nodeExec.error_message }}</pre>
               </div>
             </div>
           </div>
@@ -729,5 +751,179 @@ onUnmounted(() => {
 
 .result-text.failed {
   color: #f56c6c;
+}
+
+/* Enhanced Logs Dialog */
+.logs-dialog-header-enhanced {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+  margin: -20px -20px 0 -20px;
+}
+
+.logs-dialog-accent {
+  width: 4px;
+  height: 48px;
+  background: linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.logs-dialog-icon-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.logs-dialog-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 10px;
+  color: #8b5cf6;
+}
+
+.logs-dialog-title-block {
+  flex: 1;
+}
+
+.logs-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.logs-dialog-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.logs-dialog-content-enhanced {
+  padding: 20px;
+  min-height: 300px;
+}
+
+.logs-dialog-scroll-enhanced {
+  max-height: 480px;
+}
+
+.no-logs-enhanced {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.no-logs-enhanced p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.log-entries-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-entry-enhanced {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.log-header-enhanced {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.log-node-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.log-node-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.log-node-icon.completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.log-node-icon.failed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.log-node-icon.running {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.log-node-icon.pending {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.log-node-enhanced {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.log-section-enhanced {
+  margin-bottom: 12px;
+}
+
+.log-section-enhanced:last-child {
+  margin-bottom: 0;
+}
+
+.log-label-enhanced {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 6px;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.log-data-enhanced {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 11px;
+  background: #1e293b;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.log-data-enhanced.error {
+  color: #fca5a5;
+  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
 }
 </style>
