@@ -11,7 +11,7 @@
 
 ### 文档位置
 
-- 说明文档: `README.md` 或 `docs/` 目录下的相关文档
+- 说明文档: 优先放在 `docs/` 目录；根目录 `README.md` 仅作为项目入口，`CLAUDE.md` 作为 Claude Code 调用入口保留在根目录
 - 设计文档: `docs/design/` 目录
 
 ### 文档命名规范
