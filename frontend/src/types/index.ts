@@ -1,3 +1,6 @@
+// Region options for server selection
+export const REGION_OPTIONS: string[] = ["私有云", "公司-上层", "公司", "Fit楼", "公有云", "异构"]
+
 // Node type configurations for the workflow editor
 
 export type NodeCategory = 'basic' | 'iotdb' | 'control' | 'result'
@@ -23,7 +26,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Monitor',
     color: '#409EFF',
     description: 'Execute shell command',
-    defaultConfig: { command: '', server_id: null, timeout: 300, retry: 0 },
+    defaultConfig: { command: '', server_id: null, region: null, timeout: 300, retry: 0 },
     inputs: 1,
     outputs: 1
   },
@@ -34,7 +37,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Upload',
     color: '#67C23A',
     description: 'Upload file via SFTP',
-    defaultConfig: { local_path: '', remote_path: '', server_id: null, timeout: 300 },
+    defaultConfig: { local_path: '', remote_path: '', server_id: null, region: null, timeout: 300 },
     inputs: 1,
     outputs: 1
   },
@@ -45,7 +48,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Download',
     color: '#E6A23C',
     description: 'Download file via SFTP',
-    defaultConfig: { remote_path: '', local_path: '', server_id: null },
+    defaultConfig: { remote_path: '', local_path: '', server_id: null, region: null },
     inputs: 1,
     outputs: 1
   },
@@ -56,7 +59,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Setting',
     color: '#909399',
     description: 'Modify configuration file',
-    defaultConfig: { file_path: '', config_items: {}, backup_before_write: true, server_id: null, timeout: 60 },
+    defaultConfig: { file_path: '', config_items: {}, backup_before_write: true, server_id: null, region: null, timeout: 60 },
     inputs: 1,
     outputs: 1
   },
@@ -67,7 +70,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'Document',
     color: '#909399',
     description: 'View log content',
-    defaultConfig: { file_path: '', lines: 100, server_id: null },
+    defaultConfig: { file_path: '', lines: 100, server_id: null, region: null },
     inputs: 1,
     outputs: 1
   },
@@ -82,6 +85,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     description: 'Deploy IoTDB instance',
     defaultConfig: {
       server_id: null,
+      region: null,
       artifact_local_path: '',
       remote_package_path: '/tmp/apache-iotdb-bin.zip',
       install_dir: '/opt/iotdb',
@@ -103,6 +107,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     description: 'Start IoTDB service',
     defaultConfig: {
       server_id: null,
+      region: null,
       node_role: 'standalone',
       iotdb_home: '',
       host: '',
@@ -121,7 +126,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     icon: 'VideoPause',
     color: '#E74C3C',
     description: 'Stop IoTDB service',
-    defaultConfig: { server_id: null, node_role: 'standalone', iotdb_home: '', graceful: true, timeout_seconds: 60 },
+    defaultConfig: { server_id: null, region: null, node_role: 'standalone', iotdb_home: '', graceful: true, timeout_seconds: 60 },
     inputs: 1,
     outputs: 1
   },
@@ -134,6 +139,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     description: 'Execute IoTDB CLI commands',
     defaultConfig: {
       server_id: null,
+      region: null,
       iotdb_home: '',
       host: '',
       rpc_port: 6667,
@@ -155,6 +161,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     description: 'Declare config overrides for deployed IoTDB',
     defaultConfig: {
       server_id: null,
+      region: null,
       node_role: 'standalone',
       iotdb_home: '',
       file_path: '',
@@ -369,6 +376,8 @@ export interface Server {
   description: string | null
   tags: string | null
   status: string
+  region: string
+  is_busy: boolean
   created_at: string
   updated_at: string
 }
@@ -381,6 +390,7 @@ export interface ServerCreate {
   password?: string | null
   description?: string | null
   tags?: string | null
+  region?: string
 }
 
 export interface ServerUpdate {
@@ -391,6 +401,7 @@ export interface ServerUpdate {
   password?: string | null
   description?: string | null
   tags?: string | null
+  region?: string
 }
 
 export interface ServerTestResult {

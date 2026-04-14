@@ -1,7 +1,7 @@
 import logging
 import os
+import random
 import shlex
-import subprocess
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -98,7 +98,37 @@ class ExecutionEngine:
             for node in nodes:
                 node_id = node.get("id")
                 node_type = node.get("type", "shell")
-                config = node.get("config", {}) or {}
+                # Copy config to avoid mutating original workflow definition
+                config = dict(node.get("config", {}) or {})
+
+                if self._node_requires_server(node_type):
+                    explicit_region = config.get("region") not in (None, "")
+                    server = self._resolve_server_with_region(config, context)
+                    if server:
+                        self._write_server_config(config, server)
+                        context["server_id"] = server.id
+                        context["server_name"] = server.name
+                        context["host"] = server.host
+                        context["region"] = server.region
+                        logger.info(
+                            "Resolved server %s (%s) in region %s for node %s",
+                            server.id, server.name, server.region, node_id
+                        )
+                    elif config.get("region") in (None, ""):
+                        config["region"] = self._target_region(config, context)
+                    merge_context = context
+                    if explicit_region and not server:
+                        logger.warning(
+                            "No idle server found in explicit region %s for node %s; inherited server context will not be used",
+                            config.get("region"),
+                            node_id
+                        )
+                        merge_context = {
+                            key: value
+                            for key, value in context.items()
+                            if key not in {"server_id", "server_name", "host"}
+                        }
+                    config = self._merge_config_with_context(config, merge_context)
 
                 node_execution = NodeExecution(
                     execution_id=execution_id,
@@ -176,31 +206,31 @@ class ExecutionEngine:
         merged = self._merge_config_with_context(config, context)
 
         if node_type == "shell":
-            return self._execute_shell_node(merged)
+            return self._execute_shell_node(merged, context)
         if node_type == "upload":
-            return self._execute_upload_node(merged)
+            return self._execute_upload_node(merged, context)
         if node_type == "download":
-            return self._execute_download_node(merged)
+            return self._execute_download_node(merged, context)
         if node_type in {"config", "iotdb_config"}:
             return self._execute_config_node(node_type, merged, context)
         if node_type == "log_view":
-            return self._execute_log_view_node(merged)
+            return self._execute_log_view_node(merged, context)
         if node_type == "iotdb_deploy":
-            return self._execute_iotdb_deploy_node(merged)
+            return self._execute_iotdb_deploy_node(merged, context)
         if node_type == "iotdb_start":
-            return self._execute_iotdb_start_node(merged)
+            return self._execute_iotdb_start_node(merged, context)
         if node_type == "iotdb_cli":
-            return self._execute_iotdb_cli_node(merged)
+            return self._execute_iotdb_cli_node(merged, context)
         if node_type == "iotdb_stop":
-            return self._execute_iotdb_stop_node(merged)
+            return self._execute_iotdb_stop_node(merged, context)
         if node_type == "iotdb_cluster_deploy":
-            return self._execute_iotdb_cluster_deploy_node(merged)
+            return self._execute_iotdb_cluster_deploy_node(merged, context)
         if node_type == "iotdb_cluster_start":
-            return self._execute_iotdb_cluster_start_node(merged)
+            return self._execute_iotdb_cluster_start_node(merged, context)
         if node_type == "iotdb_cluster_check":
-            return self._execute_iotdb_cluster_check_node(merged)
+            return self._execute_iotdb_cluster_check_node(merged, context)
         if node_type == "iotdb_cluster_stop":
-            return self._execute_iotdb_cluster_stop_node(merged)
+            return self._execute_iotdb_cluster_stop_node(merged, context)
 
         return {
             "exit_status": 0,
@@ -209,15 +239,22 @@ class ExecutionEngine:
             "message": f"Node type {node_type} executed without side effects"
         }
 
-    def _execute_shell_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_shell_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         command = str(config.get("command", "")).strip()
         if not command:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Command is required"}
 
-        server = self._resolve_server(config)
+        server = self._resolve_server_with_region(config, context or {})
         timeout = int(config.get("timeout", 60))
 
         if server:
+            self._write_server_config(config, server)
+            logger.info(
+                "Executing shell command on server %s (%s) in region %s",
+                server.id,
+                server.name,
+                server.region or "私有云"
+            )
             result = self.ssh_service.run_command(
                 host=server.host,
                 username=server.username,
@@ -228,27 +265,20 @@ class ExecutionEngine:
             )
             return self._ssh_result_to_dict(result)
 
-        try:
-            proc = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=timeout
-            )
-            return {
-                "exit_status": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "command": command
-            }
-        except subprocess.TimeoutExpired:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Command timed out"}
-        except Exception as exc:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": str(exc)}
+        target_region = self._target_region(config, context or {})
+        logger.warning(
+            "Shell node has no idle server in region %s; command will not run locally",
+            target_region
+        )
+        return {
+            "exit_status": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"No idle server found in region {target_region}"
+        }
 
-    def _execute_upload_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_upload_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         local_path = self._required_str(config, "local_path", "artifact_local_path")
         remote_path = self._required_str(config, "remote_path", "remote_package_path")
 
@@ -279,8 +309,8 @@ class ExecutionEngine:
             "remote_path": remote_path
         }
 
-    def _execute_download_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_download_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         remote_path = self._required_str(config, "remote_path")
         local_path = self._required_str(config, "local_path")
 
@@ -317,7 +347,7 @@ class ExecutionEngine:
         config: Dict[str, Any],
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        server = self._require_server(config)
+        server = self._require_server(config, context)
         role = self._normalize_node_role(config.get("node_role"))
 
         if node_type == "iotdb_config":
@@ -351,8 +381,8 @@ class ExecutionEngine:
                 result["rpc_port"] = context["rpc_port"]
         return result
 
-    def _execute_log_view_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_log_view_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         file_path = self._required_str(config, "file_path")
         lines = int(config.get("lines", 100))
         command = f"tail -n {lines} {self._quote(file_path)}"
@@ -368,8 +398,8 @@ class ExecutionEngine:
         payload["file_path"] = file_path
         return payload
 
-    def _execute_iotdb_deploy_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_iotdb_deploy_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         role = self._normalize_node_role(config.get("node_role"))
         install_dir = self._required_str(config, "install_dir", "install_path")
         remote_package_path = config.get("remote_package_path") or config.get("remote_path")
@@ -400,8 +430,8 @@ class ExecutionEngine:
         })
         return deploy_result
 
-    def _execute_iotdb_start_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_iotdb_start_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         role = self._normalize_node_role(config.get("node_role"))
         iotdb_home = self._required_str(config, "iotdb_home")
         host = str(config.get("host") or server.host or "127.0.0.1")
@@ -479,8 +509,8 @@ class ExecutionEngine:
             "start_script": script_name
         }
 
-    def _execute_iotdb_cli_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_iotdb_cli_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         iotdb_home = self._required_str(config, "iotdb_home")
         host = str(config.get("host") or server.host or "127.0.0.1")
         rpc_port = int(config.get("rpc_port", 6667))
@@ -504,8 +534,8 @@ class ExecutionEngine:
             timeout_seconds=timeout_seconds
         )
 
-    def _execute_iotdb_stop_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        server = self._require_server(config)
+    def _execute_iotdb_stop_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        server = self._require_server(config, context)
         role = self._normalize_node_role(config.get("node_role"))
         iotdb_home = self._required_str(config, "iotdb_home")
         graceful = bool(config.get("graceful", True))
@@ -530,7 +560,7 @@ class ExecutionEngine:
         payload["stop_script"] = script_name
         return payload
 
-    def _execute_iotdb_cluster_deploy_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_iotdb_cluster_deploy_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cluster_name = str(config.get("cluster_name") or "defaultCluster")
         config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
         data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
@@ -549,7 +579,7 @@ class ExecutionEngine:
         seed = f"{seed_cn['host']}:{seed_cn['cn_internal_port']}"
 
         for entry in config_nodes + data_nodes:
-            server = self._require_server(entry)
+            server = self._require_server(entry, context)
             deploy_result = self._deploy_package_to_server(
                 server=server,
                 artifact_local_path=config.get("artifact_local_path"),
@@ -594,7 +624,7 @@ class ExecutionEngine:
             "results": results
         }
 
-    def _execute_iotdb_cluster_start_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_iotdb_cluster_start_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cluster_name = str(config.get("cluster_name") or "defaultCluster")
         config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
         data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
@@ -612,7 +642,7 @@ class ExecutionEngine:
                 "wait_port": self._cluster_wait_port(entry),
                 "wait_strategy": wait_strategy,
                 "timeout_seconds": timeout_seconds
-            })
+            }, context)
             results.append({"node": entry, "result": start_result})
             if start_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster start failed", results, cluster_name, config_nodes, data_nodes)
@@ -627,7 +657,7 @@ class ExecutionEngine:
             "started_nodes": results
         }
 
-    def _execute_iotdb_cluster_check_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_iotdb_cluster_check_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cluster_name = str(config.get("cluster_name") or "defaultCluster")
         config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
         data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
@@ -635,7 +665,7 @@ class ExecutionEngine:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "At least one DataNode is required for cluster check"}
 
         primary = data_nodes[0]
-        server = self._require_server({"server_id": primary["server_id"]})
+        server = self._require_server({"server_id": primary["server_id"]}, context)
         username = str(config.get("username") or "root")
         password = str(config.get("password") or "root")
         sql_dialect = str(config.get("sql_dialect") or "tree")
@@ -687,7 +717,7 @@ class ExecutionEngine:
 
         return result
 
-    def _execute_iotdb_cluster_stop_node(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_iotdb_cluster_stop_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cluster_name = str(config.get("cluster_name") or "defaultCluster")
         config_nodes = self._normalize_cluster_nodes(config.get("config_nodes"), "confignode", config)
         data_nodes = self._normalize_cluster_nodes(config.get("data_nodes"), "datanode", config)
@@ -702,7 +732,7 @@ class ExecutionEngine:
                 "iotdb_home": entry["install_dir"],
                 "graceful": graceful,
                 "timeout_seconds": timeout_seconds
-            })
+            }, context)
             results.append({"node": entry, "result": stop_result})
             if stop_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster stop failed", results, cluster_name, config_nodes, data_nodes)
@@ -1058,6 +1088,7 @@ class ExecutionEngine:
 
     def _merge_config_with_context(self, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         merged = dict(config)
+        has_explicit_region = config.get("region") not in (None, "")
         fallback_keys = [
             "server_id",
             "node_role",
@@ -1070,8 +1101,11 @@ class ExecutionEngine:
             "cluster_name",
             "config_nodes",
             "data_nodes",
+            "region",
         ]
         for key in fallback_keys:
+            if has_explicit_region and key in {"server_id", "host"}:
+                continue
             if merged.get(key) in (None, "", []):
                 if key in context:
                     merged[key] = context[key]
@@ -1090,10 +1124,12 @@ class ExecutionEngine:
             server = self.db.query(Server).filter(Server.id == int(server_id)).first()
             if server:
                 updates["host"] = server.host
+                updates["region"] = server.region
 
         for key in [
             "node_role", "iotdb_home", "conf_path", "rpc_port", "wait_port",
-            "remote_package_path", "backup_path", "cluster_name", "config_nodes", "data_nodes"
+            "remote_package_path", "backup_path", "cluster_name", "config_nodes",
+            "data_nodes", "region"
         ]:
             if key in result and result[key] not in (None, ""):
                 updates[key] = result[key]
@@ -1102,10 +1138,14 @@ class ExecutionEngine:
             updates["executed_sqls"] = result["executed_sqls"]
         return updates
 
-    def _require_server(self, config: Dict[str, Any]) -> Server:
-        server = self._resolve_server(config)
+    def _require_server(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Server:
+        """Require a server, using region-based scheduling if context is provided."""
+        if context is not None:
+            server = self._resolve_server_with_region(config, context)
+        else:
+            server = self._resolve_server(config)
         if not server:
-            raise ValueError("A valid server_id is required")
+            raise ValueError("A valid server_id is required or no idle server available in target region")
         return server
 
     def _resolve_server(self, config: Dict[str, Any]) -> Optional[Server]:
@@ -1113,6 +1153,107 @@ class ExecutionEngine:
         if server_id is None:
             return None
         return self.db.query(Server).filter(Server.id == int(server_id)).first()
+
+    def _resolve_server_with_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> Optional[Server]:
+        """Resolve server with region-based scheduling logic.
+
+        Priority:
+        1. Explicit server_id in config
+        2. Explicit region in config -> random idle server from that region
+        3. server_id in context
+        4. region in context -> random idle server from that region
+        5. Default to '私有云' region -> random idle server
+        """
+        server_id = config.get("server_id")
+        if server_id is not None and server_id != "":
+            return self.db.query(Server).filter(Server.id == int(server_id)).first()
+
+        region = config.get("region")
+        if region not in (None, ""):
+            return self._resolve_idle_server_by_region(str(region))
+
+        server_id = context.get("server_id")
+        if server_id is not None and server_id != "":
+            return self.db.query(Server).filter(Server.id == int(server_id)).first()
+
+        return self._resolve_idle_server_by_region(self._target_region(config, context))
+
+    def _resolve_idle_server_by_region(self, region: str) -> Optional[Server]:
+        busy_server_ids = self._compute_busy_server_ids()
+
+        query = self.db.query(Server).filter(Server.region == region)
+        if busy_server_ids:
+            query = query.filter(Server.id.notin_(busy_server_ids))
+
+        idle_servers = query.all()
+
+        if not idle_servers:
+            logger.warning(
+                "No idle server found in region %s; busy_server_ids=%s",
+                region,
+                busy_server_ids
+            )
+            return None
+
+        server = random.choice(idle_servers)
+        logger.info(
+            "Selected idle server %s (%s) from region %s; candidates=%s",
+            server.id,
+            server.name,
+            region,
+            [item.id for item in idle_servers]
+        )
+        return server
+
+    def _write_server_config(self, config: Dict[str, Any], server: Server) -> None:
+        config["server_id"] = server.id
+        config["server_name"] = server.name
+        config["host"] = server.host
+        config["region"] = server.region or "私有云"
+
+    def _target_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
+        region = config.get("region")
+        if region in (None, ""):
+            region = context.get("region")
+        if region in (None, ""):
+            region = "私有云"
+        return str(region)
+
+    def _compute_busy_server_ids(self) -> List[int]:
+        """Get IDs of servers currently being used in running executions."""
+        # Find all running executions
+        running_executions = self.db.query(Execution.id).filter(
+            Execution.status == "running"
+        ).all()
+        running_exec_ids = [e.id for e in running_executions]
+
+        if not running_exec_ids:
+            return []
+
+        # Single query with .in_() filter for all running node_executions
+        running_node_execs = self.db.query(NodeExecution).filter(
+            NodeExecution.execution_id.in_(running_exec_ids),
+            NodeExecution.status == "running"
+        ).all()
+
+        busy_ids: List[int] = []
+        for ne in running_node_execs:
+            if ne.input_data and isinstance(ne.input_data, dict):
+                server_id = ne.input_data.get("server_id")
+                if server_id is not None:
+                    busy_ids.append(int(server_id))
+
+        return list(set(busy_ids))
+
+    def _node_requires_server(self, node_type: str) -> bool:
+        """Check if a node type requires a server to execute."""
+        server_required_types = {
+            "shell", "upload", "download", "config", "iotdb_config",
+            "log_view", "iotdb_deploy", "iotdb_start", "iotdb_cli",
+            "iotdb_stop", "iotdb_cluster_deploy", "iotdb_cluster_start",
+            "iotdb_cluster_check", "iotdb_cluster_stop"
+        }
+        return node_type in server_required_types
 
     def _required_str(self, config: Dict[str, Any], *keys: str) -> str:
         for key in keys:

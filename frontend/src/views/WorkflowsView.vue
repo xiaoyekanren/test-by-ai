@@ -55,6 +55,17 @@ const createFormRules = {
 }
 const isCreating = ref(false)
 
+// Rename dialog state
+const renameDialogVisible = ref(false)
+const renameFormRef = ref()
+const renameWorkflowId = ref<number | null>(null)
+const renameForm = ref({
+  name: '',
+  description: ''
+})
+const renameFormRules = createFormRules
+const isRenaming = ref(false)
+
 // Execution dialog state
 const executionDialogVisible = ref(false)
 const currentExecutionWorkflow = ref<Workflow | null>(null)
@@ -86,7 +97,12 @@ const handleRowClick = (row: Workflow) => {
 }
 
 const handleEdit = (row: Workflow) => {
-  router.push(`/workflows/${row.id}/edit`)
+  renameWorkflowId.value = row.id
+  renameForm.value = {
+    name: row.name,
+    description: row.description || ''
+  }
+  renameDialogVisible.value = true
 }
 
 const handleDelete = async (row: Workflow) => {
@@ -150,6 +166,27 @@ const handleCreate = async () => {
     }
   } finally {
     isCreating.value = false
+  }
+}
+
+const handleRename = async () => {
+  if (!renameFormRef.value || !renameWorkflowId.value) return
+
+  try {
+    await renameFormRef.value.validate()
+    isRenaming.value = true
+    await workflowsStore.updateWorkflow(renameWorkflowId.value, {
+      name: renameForm.value.name,
+      description: renameForm.value.description || null
+    })
+    renameDialogVisible.value = false
+    ElMessage.success('Workflow renamed successfully')
+  } catch (error) {
+    if (error !== 'Validation failed') {
+      ElMessage.error('Failed to rename workflow')
+    }
+  } finally {
+    isRenaming.value = false
   }
 }
 
@@ -356,7 +393,7 @@ onUnmounted(() => {
                   link
                 />
               </ElTooltip>
-              <ElTooltip content="Edit" placement="top">
+              <ElTooltip content="Rename" placement="top">
                 <ElButton
                   type="primary"
                   :icon="Edit"
@@ -429,6 +466,50 @@ onUnmounted(() => {
           :loading="isCreating"
         >
           Create
+        </ElButton>
+      </template>
+    </ElDialog>
+
+    <!-- Rename Workflow Dialog -->
+    <ElDialog
+      v-model="renameDialogVisible"
+      title="Rename Workflow"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <ElForm
+        ref="renameFormRef"
+        :model="renameForm"
+        :rules="renameFormRules"
+        label-position="top"
+      >
+        <ElFormItem label="Name" prop="name">
+          <ElInput
+            v-model="renameForm.name"
+            placeholder="Enter workflow name"
+            maxlength="100"
+            show-word-limit
+          />
+        </ElFormItem>
+        <ElFormItem label="Description" prop="description">
+          <ElInput
+            v-model="renameForm.description"
+            type="textarea"
+            :rows="4"
+            placeholder="Enter workflow description (optional)"
+            maxlength="500"
+            show-word-limit
+          />
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="renameDialogVisible = false">Cancel</ElButton>
+        <ElButton
+          type="primary"
+          @click="handleRename"
+          :loading="isRenaming"
+        >
+          Save
         </ElButton>
       </template>
     </ElDialog>

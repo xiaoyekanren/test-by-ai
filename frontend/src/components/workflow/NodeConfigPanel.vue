@@ -14,6 +14,7 @@ import {
 import { Edit, Plus, Delete } from '@element-plus/icons-vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
+import { REGION_OPTIONS } from '@/types'
 import type { NodeType } from '@/types'
 
 interface KeyValueDraft {
@@ -25,7 +26,7 @@ interface KeyValueDraft {
 interface FieldDefinition {
   field: string
   label: string
-  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'keyValue' | 'server'
+  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'keyValue' | 'server' | 'region'
   options?: Array<{ value: string | number | boolean; label: string }>
   placeholder?: string
   min?: number
@@ -78,8 +79,15 @@ const nodeHelpText = computed(() => {
 const serverOptions = computed(() => {
   return serversStore.servers.map(server => ({
     value: server.id,
-    label: `${server.name} (${server.host})`
+    label: `${server.name} (${server.host})`,
+    region: server.region || '私有云'
   }))
+})
+
+const filteredServerOptions = computed(() => {
+  const region = getConfigValue('region')
+  if (!region) return serverOptions.value
+  return serverOptions.value.filter(server => server.region === region)
 })
 
 // Fetch servers on mount
@@ -141,6 +149,32 @@ const updateConfig = (field: string, value: unknown) => {
   workflowsStore.updateNodeConfig(selectedNode.value.id, { [field]: value })
 }
 
+const updateServerConfig = (value: number | string | null | undefined) => {
+  if (!selectedNode.value) return
+  const serverId = value === '' || value === null || value === undefined ? null : Number(value)
+  const selectedServer = serversStore.servers.find(server => server.id === serverId)
+  workflowsStore.updateNodeConfig(selectedNode.value.id, {
+    server_id: serverId,
+    region: selectedServer ? selectedServer.region || '私有云' : getConfigValue('region')
+  })
+}
+
+const updateRegionConfig = (value: string | null | undefined) => {
+  if (!selectedNode.value) return
+  const currentServerId = getConfigValue('server_id')
+  const currentServer = serversStore.servers.find(server => server.id === Number(currentServerId))
+  const shouldClearServer = Boolean(
+    value &&
+    currentServer &&
+    (currentServer.region || '私有云') !== value
+  )
+
+  workflowsStore.updateNodeConfig(selectedNode.value.id, {
+    region: value,
+    ...(shouldClearServer ? { server_id: null } : {})
+  })
+}
+
 // Get config value
 const getConfigValue = (field: string): unknown => {
   if (!selectedNode.value) return null
@@ -151,9 +185,9 @@ const getFieldLayoutClass = (field: FieldDefinition) => {
   if (['textarea', 'json', 'keyValue'].includes(field.type)) return 'field-full'
   if (field.type === 'number') return 'field-compact field-inline'
   if (field.type === 'checkbox') return 'field-compact field-inline'
-  if (['host', 'username', 'password', 'node_role', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type'].includes(field.field)) return 'field-medium field-inline'
+  if (['host', 'username', 'password', 'node_role', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type', 'region'].includes(field.field)) return 'field-medium field-inline'
   if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'remote_package_path'].includes(field.field)) return 'field-wide field-inline'
-  if (field.type === 'server') return 'field-wide field-inline'
+  if (field.type === 'server' || field.type === 'region') return 'field-wide field-inline'
   return 'field-wide field-inline'
 }
 
@@ -164,6 +198,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     shell: [
       { field: 'command', label: 'Command', type: 'textarea', placeholder: 'Enter shell command...' },
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 },
       { field: 'retry', label: 'Retry Count', type: 'number', min: 0, max: 10 }
     ],
@@ -171,29 +206,34 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       { field: 'local_path', label: 'Local Path', type: 'text', placeholder: '/path/to/local/file' },
       { field: 'remote_path', label: 'Remote Path', type: 'text', placeholder: '/path/to/remote/file' },
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
     download: [
       { field: 'remote_path', label: 'Remote Path', type: 'text', placeholder: '/path/to/remote/file' },
       { field: 'local_path', label: 'Local Path', type: 'text', placeholder: '/path/to/local/file' },
-      { field: 'server_id', label: 'Server', type: 'server' }
+      { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' }
     ],
     config: [
       { field: 'file_path', label: 'File Path', type: 'text', placeholder: '/path/to/config/file' },
       { field: 'config_items', label: 'Config Items', type: 'keyValue', placeholder: 'e.g. key = value' },
       { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a .bak file before writing' },
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
     log_view: [
       { field: 'file_path', label: 'File Path', type: 'text', placeholder: '/path/to/log/file' },
       { field: 'lines', label: 'Lines', type: 'number', min: 1, max: 10000 },
-      { field: 'server_id', label: 'Server', type: 'server' }
+      { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' }
     ],
 
     // IoTDB nodes
     iotdb_deploy: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: '/path/to/apache-iotdb-bin.zip' },
       { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/apache-iotdb-bin.zip' },
       { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iotdb' },
@@ -209,6 +249,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_start: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'node_role', label: 'Node Role', type: 'select', options: [
         { value: 'standalone', label: 'Standalone' },
         { value: 'confignode', label: 'ConfigNode' },
@@ -226,6 +267,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_stop: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'node_role', label: 'Node Role', type: 'select', options: [
         { value: 'standalone', label: 'Standalone' },
         { value: 'confignode', label: 'ConfigNode' },
@@ -237,6 +279,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_cli: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'host', label: 'Host', type: 'text', placeholder: 'Optional, defaults to server host' },
       { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
@@ -251,6 +294,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_config: [
       { field: 'server_id', label: 'Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
       { field: 'node_role', label: 'Node Role', type: 'select', options: [
         { value: 'standalone', label: 'Standalone' },
         { value: 'confignode', label: 'ConfigNode' },
@@ -380,7 +424,7 @@ const fieldSectionTitles: Record<string, string> = {
 }
 
 const getFieldSection = (field: FieldDefinition) => {
-  if (['server_id', 'host', 'username', 'password'].includes(field.field)) return 'connection'
+  if (['server_id', 'host', 'username', 'password', 'region'].includes(field.field)) return 'connection'
   if (['artifact_local_path', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
   if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir'].includes(field.field)) return 'paths'
   if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
@@ -581,13 +625,31 @@ const isListField = (field: string): boolean => {
                 clearable
                 size="small"
                 style="width: 100%"
-                @update:model-value="updateConfig(field.field, $event)"
+                @update:model-value="updateServerConfig($event)"
               >
                 <ElOption
-                  v-for="option in serverOptions"
+                  v-for="option in filteredServerOptions"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
+                />
+              </ElSelect>
+            </template>
+
+            <template v-else-if="field.type === 'region'">
+              <ElSelect
+                :model-value="(getConfigValue(field.field) as string | null | undefined)"
+                placeholder="Select region (default: 私有云)"
+                clearable
+                size="small"
+                style="width: 100%"
+                @update:model-value="updateRegionConfig($event)"
+              >
+                <ElOption
+                  v-for="region in REGION_OPTIONS"
+                  :key="region"
+                  :label="region"
+                  :value="region"
                 />
               </ElSelect>
             </template>
