@@ -79,8 +79,15 @@ const nodeHelpText = computed(() => {
 const serverOptions = computed(() => {
   return serversStore.servers.map(server => ({
     value: server.id,
-    label: `${server.name} (${server.host})`
+    label: `${server.name} (${server.host})`,
+    region: server.region || '私有云'
   }))
+})
+
+const filteredServerOptions = computed(() => {
+  const region = getConfigValue('region')
+  if (!region) return serverOptions.value
+  return serverOptions.value.filter(server => server.region === region)
 })
 
 // Fetch servers on mount
@@ -140,6 +147,32 @@ const cancelEditLabel = () => {
 const updateConfig = (field: string, value: unknown) => {
   if (!selectedNode.value) return
   workflowsStore.updateNodeConfig(selectedNode.value.id, { [field]: value })
+}
+
+const updateServerConfig = (value: number | string | null | undefined) => {
+  if (!selectedNode.value) return
+  const serverId = value === '' || value === null || value === undefined ? null : Number(value)
+  const selectedServer = serversStore.servers.find(server => server.id === serverId)
+  workflowsStore.updateNodeConfig(selectedNode.value.id, {
+    server_id: serverId,
+    region: selectedServer ? selectedServer.region || '私有云' : getConfigValue('region')
+  })
+}
+
+const updateRegionConfig = (value: string | null | undefined) => {
+  if (!selectedNode.value) return
+  const currentServerId = getConfigValue('server_id')
+  const currentServer = serversStore.servers.find(server => server.id === Number(currentServerId))
+  const shouldClearServer = Boolean(
+    value &&
+    currentServer &&
+    (currentServer.region || '私有云') !== value
+  )
+
+  workflowsStore.updateNodeConfig(selectedNode.value.id, {
+    region: value,
+    ...(shouldClearServer ? { server_id: null } : {})
+  })
 }
 
 // Get config value
@@ -592,10 +625,10 @@ const isListField = (field: string): boolean => {
                 clearable
                 size="small"
                 style="width: 100%"
-                @update:model-value="updateConfig(field.field, $event)"
+                @update:model-value="updateServerConfig($event)"
               >
                 <ElOption
-                  v-for="option in serverOptions"
+                  v-for="option in filteredServerOptions"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
@@ -610,7 +643,7 @@ const isListField = (field: string): boolean => {
                 clearable
                 size="small"
                 style="width: 100%"
-                @update:model-value="updateConfig(field.field, $event)"
+                @update:model-value="updateRegionConfig($event)"
               >
                 <ElOption
                   v-for="region in REGION_OPTIONS"

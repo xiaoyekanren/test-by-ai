@@ -2,7 +2,6 @@ import logging
 import os
 import random
 import shlex
-import subprocess
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -94,7 +93,6 @@ class ExecutionEngine:
         passed_count = 0
         failed_count = 0
         context: Dict[str, Any] = {}
-        first_server_node_resolved = False
 
         try:
             for node in nodes:
@@ -103,27 +101,34 @@ class ExecutionEngine:
                 # Copy config to avoid mutating original workflow definition
                 config = dict(node.get("config", {}) or {})
 
-                # Resolve server for server-dependent nodes without explicit server_id
                 if self._node_requires_server(node_type):
-                    server_id_explicit = config.get("server_id") not in (None, "")
-                    if not server_id_explicit and not first_server_node_resolved:
-                        server = self._resolve_server_with_region(config, context)
-                        if server:
-                            # Write resolved server info to config
-                            config["server_id"] = server.id
-                            config["server_name"] = server.name
-                            config["host"] = server.host
-                            config["region"] = server.region
-                            # Update context for subsequent nodes
-                            context["server_id"] = server.id
-                            context["server_name"] = server.name
-                            context["host"] = server.host
-                            context["region"] = server.region
-                            first_server_node_resolved = True
-                            logger.info(
-                                "Resolved server %s (%s) in region %s for node %s",
-                                server.id, server.name, server.region, node_id
-                            )
+                    explicit_region = config.get("region") not in (None, "")
+                    server = self._resolve_server_with_region(config, context)
+                    if server:
+                        self._write_server_config(config, server)
+                        context["server_id"] = server.id
+                        context["server_name"] = server.name
+                        context["host"] = server.host
+                        context["region"] = server.region
+                        logger.info(
+                            "Resolved server %s (%s) in region %s for node %s",
+                            server.id, server.name, server.region, node_id
+                        )
+                    elif config.get("region") in (None, ""):
+                        config["region"] = self._target_region(config, context)
+                    merge_context = context
+                    if explicit_region and not server:
+                        logger.warning(
+                            "No idle server found in explicit region %s for node %s; inherited server context will not be used",
+                            config.get("region"),
+                            node_id
+                        )
+                        merge_context = {
+                            key: value
+                            for key, value in context.items()
+                            if key not in {"server_id", "server_name", "host"}
+                        }
+                    config = self._merge_config_with_context(config, merge_context)
 
                 node_execution = NodeExecution(
                     execution_id=execution_id,
@@ -243,6 +248,13 @@ class ExecutionEngine:
         timeout = int(config.get("timeout", 60))
 
         if server:
+            self._write_server_config(config, server)
+            logger.info(
+                "Executing shell command on server %s (%s) in region %s",
+                server.id,
+                server.name,
+                server.region or "私有云"
+            )
             result = self.ssh_service.run_command(
                 host=server.host,
                 username=server.username,
@@ -253,24 +265,17 @@ class ExecutionEngine:
             )
             return self._ssh_result_to_dict(result)
 
-        try:
-            proc = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=timeout
-            )
-            return {
-                "exit_status": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "command": command
-            }
-        except subprocess.TimeoutExpired:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Command timed out"}
-        except Exception as exc:
-            return {"exit_status": -1, "stdout": "", "stderr": "", "error": str(exc)}
+        target_region = self._target_region(config, context or {})
+        logger.warning(
+            "Shell node has no idle server in region %s; command will not run locally",
+            target_region
+        )
+        return {
+            "exit_status": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"No idle server found in region {target_region}"
+        }
 
     def _execute_upload_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         server = self._require_server(config, context)
@@ -1083,6 +1088,7 @@ class ExecutionEngine:
 
     def _merge_config_with_context(self, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         merged = dict(config)
+        has_explicit_region = config.get("region") not in (None, "")
         fallback_keys = [
             "server_id",
             "node_role",
@@ -1098,6 +1104,8 @@ class ExecutionEngine:
             "region",
         ]
         for key in fallback_keys:
+            if has_explicit_region and key in {"server_id", "host"}:
+                continue
             if merged.get(key) in (None, "", []):
                 if key in context:
                     merged[key] = context[key]
@@ -1150,26 +1158,27 @@ class ExecutionEngine:
         """Resolve server with region-based scheduling logic.
 
         Priority:
-        1. Explicit server_id in config or context
-        2. Explicit region in config or context -> random idle server from that region
-        3. Default to '私有云' region -> random idle server
+        1. Explicit server_id in config
+        2. Explicit region in config -> random idle server from that region
+        3. server_id in context
+        4. region in context -> random idle server from that region
+        5. Default to '私有云' region -> random idle server
         """
-        # Step 1: Check explicit server_id
         server_id = config.get("server_id")
-        if server_id in (None, ""):
-            server_id = context.get("server_id")
-
         if server_id is not None and server_id != "":
             return self.db.query(Server).filter(Server.id == int(server_id)).first()
 
-        # Step 2: Determine target region
         region = config.get("region")
-        if region in (None, ""):
-            region = context.get("region")
-        if region in (None, ""):
-            region = "私有云"  # Default region
+        if region not in (None, ""):
+            return self._resolve_idle_server_by_region(str(region))
 
-        # Step 3: Find idle servers in target region
+        server_id = context.get("server_id")
+        if server_id is not None and server_id != "":
+            return self.db.query(Server).filter(Server.id == int(server_id)).first()
+
+        return self._resolve_idle_server_by_region(self._target_region(config, context))
+
+    def _resolve_idle_server_by_region(self, region: str) -> Optional[Server]:
         busy_server_ids = self._compute_busy_server_ids()
 
         query = self.db.query(Server).filter(Server.region == region)
@@ -1179,10 +1188,36 @@ class ExecutionEngine:
         idle_servers = query.all()
 
         if not idle_servers:
+            logger.warning(
+                "No idle server found in region %s; busy_server_ids=%s",
+                region,
+                busy_server_ids
+            )
             return None
 
-        # Step 4: Random select
-        return random.choice(idle_servers)
+        server = random.choice(idle_servers)
+        logger.info(
+            "Selected idle server %s (%s) from region %s; candidates=%s",
+            server.id,
+            server.name,
+            region,
+            [item.id for item in idle_servers]
+        )
+        return server
+
+    def _write_server_config(self, config: Dict[str, Any], server: Server) -> None:
+        config["server_id"] = server.id
+        config["server_name"] = server.name
+        config["host"] = server.host
+        config["region"] = server.region or "私有云"
+
+    def _target_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
+        region = config.get("region")
+        if region in (None, ""):
+            region = context.get("region")
+        if region in (None, ""):
+            region = "私有云"
+        return str(region)
 
     def _compute_busy_server_ids(self) -> List[int]:
         """Get IDs of servers currently being used in running executions."""
