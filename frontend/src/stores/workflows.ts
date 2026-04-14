@@ -12,16 +12,16 @@ interface HistoryState {
 }
 
 const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
-  shell: ['server_id'],
-  upload: ['server_id'],
-  download: ['server_id'],
-  config: ['server_id', 'file_path'],
-  log_view: ['server_id', 'file_path'],
-  iotdb_deploy: ['server_id', 'remote_package_path', 'rpc_port'],
-  iotdb_start: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port', 'wait_port'],
-  iotdb_stop: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_cli: ['server_id', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_config: ['server_id', 'node_role', 'iotdb_home', 'rpc_port', 'file_path', 'config_items'],
+  shell: ['server_id', 'region'],
+  upload: ['server_id', 'region'],
+  download: ['server_id', 'region'],
+  config: ['server_id', 'region', 'file_path'],
+  log_view: ['server_id', 'region', 'file_path'],
+  iotdb_deploy: ['server_id', 'region', 'remote_package_path', 'rpc_port'],
+  iotdb_start: ['server_id', 'region', 'node_role', 'iotdb_home', 'host', 'rpc_port', 'wait_port'],
+  iotdb_stop: ['server_id', 'region', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_cli: ['server_id', 'region', 'node_role', 'iotdb_home', 'host', 'rpc_port'],
+  iotdb_config: ['server_id', 'region', 'node_role', 'iotdb_home', 'rpc_port', 'file_path', 'config_items'],
   iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes']
@@ -264,7 +264,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const config = node.data.config
     const output: Record<string, unknown> = {}
 
-    for (const field of ['server_id', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
+    for (const field of ['server_id', 'region', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
       const value = config[field]
       if (!isEmptyInheritedValue(value)) {
         output[field] = cloneValue(value)

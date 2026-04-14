@@ -1,20 +1,74 @@
 # backend/app/api/servers.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Set
 from ..dependencies import get_db
-from ..models.database import Server
+from ..models.database import Server, Execution, NodeExecution
 from ..schemas.server import ServerCreate, ServerUpdate, ServerResponse
 from ..services.ssh_service import SSHService
 
 router = APIRouter()
 
 
+def _compute_busy_servers(db: Session) -> Set[int]:
+    """Compute set of server_ids that are currently busy"""
+    # Find all running executions
+    running_executions = db.query(Execution.id).filter(
+        Execution.status == "running"
+    ).all()
+    running_exec_ids = [e.id for e in running_executions]
+
+    if not running_exec_ids:
+        return set()
+
+    # Find all running node_executions in these executions
+    running_node_execs = db.query(NodeExecution).filter(
+        NodeExecution.execution_id.in_(running_exec_ids),
+        NodeExecution.status == "running"
+    ).all()
+
+    # Extract server_ids from input_data
+    busy_server_ids = set()
+    for ne in running_node_execs:
+        if ne.input_data and isinstance(ne.input_data, dict):
+            server_id = ne.input_data.get("server_id")
+            if server_id is not None:
+                busy_server_ids.add(int(server_id))
+
+    return busy_server_ids
+
+
+def _build_server_response(server: Server, is_busy: bool) -> ServerResponse:
+    """Build ServerResponse from Server model with is_busy computed field"""
+    server_dict = {
+        "id": server.id,
+        "name": server.name,
+        "host": server.host,
+        "port": server.port,
+        "username": server.username,
+        "description": server.description,
+        "tags": server.tags,
+        "status": server.status,
+        "region": server.region or "私有云",
+        "is_busy": is_busy,
+        "created_at": server.created_at,
+        "updated_at": server.updated_at
+    }
+    return ServerResponse.model_validate(server_dict)
+
+
 @router.get("", response_model=List[ServerResponse])
 def list_servers(db: Session = Depends(get_db)):
-    """List all servers"""
+    """List all servers with is_busy computed field"""
     servers = db.query(Server).all()
-    return servers
+    busy_server_ids = _compute_busy_servers(db)
+
+    # Convert to response with is_busy
+    responses = []
+    for server in servers:
+        responses.append(_build_server_response(server, server.id in busy_server_ids))
+
+    return responses
 
 
 @router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
@@ -36,14 +90,16 @@ def create_server(server: ServerCreate, db: Session = Depends(get_db)):
         username=server.username,
         password=server.password.get_secret_value() if server.password else None,
         description=server.description,
-        tags=server.tags
+        tags=server.tags,
+        region=server.region
     )
 
     db.add(db_server)
     db.commit()
     db.refresh(db_server)
 
-    return db_server
+    # Freshly created server is not busy
+    return _build_server_response(db_server, is_busy=False)
 
 
 @router.get("/{server_id}", response_model=ServerResponse)
@@ -55,7 +111,8 @@ def get_server(server_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Server with id {server_id} not found"
         )
-    return server
+    busy_server_ids = _compute_busy_servers(db)
+    return _build_server_response(server, server.id in busy_server_ids)
 
 
 @router.put("/{server_id}", response_model=ServerResponse)
@@ -88,7 +145,9 @@ def update_server(server_id: int, server_update: ServerUpdate, db: Session = Dep
     db.commit()
     db.refresh(server)
 
-    return server
+    # Check if server is busy after update
+    busy_server_ids = _compute_busy_servers(db)
+    return _build_server_response(server, server.id in busy_server_ids)
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
