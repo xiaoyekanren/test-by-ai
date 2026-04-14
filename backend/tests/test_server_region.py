@@ -142,3 +142,74 @@ def test_server_list_is_busy():
 
     servers_list2 = list_servers(db)
     assert servers_list2[0].is_busy == False
+
+
+def test_create_server_returns_is_busy_false():
+    """Test create_server returns is_busy=False for new server"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models.database import Base
+    from app.api.servers import create_server
+    from app.schemas.server import ServerCreate
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+
+    # Create server via API
+    server_create = ServerCreate(name="new-server", host="192.168.1.1", region="公司")
+    result = create_server(server_create, db)
+
+    assert result.is_busy == False
+    assert result.region == "公司"
+
+
+def test_get_server_returns_is_busy():
+    """Test get_server returns is_busy computed field"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models.database import Base, Server, Workflow, Execution, NodeExecution
+    from app.api.servers import get_server
+    from datetime import datetime
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+
+    # Create server
+    server = Server(name="test-server", host="192.168.1.1", port=22, username="admin", password="secret")
+    db.add(server)
+    db.commit()
+    db.refresh(server)
+
+    # Get server without any running execution
+    result = get_server(server.id, db)
+    assert result.is_busy == False
+
+    # Create workflow and running execution
+    workflow = Workflow(name="test-wf")
+    db.add(workflow)
+    db.commit()
+    db.refresh(workflow)
+
+    execution = Execution(workflow_id=workflow.id, status="running", started_at=datetime.utcnow())
+    db.add(execution)
+    db.commit()
+    db.refresh(execution)
+
+    node_exec = NodeExecution(
+        execution_id=execution.id,
+        node_id="node1",
+        node_type="shell",
+        status="running",
+        started_at=datetime.utcnow(),
+        input_data={"server_id": server.id}
+    )
+    db.add(node_exec)
+    db.commit()
+
+    # Get server with running execution
+    result2 = get_server(server.id, db)
+    assert result2.is_busy == True
