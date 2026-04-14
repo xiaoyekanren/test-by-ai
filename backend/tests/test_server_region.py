@@ -40,3 +40,39 @@ def test_server_region_valid_values():
             region=region
         )
         assert server.region == region
+
+
+def test_server_create_schema_region():
+    """Test ServerCreate schema accepts region field"""
+    from app.schemas.server import ServerCreate, ServerUpdate, ServerResponse
+
+    # ServerCreate with default region
+    create1 = ServerCreate(name="test", host="192.168.1.1")
+    assert create1.region == "私有云"
+
+    # ServerCreate with explicit region
+    create2 = ServerCreate(name="test2", host="192.168.1.2", region="公司")
+    assert create2.region == "公司"
+
+    # ServerUpdate with region
+    update = ServerUpdate(region="公有云")
+    assert update.region == "公有云"
+
+    # ServerResponse with region
+    response_data = {
+        "id": 1,
+        "name": "test",
+        "host": "192.168.1.1",
+        "port": 22,
+        "username": "admin",
+        "description": None,
+        "tags": None,
+        "status": "offline",
+        "region": "异构",
+        "is_busy": False,
+        "created_at": "2026-01-01T00:00:00",
+        "updated_at": "2026-01-01T00:00:00"
+    }
+    response = ServerResponse.model_validate(response_data)
+    assert response.region == "异构"
+    assert response.is_busy == False
