@@ -23,11 +23,10 @@ class Server(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __init__(self, **kwargs):
-        # Set default values for Python instance creation
+        # Set default value for region when creating Python instance
+        # (SQLAlchemy's Column default only applies during INSERT, not instance creation)
         if "region" not in kwargs:
             kwargs["region"] = "私有云"
-        if "status" not in kwargs:
-            kwargs["status"] = "offline"
         super().__init__(**kwargs)
 
 class Workflow(Base):
