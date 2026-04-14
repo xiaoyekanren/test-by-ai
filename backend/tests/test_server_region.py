@@ -76,3 +76,69 @@ def test_server_create_schema_region():
     response = ServerResponse.model_validate(response_data)
     assert response.region == "异构"
     assert response.is_busy == False
+
+
+def test_server_list_is_busy():
+    """Test server list returns is_busy computed field"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models.database import Base, Server, Workflow, Execution, NodeExecution
+    from app.api.servers import list_servers, _compute_busy_servers
+    from datetime import datetime
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+
+    # Create server
+    server = Server(name="busy-server", host="192.168.1.1", port=22, username="admin", password="secret", region="私有云")
+    db.add(server)
+    db.commit()
+    db.refresh(server)
+
+    # Create workflow
+    workflow = Workflow(name="test-wf")
+    db.add(workflow)
+    db.commit()
+    db.refresh(workflow)
+
+    # Create running execution
+    execution = Execution(
+        workflow_id=workflow.id,
+        status="running",
+        started_at=datetime.utcnow()
+    )
+    db.add(execution)
+    db.commit()
+    db.refresh(execution)
+
+    # Create running node_execution linked to server
+    node_exec = NodeExecution(
+        execution_id=execution.id,
+        node_id="node1",
+        node_type="shell",
+        status="running",
+        started_at=datetime.utcnow(),
+        input_data={"server_id": server.id}
+    )
+    db.add(node_exec)
+    db.commit()
+
+    # Test _compute_busy_servers helper
+    busy_ids = _compute_busy_servers(db)
+    assert server.id in busy_ids
+
+    # Test server list response
+    servers_list = list_servers(db)
+
+    # Server should be marked as busy
+    assert len(servers_list) == 1
+    assert servers_list[0].is_busy == True
+
+    # Mark node_execution as completed
+    node_exec.status = "success"
+    db.commit()
+
+    servers_list2 = list_servers(db)
+    assert servers_list2[0].is_busy == False
