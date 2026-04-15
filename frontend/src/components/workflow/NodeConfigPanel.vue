@@ -26,7 +26,7 @@ interface KeyValueDraft {
 interface FieldDefinition {
   field: string
   label: string
-  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'keyValue' | 'server' | 'region'
+  type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'json' | 'keyValue' | 'server' | 'region' | 'clusterNodes'
   options?: Array<{ value: string | number | boolean; label: string }>
   placeholder?: string
   min?: number
@@ -90,6 +90,16 @@ const serverOptions = computed(() => {
     label: `${server.name} (${server.host})`,
     region: server.region || '私有云'
   }))
+})
+
+const selectedRegion = computed(() => {
+  const value = getConfigValue('region')
+  return typeof value === 'string' && value ? value : null
+})
+
+const filteredServerOptions = computed(() => {
+  if (!selectedRegion.value) return serverOptions.value
+  return serverOptions.value.filter(option => option.region === selectedRegion.value)
 })
 
 // Fetch servers on mount
@@ -157,14 +167,15 @@ const updateServerConfig = (value: number | string | null | undefined) => {
   const selectedServer = serversStore.servers.find(server => server.id === serverId)
   workflowsStore.updateNodeConfig(selectedNode.value.id, {
     server_id: serverId,
-    region: selectedServer ? selectedServer.region || '私有云' : getConfigValue('region')
+    region: selectedServer ? selectedServer.region || '私有云' : null
   })
 }
 
 const updateRegionConfig = (value: string | null | undefined) => {
   if (!selectedNode.value) return
   workflowsStore.updateNodeConfig(selectedNode.value.id, {
-    region: value
+    region: value || null,
+    server_id: null
   })
 }
 
@@ -174,8 +185,87 @@ const getConfigValue = (field: string): unknown => {
   return selectedNode.value.data.config[field]
 }
 
+const getClusterNodeRole = (field: string): 'confignode' | 'datanode' => {
+  return field === 'config_nodes' ? 'confignode' : 'datanode'
+}
+
+const getClusterNodeList = (field: string): Record<string, unknown>[] => {
+  const value = getConfigValue(field)
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    : []
+}
+
+const getClusterNodeServerIds = (field: string): number[] => {
+  return getClusterNodeList(field)
+    .map(item => Number(item.server_id))
+    .filter(id => Number.isFinite(id))
+}
+
+const getServerRegion = (serverId: number) => {
+  return serversStore.servers.find(server => server.id === serverId)?.region || '私有云'
+}
+
+const getClusterSelectedRegion = () => {
+  const selectedIds = [
+    ...getClusterNodeServerIds('config_nodes'),
+    ...getClusterNodeServerIds('data_nodes')
+  ]
+  const firstId = selectedIds.find(id => serversStore.servers.some(server => server.id === id))
+  return firstId === undefined ? null : getServerRegion(firstId)
+}
+
+const getClusterServerOptions = (field: string) => {
+  const selectedRegion = getClusterSelectedRegion()
+  const selectedIds = new Set(getClusterNodeServerIds(field))
+
+  return serverOptions.value.filter(option => {
+    if (!selectedRegion) return true
+    return option.region === selectedRegion || selectedIds.has(Number(option.value))
+  })
+}
+
+const buildClusterNode = (
+  field: string,
+  serverId: number,
+  existingNodes: Record<string, unknown>[]
+) => {
+  const server = serversStore.servers.find(item => item.id === serverId)
+  const existing = existingNodes.find(item => Number(item.server_id) === serverId) || {}
+  return {
+    ...existing,
+    server_id: serverId,
+    host: server?.host || existing.host,
+    node_role: getClusterNodeRole(field)
+  }
+}
+
+const filterClusterNodesByRegion = (field: string, region: string | null, nextValue?: Record<string, unknown>[]) => {
+  const nodes = nextValue || getClusterNodeList(field)
+  if (!region) return nodes
+  return nodes.filter(node => getServerRegion(Number(node.server_id)) === region)
+}
+
+const updateClusterNodes = (field: string, value: unknown) => {
+  if (!selectedNode.value) return
+
+  const serverIds = Array.isArray(value) ? value.map(Number).filter(id => Number.isFinite(id)) : []
+  const existingNodes = getClusterNodeList(field)
+  const selectedRegion = serverIds.length > 0 ? getServerRegion(serverIds[0]) : getClusterSelectedRegion()
+  const nextNodes = serverIds
+    .filter(serverId => !selectedRegion || getServerRegion(serverId) === selectedRegion)
+    .map(serverId => buildClusterNode(field, serverId, existingNodes))
+
+  const otherField = field === 'config_nodes' ? 'data_nodes' : 'config_nodes'
+  workflowsStore.updateNodeConfig(selectedNode.value.id, {
+    [field]: nextNodes,
+    [otherField]: filterClusterNodesByRegion(otherField, selectedRegion)
+  })
+}
+
 const getFieldLayoutClass = (field: FieldDefinition) => {
   if (['textarea', 'json', 'keyValue'].includes(field.type)) return 'field-full'
+  if (field.type === 'clusterNodes') return 'field-full'
   if (field.type === 'number') return 'field-compact field-inline'
   if (field.type === 'checkbox') return 'field-compact field-inline'
   if (['host', 'username', 'password', 'node_role', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type', 'region'].includes(field.field)) return 'field-medium field-inline'
@@ -311,15 +401,15 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
       { field: 'overwrite', label: 'Overwrite Install Dir', type: 'checkbox', placeholder: 'Delete existing install directory first' },
       { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'defaultCluster' },
-      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: '[{"server_id":1,"host":"10.0.0.1","install_dir":"/opt/iotdb-cn-1","cn_internal_port":10710,"cn_consensus_port":10720}]' },
-      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: '[{"server_id":2,"host":"10.0.0.2","install_dir":"/opt/iotdb-dn-1","dn_rpc_port":6667,"dn_internal_port":10730}]' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Select ConfigNode servers' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Select DataNode servers' },
       { field: 'common_config', label: 'Common Config', type: 'json', placeholder: '{"schema_replication_factor":"1","data_replication_factor":"1"}' },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
     iotdb_cluster_start: [
       { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy node' },
-      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy node' },
-      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy node' },
       { field: 'wait_strategy', label: 'Wait Strategy', type: 'select', options: [
         { value: 'port', label: 'Port Check' },
         { value: 'cli', label: 'CLI Check (DataNode only)' }
@@ -328,8 +418,8 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_cluster_check: [
       { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy/start node' },
-      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
-      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy/start node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy/start node' },
       { field: 'username', label: 'Username', type: 'text', placeholder: 'root' },
       { field: 'password', label: 'Password', type: 'text', placeholder: 'root' },
       { field: 'sql_dialect', label: 'SQL Dialect', type: 'select', options: [
@@ -341,8 +431,8 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     ],
     iotdb_cluster_stop: [
       { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'Inherited from deploy/start node' },
-      { field: 'config_nodes', label: 'Config Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
-      { field: 'data_nodes', label: 'Data Nodes', type: 'json', placeholder: 'Inherited from deploy/start node' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy/start node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Inherited from deploy/start node' },
       { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Stop nodes gracefully before forcing' },
       { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
     ],
@@ -660,7 +750,7 @@ const isListField = (field: string): boolean => {
                 @update:model-value="updateServerConfig($event)"
               >
                 <ElOption
-                  v-for="option in serverOptions"
+                  v-for="option in filteredServerOptions"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
@@ -671,7 +761,7 @@ const isListField = (field: string): boolean => {
             <template v-else-if="field.type === 'region'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as string | null | undefined)"
-                placeholder="Select region (default: 私有云)"
+                placeholder="Select region"
                 clearable
                 size="small"
                 style="width: 100%"
@@ -753,6 +843,38 @@ const isListField = (field: string): boolean => {
                 :placeholder="field.placeholder"
                 @update:model-value="handleJsonInput(field.field, $event)"
               />
+            </template>
+
+            <template v-else-if="field.type === 'clusterNodes'">
+              <div class="cluster-node-select">
+                <ElSelect
+                  :model-value="getClusterNodeServerIds(field.field)"
+                  multiple
+                  filterable
+                  clearable
+                  collapse-tags
+                  collapse-tags-tooltip
+                  :placeholder="field.placeholder"
+                  size="small"
+                  style="width: 100%"
+                  @update:model-value="updateClusterNodes(field.field, $event)"
+                >
+                  <ElOption
+                    v-for="option in getClusterServerOptions(field.field)"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  >
+                    <div class="cluster-server-option">
+                      <span>{{ option.label }}</span>
+                      <span>{{ option.region }}</span>
+                    </div>
+                  </ElOption>
+                </ElSelect>
+                <div class="cluster-region-hint">
+                  {{ getClusterSelectedRegion() ? `已限制为 ${getClusterSelectedRegion()} 区域` : '选择任意服务器后，另一组节点会限制在同一区域' }}
+                </div>
+              </div>
             </template>
 
             <template v-else-if="field.type === 'keyValue'">
@@ -994,6 +1116,31 @@ const isListField = (field: string): boolean => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.cluster-node-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.cluster-server-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.cluster-server-option span:last-child {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.cluster-region-hint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .key-value-heading {

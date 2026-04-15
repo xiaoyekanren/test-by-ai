@@ -13,6 +13,8 @@ import {
   ElMessageBox,
   ElMessage,
   ElTooltip,
+  ElDrawer,
+  ElEmpty,
   ElCollapse,
   ElCollapseItem,
   ElSelect,
@@ -20,12 +22,24 @@ import {
   type FormInstance,
   type FormRules
 } from 'element-plus'
-import { Refresh, Plus, Edit, Delete, Connection, Promotion } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete, Connection, Promotion, Reading } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
-import type { Server, ServerCreate, ServerUpdate } from '@/types'
+import { useMonitoringStore } from '@/stores/monitoring'
+import type { ProcessInfo, Server, ServerCreate, ServerUpdate } from '@/types'
 import { REGION_OPTIONS } from '@/types'
 
 const serversStore = useServersStore()
+const monitoringStore = useMonitoringStore()
+
+interface ServerMetrics {
+  cpu?: number
+  memoryPercent?: number
+  memoryUsed?: number
+  memoryTotal?: number
+  diskPercent?: number
+  diskUsed?: number
+  diskTotal?: number
+}
 
 // Form related
 const formRef = ref<FormInstance>()
@@ -59,6 +73,13 @@ const formRules: FormRules = {
   ]
 }
 
+const serverDialogCopy = computed(() => ({
+  title: dialogMode.value === 'create' ? '新增服务器' : '编辑服务器',
+  subtitle: dialogMode.value === 'create' ? '添加一个新的 SSH 服务器配置' : '修改服务器配置信息',
+  actionText: dialogMode.value === 'create' ? '创建' : '保存',
+  icon: dialogMode.value === 'create' ? Plus : Edit
+}))
+
 // Command execution dialog
 const commandDialogVisible = ref(false)
 const commandInput = ref('')
@@ -69,6 +90,16 @@ const commandLoading = ref(false)
 const pendingStatusChecks = ref(0)
 const statusCheckRunId = ref(0)
 const isStatusChecking = computed(() => pendingStatusChecks.value > 0)
+const serverMetrics = ref<Record<number, ServerMetrics>>({})
+const metricLoadingIds = ref<Set<number>>(new Set())
+
+// Process drawer state
+const processDrawerVisible = ref(false)
+const currentProcessServer = ref<Server | null>(null)
+const processList = ref<ProcessInfo[]>([])
+const processLoading = ref(false)
+const processLimit = ref(20)
+const processSortBy = ref<'cpu' | 'memory'>('cpu')
 
 // Sort servers by host:port
 const sortedServers = computed(() => {
@@ -130,6 +161,7 @@ function refreshServerStatuses() {
   const servers = [...serversStore.servers]
   const runId = statusCheckRunId.value + 1
   statusCheckRunId.value = runId
+  serverMetrics.value = {}
   pendingStatusChecks.value = servers.length
 
   if (servers.length === 0) {
@@ -143,8 +175,15 @@ function refreshServerStatuses() {
 
 async function checkServerStatus(server: Server, runId: number) {
   try {
-    await serversStore.testConnection(server.id, { useGlobalLoading: false })
+    const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
+    if (statusCheckRunId.value !== runId) return
+    if (result.success) {
+      await fetchServerMetrics(server, runId)
+    } else {
+      clearServerMetrics(server.id)
+    }
   } catch (error) {
+    clearServerMetrics(server.id)
     // Keep the page responsive; each failed host is marked offline in the store.
   } finally {
     if (statusCheckRunId.value === runId) {
@@ -155,6 +194,73 @@ async function checkServerStatus(server: Server, runId: number) {
 
 function getServerStatus(server: Server) {
   return serversStore.isTestingServer(server.id) ? 'loading' : server.status
+}
+
+function setMetricLoading(id: number, isLoading: boolean) {
+  const next = new Set(metricLoadingIds.value)
+  if (isLoading) {
+    next.add(id)
+  } else {
+    next.delete(id)
+  }
+  metricLoadingIds.value = next
+}
+
+function isMetricLoading(id: number) {
+  return metricLoadingIds.value.has(id)
+}
+
+function getServerMetrics(serverId: number) {
+  return serverMetrics.value[serverId] || {}
+}
+
+function clearServerMetrics(serverId: number) {
+  const next = { ...serverMetrics.value }
+  delete next[serverId]
+  serverMetrics.value = next
+  setMetricLoading(serverId, false)
+}
+
+async function fetchServerMetrics(server: Server, runId = statusCheckRunId.value) {
+  setMetricLoading(server.id, true)
+  try {
+    const status = await monitoringStore.fetchRemoteStatus(server.id)
+    if (statusCheckRunId.value !== runId || !status) return
+    serverMetrics.value = {
+      ...serverMetrics.value,
+      [server.id]: {
+        cpu: status.cpu_percent,
+        memoryPercent: status.memory?.percent,
+        memoryUsed: status.memory?.used,
+        memoryTotal: status.memory?.total,
+        diskPercent: status.disk?.percent,
+        diskUsed: status.disk?.used,
+        diskTotal: status.disk?.total
+      }
+    }
+  } catch {
+    clearServerMetrics(server.id)
+  } finally {
+    setMetricLoading(server.id, false)
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function getProgressColor(percent: number): string {
+  if (percent < 50) return '#67c23a'
+  if (percent < 80) return '#e6a23c'
+  return '#f56c6c'
+}
+
+function sortByMetric(key: keyof ServerMetrics) {
+  return (a: Server, b: Server) => (getServerMetrics(a.id)[key] ?? -1) - (getServerMetrics(b.id)[key] ?? -1)
 }
 
 // Open create dialog
@@ -264,13 +370,49 @@ async function testConnection(server: Server) {
   try {
     const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
     if (result.success) {
+      await fetchServerMetrics(server)
       ElMessage.success(`Connection successful: ${result.message}`)
     } else {
+      clearServerMetrics(server.id)
       ElMessage.error(`Connection failed: ${result.message}`)
     }
   } catch (error) {
+    clearServerMetrics(server.id)
     ElMessage.error('Failed to test connection')
   }
+}
+
+async function openProcessDrawer(server: Server) {
+  currentProcessServer.value = server
+  processDrawerVisible.value = true
+  processList.value = []
+  await fetchProcessList()
+}
+
+async function fetchProcessList() {
+  if (!currentProcessServer.value) return
+
+  processLoading.value = true
+  try {
+    const result = await monitoringStore.fetchRemoteProcesses(
+      currentProcessServer.value.id,
+      { limit: processLimit.value, sort_by: processSortBy.value }
+    )
+    processList.value = result?.processes || []
+  } catch {
+    ElMessage.error('Failed to fetch process list')
+    processList.value = []
+  } finally {
+    processLoading.value = false
+  }
+}
+
+async function handleProcessLimitChange() {
+  await fetchProcessList()
+}
+
+async function handleProcessSortChange() {
+  await fetchProcessList()
 }
 
 // Open command dialog
@@ -365,7 +507,7 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Host:Port" width="220" show-overflow-tooltip>
+            <ElTableColumn label="Host:Port" width="148" class-name="host-port-column" show-overflow-tooltip>
               <template #default="{ row }">
                 <code class="host-port">{{ row.host }}:{{ row.port }}</code>
               </template>
@@ -381,12 +523,6 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="region" label="Region" width="100" align="center">
-              <template #default="{ row }">
-                <ElTag size="small" type="info">{{ row.region || '私有云' }}</ElTag>
-              </template>
-            </ElTableColumn>
-
             <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
               <template #default="{ row }">
                 <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
@@ -395,7 +531,91 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="150" align="center">
+            <ElTableColumn
+              label="CPU"
+              width="100"
+              align="center"
+              class-name="metric-divider-column"
+              sortable
+              :sort-method="sortByMetric('cpu')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell" v-if="getServerMetrics(row.id).cpu !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).cpu || 0}%`, background: getProgressColor(getServerMetrics(row.id).cpu || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).cpu || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).cpu || 0) }}%
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn
+              label="Memory"
+              width="240"
+              align="center"
+              class-name="metric-divider-column"
+              sortable
+              :sort-method="sortByMetric('memoryPercent')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell metric-cell-composite" v-if="getServerMetrics(row.id).memoryPercent !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).memoryPercent || 0}%`, background: getProgressColor(getServerMetrics(row.id).memoryPercent || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).memoryPercent || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).memoryPercent || 0) }}%
+                  </span>
+                  <span
+                    v-if="getServerMetrics(row.id).memoryUsed !== undefined && getServerMetrics(row.id).memoryTotal !== undefined"
+                    class="metric-detail"
+                  >
+                    {{ formatBytes(getServerMetrics(row.id).memoryUsed || 0) }}/{{ formatBytes(getServerMetrics(row.id).memoryTotal || 0) }}
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn
+              label="Disk"
+              width="240"
+              align="center"
+              class-name="metric-divider-column metric-divider-end-column"
+              sortable
+              :sort-method="sortByMetric('diskPercent')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell metric-cell-composite" v-if="getServerMetrics(row.id).diskPercent !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).diskPercent || 0}%`, background: getProgressColor(getServerMetrics(row.id).diskPercent || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).diskPercent || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).diskPercent || 0) }}%
+                  </span>
+                  <span
+                    v-if="getServerMetrics(row.id).diskUsed !== undefined && getServerMetrics(row.id).diskTotal !== undefined"
+                    class="metric-detail"
+                  >
+                    {{ formatBytes(getServerMetrics(row.id).diskUsed || 0) }}/{{ formatBytes(getServerMetrics(row.id).diskTotal || 0) }}
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn label="Actions" width="220" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <ElTooltip content="Test Connection" placement="top">
@@ -412,6 +632,15 @@ async function executeCommand() {
                       size="small"
                       :icon="Promotion"
                       @click="openCommandDialog(row)"
+                      link
+                    />
+                  </ElTooltip>
+                  <ElTooltip content="Process Monitor" placement="top">
+                    <ElButton
+                      size="small"
+                      :icon="Reading"
+                      @click="openProcessDrawer(row)"
+                      :disabled="getServerStatus(row) !== 'online'"
                       link
                     />
                   </ElTooltip>
@@ -447,7 +676,7 @@ async function executeCommand() {
     <!-- Add/Edit Server Dialog -->
     <ElDialog
       v-model="dialogVisible"
-      width="520px"
+      width="560px"
       :close-on-click-modal="false"
       class="enhanced-dialog"
     >
@@ -457,12 +686,12 @@ async function executeCommand() {
           <div class="dialog-header-content">
             <div class="dialog-header-icon">
               <ElIcon :size="20">
-                <component :is="dialogMode === 'create' ? Plus : Edit" />
+                <component :is="serverDialogCopy.icon" />
               </ElIcon>
             </div>
             <div class="dialog-header-text">
-              <h3 class="dialog-title">{{ dialogMode === 'create' ? '新增服务器' : '编辑服务器' }}</h3>
-              <p class="dialog-subtitle">{{ dialogMode === 'create' ? '添加一个新的 SSH 服务器配置' : '修改服务器配置信息' }}</p>
+              <h3 class="dialog-title">{{ serverDialogCopy.title }}</h3>
+              <p class="dialog-subtitle">{{ serverDialogCopy.subtitle }}</p>
             </div>
           </div>
         </div>
@@ -478,25 +707,40 @@ async function executeCommand() {
           <ElInput v-model="formData.name" placeholder="请输入服务器名称" />
         </ElFormItem>
 
-        <ElFormItem label="Host" prop="host">
-          <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
-        </ElFormItem>
+        <div class="form-row">
+          <ElFormItem label="Host" prop="host" class="form-row-item form-row-item-wide">
+            <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
+          </ElFormItem>
 
-        <ElFormItem label="Port" prop="port">
-          <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
-        </ElFormItem>
+          <ElFormItem label="Port" prop="port" class="form-row-item form-row-item-port">
+            <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
+          </ElFormItem>
+        </div>
 
-        <ElFormItem label="用户名" prop="username">
-          <ElInput v-model="formData.username" placeholder="SSH 用户名" />
-        </ElFormItem>
+        <div class="form-row">
+          <ElFormItem label="用户名" prop="username" class="form-row-item">
+            <ElInput v-model="formData.username" placeholder="SSH 用户名" />
+          </ElFormItem>
 
-        <ElFormItem label="密码" prop="password">
-          <ElInput
-            v-model="formData.password"
-            type="password"
-            show-password
-            :placeholder="dialogMode === 'edit' ? '留空保持当前密码' : 'SSH 密码'"
-          />
+          <ElFormItem label="密码" prop="password" class="form-row-item">
+            <ElInput
+              v-model="formData.password"
+              type="password"
+              show-password
+              :placeholder="dialogMode === 'edit' ? '留空保持当前密码' : 'SSH 密码'"
+            />
+          </ElFormItem>
+        </div>
+
+        <ElFormItem label="Region" prop="region">
+          <ElSelect v-model="formData.region" placeholder="Select region" style="width: 100%">
+            <ElOption
+              v-for="region in REGION_OPTIONS"
+              :key="region"
+              :label="region"
+              :value="region"
+            />
+          </ElSelect>
         </ElFormItem>
 
         <ElFormItem label="描述" prop="description">
@@ -508,25 +752,14 @@ async function executeCommand() {
           />
         </ElFormItem>
 
-        <ElFormItem label="Region" prop="region">
-          <ElSelect v-model="formData.region" placeholder="Select region" size="small" style="width: 100%">
-            <ElOption
-              v-for="region in REGION_OPTIONS"
-              :key="region"
-              :label="region"
-              :value="region"
-            />
-          </ElSelect>
-        </ElFormItem>
-
       </ElForm>
 
       <template #footer>
         <div class="dialog-footer-enhanced">
           <ElButton @click="dialogVisible = false" class="btn-cancel">取消</ElButton>
           <ElButton type="primary" @click="submitForm" :loading="serversStore.loading" class="btn-primary">
-            <ElIcon><component :is="dialogMode === 'create' ? Plus : Edit" /></ElIcon>
-            {{ dialogMode === 'create' ? '创建' : '保存' }}
+            <ElIcon><component :is="serverDialogCopy.icon" /></ElIcon>
+            {{ serverDialogCopy.actionText }}
           </ElButton>
         </div>
       </template>
@@ -599,6 +832,60 @@ async function executeCommand() {
         </div>
       </template>
     </ElDialog>
+
+    <!-- Process Management Drawer -->
+    <ElDrawer
+      v-model="processDrawerVisible"
+      :title="`进程管理 - ${currentProcessServer?.name || ''}`"
+      size="50%"
+      direction="rtl"
+    >
+      <div class="process-drawer-content">
+        <div class="process-controls">
+          <ElSelect v-model="processLimit" placeholder="数量" style="width: 80px" size="small" @change="handleProcessLimitChange">
+            <ElOption :value="20" label="20" />
+            <ElOption :value="50" label="50" />
+            <ElOption :value="100" label="100" />
+            <ElOption :value="500" label="所有" />
+          </ElSelect>
+          <ElSelect v-model="processSortBy" placeholder="取值" style="width: 110px" size="small" @change="handleProcessSortChange">
+            <ElOption value="cpu" label="CPU（默认）" />
+            <ElOption value="memory" label="MEM" />
+          </ElSelect>
+          <ElButton @click="fetchProcessList" :loading="processLoading" size="small">
+            刷新
+          </ElButton>
+        </div>
+
+        <ElTable
+          :data="processList"
+          v-loading="processLoading"
+          stripe
+          style="width: 100%; margin-top: 12px"
+          size="small"
+          class="process-table"
+        >
+          <ElTableColumn prop="pid" label="PID" width="70" />
+          <ElTableColumn prop="name" label="名称" min-width="180" show-overflow-tooltip />
+          <ElTableColumn prop="cpu_percent" label="CPU %" width="90" sortable>
+            <template #default="{ row }">
+              <span :class="{ 'high-usage': row.cpu_percent > 50 }" style="font-size:12px">
+                {{ row.cpu_percent.toFixed(1) }}%
+              </span>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn prop="memory_percent" label="Mem %" width="90" sortable>
+            <template #default="{ row }">
+              <span :class="{ 'high-usage': row.memory_percent > 50 }" style="font-size:12px">
+                {{ row.memory_percent.toFixed(1) }}%
+              </span>
+            </template>
+          </ElTableColumn>
+        </ElTable>
+
+        <ElEmpty v-if="!processLoading && processList.length === 0" description="无进程数据" />
+      </div>
+    </ElDrawer>
   </div>
 </template>
 
@@ -666,9 +953,10 @@ async function executeCommand() {
 .server-info {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .server-type-tag {
@@ -679,9 +967,9 @@ async function executeCommand() {
 }
 
 .server-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -709,12 +997,42 @@ async function executeCommand() {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
   background: #f1f5f9;
-  padding: 2px 6px;
+  padding: 1px 3px;
   border-radius: 4px;
   color: #475569;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.server-table :deep(.host-port-column .cell) {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.server-table :deep(.metric-divider-column .cell) {
+  position: relative;
+  padding-left: 10px;
+}
+
+.server-table :deep(.metric-divider-column .cell::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  width: 1px;
+  height: 50%;
+  background: #cbd5e1;
+}
+
+.server-table :deep(.metric-divider-end-column .cell::after) {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 25%;
+  width: 1px;
+  height: 50%;
+  background: #cbd5e1;
 }
 
 .status-tag {
@@ -765,6 +1083,73 @@ async function executeCommand() {
   color: #059669;
 }
 
+.metric-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.metric-cell-composite {
+  display: grid;
+  grid-template-columns: 70px 38px 112px;
+  gap: 8px;
+}
+
+.metric-cell-composite .metric-bar {
+  width: 70px;
+}
+
+.metric-cell-composite .metric-value {
+  text-align: right;
+}
+
+.metric-cell-composite .metric-detail {
+  min-width: 0;
+  text-align: left;
+}
+
+.metric-bar {
+  width: 50px;
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.metric-value {
+  font-weight: 500;
+  font-size: 11px;
+  color: #303133;
+}
+
+.metric-value.high,
+.high-usage {
+  color: #f56c6c;
+}
+
+.metric-detail {
+  display: inline-block;
+  min-width: 80px;
+  font-size: 10px;
+  color: #909399;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.metric-error {
+  font-weight: 500;
+  font-size: 11px;
+  color: #c0c4cc;
+}
+
 .status-icon {
   display: inline-flex;
   align-items: center;
@@ -786,13 +1171,16 @@ async function executeCommand() {
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   justify-content: center;
   align-items: center;
+  white-space: nowrap;
 }
 
 .action-buttons :deep(.el-button) {
   font-size: 18px;
+  width: 22px;
+  min-width: 22px;
   padding: 4px;
 }
 
@@ -836,7 +1224,7 @@ async function executeCommand() {
 }
 
 .grouped-view {
-  margin-top: 0;
+  margin-top: 10px;
 }
 
 .group-header {
@@ -854,6 +1242,22 @@ async function executeCommand() {
   text-align: center;
   padding: 40px;
   color: #94a3b8;
+}
+
+.process-drawer-content {
+  padding: 0 16px;
+}
+
+.process-controls {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.process-table :deep(.el-table__cell),
+.process-table :deep(.el-table__header-cell) {
+  padding: 4px 0;
 }
 
 /* Enhanced Dialog Styles */
@@ -925,6 +1329,24 @@ async function executeCommand() {
 
 .dialog-form-enhanced {
   padding: 8px 0;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-row-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-row-item-wide {
+  flex: 1 1 auto;
+}
+
+.form-row-item-port {
+  flex: 0 0 150px;
 }
 
 .dialog-footer-enhanced {

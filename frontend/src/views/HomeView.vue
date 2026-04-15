@@ -1,26 +1,18 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { Monitor, Setting, Document, DataAnalysis, Platform } from '@element-plus/icons-vue'
+import { Setting, Document, DataAnalysis, Platform } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
 const rootFeature = {
-  title: '服务器管理',
-  description: '统一维护 SSH 连接、认证信息和远程执行入口，是整个平台能力的起点。',
+  title: '服务器管理 / 系统监控',
+  description: '统一维护 SSH 连接、远程执行入口、资源指标和进程查看。',
   icon: Setting,
   path: '/servers',
   color: '#3b82f6'
 }
 
 const branches = [
-  {
-    title: '系统监控',
-    description: '从服务器连接延伸到 CPU、内存、磁盘和进程监控。',
-    icon: Monitor,
-    path: '/monitor',
-    color: '#10b981',
-    eyebrow: '观测'
-  },
   {
     title: 'IoTDB可视化',
     description: '基于已管理服务器连接 IoTDB，查看日志、配置和 CLI。',
