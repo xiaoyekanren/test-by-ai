@@ -68,8 +68,8 @@ def test_cluster_deploy_deploys_and_writes_role_configs(db_session):
 
     assert result["exit_status"] == 0
     assert result["cluster_name"] == "prodCluster"
-    assert result["config_nodes"][0]["install_dir"] == "/opt/iotdb-cluster/confignode-1"
-    assert result["data_nodes"][0]["install_dir"] == "/opt/iotdb-cluster/datanode-1"
+    assert result["config_nodes"][0]["install_dir"] == "/opt/iotdb-cluster"
+    assert result["data_nodes"][0]["install_dir"] == "/opt/iotdb-cluster"
     assert len(fake_ssh.writes) == 2
 
     config_content = next(item["content"] for item in fake_ssh.writes if item["host"] == "10.0.0.1")
@@ -84,6 +84,39 @@ def test_cluster_deploy_deploys_and_writes_role_configs(db_session):
     assert "dn_rpc_address=10.0.0.2" in data_content
     assert "dn_seed_config_node=10.0.0.1:10710" in data_content
     assert "data_replication_factor=1" in data_content
+
+
+def test_cluster_deploy_deploys_once_and_merges_config_for_colocated_roles(db_session):
+    db_session.add(Server(id=1, name="node-1", host="10.0.0.1", port=22, username="root", password="pw", region="公司"))
+    db_session.commit()
+
+    engine = ExecutionEngine(db_session)
+    fake_ssh = FakeClusterSSH()
+    engine.ssh_service = fake_ssh
+
+    result = engine._execute_iotdb_cluster_deploy_node({
+        "remote_package_path": "/tmp/apache-iotdb-bin.zip",
+        "install_dir": "/opt/iotdb",
+        "cluster_name": "prodCluster",
+        "config_nodes": [{"server_id": 1}],
+        "data_nodes": [{"server_id": 1}],
+        "backup_before_write": False,
+        "timeout": 900,
+    })
+
+    deploy_commands = [item["command"] for item in fake_ssh.commands if "apache-iotdb-bin.zip" in item["command"]]
+
+    assert result["exit_status"] == 0
+    assert len(deploy_commands) == 1
+    assert "start-confignode.sh" in deploy_commands[0]
+    assert "start-datanode.sh" in deploy_commands[0]
+    assert len(fake_ssh.writes) == 1
+
+    content = fake_ssh.writes[0]["content"]
+    assert "cn_internal_address=10.0.0.1" in content
+    assert "cn_seed_config_node=10.0.0.1:10710" in content
+    assert "dn_rpc_address=10.0.0.1" in content
+    assert "dn_seed_config_node=10.0.0.1:10710" in content
 
 
 def test_cluster_deploy_requires_config_and_data_nodes(db_session):

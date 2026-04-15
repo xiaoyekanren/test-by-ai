@@ -766,38 +766,40 @@ class ExecutionEngine:
         seed_cn = config_nodes[0]
         seed = f"{seed_cn['host']}:{seed_cn['cn_internal_port']}"
 
-        for entry in config_nodes + data_nodes:
-            server = self._require_server(entry, context)
+        deploy_targets = self._group_cluster_entries_by_install(config_nodes + data_nodes)
+
+        for target in deploy_targets:
+            server = self._require_server({"server_id": target["server_id"]}, context)
+            entries = target["entries"]
             deploy_result = self._deploy_package_to_server(
                 server=server,
                 artifact_local_path=config.get("artifact_local_path"),
                 remote_package_path=self._required_str(config, "remote_package_path"),
-                install_dir=str(entry["install_dir"]),
+                install_dir=str(target["install_dir"]),
                 package_type=str(config.get("package_type", "auto")),
                 extract_subdir=str(config.get("extract_subdir", "") or "").strip("/"),
                 overwrite=bool(config.get("overwrite", False)),
                 timeout=int(config.get("timeout", 900)),
-                node_role=str(entry["node_role"])
+                node_role="cluster",
+                expected_scripts=[
+                    self._start_script_for_role(str(entry["node_role"]))
+                    for entry in entries
+                ]
             )
-            results.append({"step": "deploy", "node": entry, "result": deploy_result})
+            results.append({"step": "deploy", "node": target, "result": deploy_result})
             stdout_parts.append(deploy_result.get("stdout", ""))
             if deploy_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster deploy failed during package deployment", results, cluster_name, config_nodes, data_nodes)
 
-            replacements = self._build_cluster_replacements(
-                entry=entry,
-                cluster_name=cluster_name,
-                seed_config_node=seed,
-                common_config=common_config
-            )
+            replacements = self._build_cluster_replacements_for_entries(entries, cluster_name, seed, common_config)
             config_result = self._apply_config_file_to_server(
                 server=server,
-                file_path=self._default_config_path(str(entry["install_dir"])),
+                file_path=self._default_config_path(str(target["install_dir"])),
                 replacements=replacements,
                 timeout=int(config.get("timeout", 900)),
                 backup_before_write=bool(config.get("backup_before_write", True))
             )
-            results.append({"step": "config", "node": entry, "result": config_result})
+            results.append({"step": "config", "node": target, "result": config_result})
             stdout_parts.append(config_result.get("stdout", ""))
             if config_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster deploy failed during config write", results, cluster_name, config_nodes, data_nodes)
@@ -1303,7 +1305,8 @@ class ExecutionEngine:
         extract_subdir: str,
         overwrite: bool,
         timeout: int,
-        node_role: str
+        node_role: str,
+        expected_scripts: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         if not remote_package_path:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "remote_package_path is required"}
@@ -1322,7 +1325,7 @@ class ExecutionEngine:
         if detected_type is None:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Unsupported package_type"}
 
-        expected_script = self._start_script_for_role(node_role)
+        scripts_to_check = expected_scripts or [self._start_script_for_role(node_role)]
         tmp_dir = f"{install_dir}.extracting"
         commands = [
             "set -e",
@@ -1345,15 +1348,16 @@ class ExecutionEngine:
         else:
             source_dir_expr = '$(find ' + self._quote(tmp_dir) + " -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 
-        expected_script_path = f"{install_dir.rstrip('/')}/sbin/{expected_script}"
         commands.extend([
             f"source_dir={source_dir_expr}",
             'if [ -z "$source_dir" ]; then source_dir=' + self._quote(tmp_dir) + "; fi",
             f"mkdir -p {self._quote(install_dir)}",
-            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/",
-            f"test -f {self._quote(expected_script_path)}",
-            f"rm -rf {self._quote(tmp_dir)}"
+            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/"
         ])
+        for script in sorted(set(scripts_to_check)):
+            expected_script_path = f"{install_dir.rstrip('/')}/sbin/{script}"
+            commands.append(f"test -f {self._quote(expected_script_path)}")
+        commands.append(f"rm -rf {self._quote(tmp_dir)}")
 
         result = self.ssh_service.run_command(
             host=server.host,
@@ -1368,7 +1372,8 @@ class ExecutionEngine:
             "remote_package_path": remote_package_path,
             "iotdb_home": install_dir,
             "conf_path": self._default_config_path(install_dir),
-            "expected_start_script": expected_script
+            "expected_start_script": sorted(set(scripts_to_check))[0],
+            "expected_start_scripts": sorted(set(scripts_to_check))
         })
         return payload
 
@@ -1390,7 +1395,7 @@ class ExecutionEngine:
 
             node_role = self._normalize_node_role(item.get("node_role") or role)
             host = str(item.get("host") or server.host)
-            install_dir = str(item.get("install_dir") or f"{base_install_dir.rstrip('/')}/{node_role}-{index + 1}")
+            install_dir = str(item.get("install_dir") or base_install_dir.rstrip("/"))
             normalized_item: Dict[str, Any] = {
                 "server_id": int(server_id),
                 "node_role": node_role,
@@ -1416,6 +1421,20 @@ class ExecutionEngine:
             normalized.append(normalized_item)
 
         return normalized
+
+    def _group_cluster_entries_by_install(self, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        grouped: Dict[tuple[int, str], Dict[str, Any]] = {}
+        for entry in entries:
+            key = (int(entry["server_id"]), str(entry["install_dir"]).rstrip("/"))
+            if key not in grouped:
+                grouped[key] = {
+                    "server_id": key[0],
+                    "host": entry["host"],
+                    "install_dir": key[1],
+                    "entries": []
+                }
+            grouped[key]["entries"].append(entry)
+        return list(grouped.values())
 
     def _build_cluster_replacements(
         self,
@@ -1449,6 +1468,27 @@ class ExecutionEngine:
         if isinstance(entry.get("config_items"), dict):
             for key, value in entry["config_items"].items():
                 replacements[str(key)] = str(value)
+
+        return replacements
+
+    def _build_cluster_replacements_for_entries(
+        self,
+        entries: List[Dict[str, Any]],
+        cluster_name: str,
+        seed_config_node: str,
+        common_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        replacements = {str(key): str(value) for key, value in common_config.items()}
+        replacements["cluster_name"] = cluster_name
+
+        for entry in entries:
+            role_replacements = self._build_cluster_replacements(
+                entry=entry,
+                cluster_name=cluster_name,
+                seed_config_node=seed_config_node,
+                common_config={}
+            )
+            replacements.update(role_replacements)
 
         return replacements
 
