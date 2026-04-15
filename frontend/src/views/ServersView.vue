@@ -500,7 +500,7 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Host:Port" width="220" show-overflow-tooltip>
+            <ElTableColumn label="Host:Port" width="162" show-overflow-tooltip>
               <template #default="{ row }">
                 <code class="host-port">{{ row.host }}:{{ row.port }}</code>
               </template>
