@@ -74,15 +74,26 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+const nodeCategoryLabels = {
+  basic: 'Basic Nodes',
+  iotdb: 'IoTDB Nodes',
+  control: 'Control Nodes',
+  result: 'Result Nodes'
+} as const
+const nodeCategoryOrder = ['basic', 'iotdb', 'control', 'result'] as const
+
+// 画布上已有节点的选项（用于节点切换）
 const configDialogNodeOptions = computed(() => {
   return workflowsStore.editorNodes.map(node => {
     const config = NODE_CONFIGS[node.data.nodeType]
     const label = node.data.label || config?.label || node.id
+    const category = config?.category || 'basic'
     return {
       value: node.id,
       label,
       typeLabel: config?.label || node.data.nodeType,
-      typeKey: node.data.nodeType,
+      category,
+      categoryLabel: nodeCategoryLabels[category],
       color: config?.color || '#409eff',
       iconSymbol: label.charAt(0).toUpperCase() || 'N',
       shortId: node.id.slice(0, 12)
@@ -92,25 +103,42 @@ const configDialogNodeOptions = computed(() => {
 const configDialogOtherNodeOptions = computed(() => {
   return configDialogNodeOptions.value.filter(option => option.value !== workflowsStore.selectedNodeId)
 })
-const configDialogNodeGroups = computed(() => {
+
+// 所有支持的卡片类型选项（用于卡片类型浏览）
+const allNodeTypeOptions = computed(() => {
+  return Object.values(NODE_CONFIGS).map(config => ({
+    value: config.type,
+    label: config.label,
+    typeLabel: config.label,
+    category: config.category,
+    categoryLabel: nodeCategoryLabels[config.category],
+    color: config.color,
+    iconSymbol: config.label.charAt(0).toUpperCase()
+  }))
+})
+
+// 所有卡片类型按类别分组
+const allNodeTypeGroups = computed(() => {
   const groups = new Map<string, {
-    typeLabel: string
+    categoryLabel: string
     color: string
-    options: typeof configDialogOtherNodeOptions.value
+    options: typeof allNodeTypeOptions.value
   }>()
 
-  configDialogOtherNodeOptions.value.forEach(option => {
-    if (!groups.has(option.typeKey)) {
-      groups.set(option.typeKey, {
-        typeLabel: option.typeLabel,
+  allNodeTypeOptions.value.forEach(option => {
+    if (!groups.has(option.category)) {
+      groups.set(option.category, {
+        categoryLabel: option.categoryLabel,
         color: option.color,
         options: []
       })
     }
-    groups.get(option.typeKey)?.options.push(option)
+    groups.get(option.category)?.options.push(option)
   })
 
-  return Array.from(groups.values())
+  return nodeCategoryOrder
+    .map(category => groups.get(category))
+    .filter((group): group is NonNullable<typeof group> => Boolean(group))
 })
 const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
@@ -271,9 +299,23 @@ const handleConfigDialogClosed = () => {
   nodeSwitcherDialogVisible.value = false
 }
 
-const handleConfigNodeSwitch = (nodeId: string) => {
-  workflowsStore.selectNode(nodeId)
+// 点击卡片类型后的处理 - 替换当前节点的类型
+const handleNodeTypeClick = (nodeType: string) => {
+  if (!workflowsStore.selectedNodeId) return
+
+  const newNodeType = nodeType as NodeType
+  const currentNodeType = workflowsStore.selectedNode?.data.nodeType
+
+  if (currentNodeType === newNodeType) {
+    // 类型相同，直接关闭弹窗
+    nodeSwitcherDialogVisible.value = false
+    return
+  }
+
+  // 替换节点类型
+  workflowsStore.replaceNodeType(workflowsStore.selectedNodeId, newNodeType)
   nodeSwitcherDialogVisible.value = false
+  ElMessage.success(`已替换为「${NODE_CONFIGS[newNodeType]?.label || nodeType}」`)
 }
 
 // Handle edge click (selection)
@@ -542,11 +584,10 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
             </div>
           </div>
           <ElButton
-            v-if="configDialogOtherNodeOptions.length > 0"
             class="config-dialog-switch-button"
             :icon="Switch"
             circle
-            title="切换其他卡片"
+            title="查看全部卡片类型"
             @click="nodeSwitcherDialogVisible = true"
           />
         </div>
@@ -568,19 +609,19 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       top="16vh"
       append-to-body
       class="node-switch-dialog"
-      title="切换卡片"
+      title="卡片类型"
     >
       <div class="node-switch-dialog-body">
-        <div class="node-switch-dialog-hint">选择要编辑的其他卡片</div>
+        <div class="node-switch-dialog-hint">全部支持的卡片类型（共 {{ allNodeTypeOptions.length }} 种）</div>
         <ElScrollbar class="node-switch-list">
           <section
-            v-for="group in configDialogNodeGroups"
-            :key="group.typeLabel"
+            v-for="group in allNodeTypeGroups"
+            :key="group.categoryLabel"
             class="node-switch-group"
           >
             <div class="node-switch-group-title">
               <span class="node-switch-group-mark" :style="{ background: group.color }"></span>
-              <span>{{ group.typeLabel }}</span>
+              <span>{{ group.categoryLabel }}</span>
               <span class="node-switch-group-count">{{ group.options.length }}</span>
             </div>
             <div class="node-switch-grid">
@@ -589,14 +630,14 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
                 :key="option.value"
                 class="node-switch-card"
                 type="button"
-                @click="handleConfigNodeSwitch(option.value)"
+                @click="handleNodeTypeClick(option.value)"
               >
                 <span class="node-switch-card-icon" :style="{ background: option.color }">
                   {{ option.iconSymbol }}
                 </span>
                 <span class="node-switch-card-main">
                   <span class="node-switch-card-title">{{ option.label }}</span>
-                  <span class="node-switch-card-meta">{{ option.shortId }}</span>
+                  <span class="node-switch-card-meta">{{ option.typeLabel }}</span>
                 </span>
               </button>
             </div>
@@ -773,12 +814,14 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
 
 .config-dialog-switch-button {
   position: absolute;
-  top: 16px;
-  right: 48px;
+  top: 20px;
+  right: 52px;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: 50%;
   color: #475569;
+  background: transparent;
+  border: none;
 }
 
 .config-dialog-switch-button:hover {

@@ -399,63 +399,40 @@ onUnmounted(() => {
 
     <ElDialog
       v-model="logDialogVisible"
-      width="800px"
-      top="8vh"
+      width="960px"
+      top="5vh"
       append-to-body
-      class="logs-dialog-enhanced"
+      class="logs-dialog-full"
     >
       <template #header>
-        <div class="logs-dialog-header-enhanced">
-          <div class="logs-dialog-accent"></div>
-          <div class="logs-dialog-icon-wrapper">
-            <div class="logs-dialog-icon">
-              <ElIcon :size="20"><Timer /></ElIcon>
-            </div>
-          </div>
-          <div class="logs-dialog-title-block">
-            <h3 class="logs-dialog-title">{{ logDialogTitle }}</h3>
-            <p class="logs-dialog-subtitle">节点执行日志详情</p>
-          </div>
+        <div class="logs-header-compact">
+          <span class="logs-title-text">{{ logDialogTitle }}</span>
+          <ElTag v-if="logDialogNodeExecutions[0]" size="small" :type="logDialogNodeExecutions[0].status === 'completed' ? 'success' : logDialogNodeExecutions[0].status === 'failed' ? 'danger' : 'info'">
+            {{ logDialogNodeExecutions[0].status }}
+          </ElTag>
         </div>
       </template>
-      <div class="logs-dialog-content-enhanced">
-        <ElScrollbar class="logs-dialog-scroll-enhanced">
-          <div v-if="logDialogNodeExecutions.length === 0" class="no-logs-enhanced">
+      <div class="logs-body-full">
+        <ElScrollbar class="logs-scroll-full">
+          <div v-if="logDialogNodeExecutions.length === 0" class="logs-empty">
             <ElIcon :size="32"><Clock /></ElIcon>
             <p>暂无日志数据</p>
           </div>
-          <div v-else class="log-entries-enhanced">
-            <div
-              v-for="nodeExec in logDialogNodeExecutions"
-              :key="nodeExec.id"
-              class="log-entry-enhanced"
-            >
-              <div class="log-header-enhanced">
-                <div class="log-node-info">
-                  <div class="log-node-icon" :class="nodeExec.status">
-                    <ElIcon>
-                      <component :is="nodeExec.status === 'completed' ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
-                    </ElIcon>
-                  </div>
-                  <span class="log-node-enhanced">{{ nodeExec.node_type }}</span>
-                </div>
-                <ElTag size="small" :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'" effect="plain">
-                  {{ nodeExec.status }}
-                </ElTag>
+          <div v-else class="logs-content-full">
+            <template v-for="nodeExec in logDialogNodeExecutions" :key="nodeExec.id">
+              <div v-if="nodeExec.input_data" class="log-block">
+                <div class="log-block-label">INPUT</div>
+                <pre class="log-block-data">{{ formatLogData(nodeExec.input_data) }}</pre>
               </div>
-              <div v-if="nodeExec.input_data" class="log-section-enhanced">
-                <span class="log-label-enhanced">Input</span>
-                <pre class="log-data-enhanced">{{ formatLogData(nodeExec.input_data) }}</pre>
+              <div v-if="nodeExec.output_data" class="log-block">
+                <div class="log-block-label">OUTPUT</div>
+                <pre class="log-block-data">{{ formatLogData(nodeExec.output_data) }}</pre>
               </div>
-              <div v-if="nodeExec.output_data" class="log-section-enhanced">
-                <span class="log-label-enhanced">Output</span>
-                <pre class="log-data-enhanced">{{ formatLogData(nodeExec.output_data) }}</pre>
+              <div v-if="nodeExec.error_message" class="log-block log-block-error">
+                <div class="log-block-label">ERROR</div>
+                <pre class="log-block-data">{{ nodeExec.error_message }}</pre>
               </div>
-              <div v-if="nodeExec.error_message" class="log-section-enhanced error">
-                <span class="log-label-enhanced">Error</span>
-                <pre class="log-data-enhanced error">{{ nodeExec.error_message }}</pre>
-              </div>
-            </div>
+            </template>
           </div>
         </ElScrollbar>
       </div>
@@ -753,178 +730,99 @@ onUnmounted(() => {
   color: #f56c6c;
 }
 
-/* Enhanced Logs Dialog */
-.logs-dialog-header-enhanced {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-  border-bottom: 1px solid #e2e8f0;
-  margin: -20px -20px 0 -20px;
+/* Full-width Logs Dialog */
+.logs-dialog-full :deep(.el-dialog) {
+  border-radius: 8px !important;
 }
 
-.logs-dialog-accent {
-  width: 4px;
-  height: 48px;
-  background: linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%);
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.logs-dialog-icon-wrapper {
-  display: flex;
-  align-items: center;
-}
-
-.logs-dialog-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 10px;
-  color: #8b5cf6;
-}
-
-.logs-dialog-title-block {
-  flex: 1;
-}
-
-.logs-dialog-title {
+.logs-dialog-full :deep(.el-dialog__header) {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e7ed;
   margin: 0;
-  font-size: 16px;
+}
+
+.logs-dialog-full :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.logs-header-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logs-title-text {
+  font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: #303133;
 }
 
-.logs-dialog-subtitle {
-  margin: 4px 0 0 0;
-  font-size: 12px;
-  color: #64748b;
+.logs-body-full {
+  height: calc(90vh - 120px);
+  max-height: 720px;
+  overflow: hidden;
 }
 
-.logs-dialog-content-enhanced {
-  padding: 20px;
-  min-height: 300px;
+.logs-scroll-full {
+  height: 100%;
 }
 
-.logs-dialog-scroll-enhanced {
-  max-height: 480px;
-}
-
-.no-logs-enhanced {
+.logs-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 60px 20px;
+  padding: 80px 20px;
   color: #94a3b8;
 }
 
-.no-logs-enhanced p {
+.logs-empty p {
   margin: 0;
   font-size: 14px;
 }
 
-.log-entries-enhanced {
+.logs-content-full {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.log-entry-enhanced {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-.log-header-enhanced {
+.log-block {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  flex-direction: column;
 }
 
-.log-node-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.log-node-icon {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.log-node-icon.completed {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-}
-
-.log-node-icon.failed {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.log-node-icon.running {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
-.log-node-icon.pending {
-  background: rgba(100, 116, 139, 0.1);
-  color: #64748b;
-}
-
-.log-node-enhanced {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.log-section-enhanced {
-  margin-bottom: 12px;
-}
-
-.log-section-enhanced:last-child {
-  margin-bottom: 0;
-}
-
-.log-label-enhanced {
+.log-block-label {
+  padding: 8px 16px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: #64748b;
-  margin-bottom: 6px;
-  display: block;
-  text-transform: uppercase;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
   letter-spacing: 0.5px;
 }
 
-.log-data-enhanced {
+.log-block-data {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-  font-size: 11px;
-  background: #1e293b;
-  padding: 12px;
-  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 16px;
   margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
   overflow-x: auto;
   white-space: pre;
   word-break: normal;
-  color: #e2e8f0;
-  line-height: 1.5;
+  min-height: 120px;
 }
 
-.log-data-enhanced.error {
+.log-block-error .log-block-label {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.log-block-error .log-block-data {
+  background: #7f1d1d;
   color: #fca5a5;
-  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
 }
 </style>
