@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
-import MonitorView from './MonitorView.vue'
 import {
   ElTable,
   ElTableColumn,
@@ -14,6 +13,8 @@ import {
   ElMessageBox,
   ElMessage,
   ElTooltip,
+  ElDrawer,
+  ElEmpty,
   ElCollapse,
   ElCollapseItem,
   ElSelect,
@@ -21,12 +22,24 @@ import {
   type FormInstance,
   type FormRules
 } from 'element-plus'
-import { Refresh, Plus, Edit, Delete, Connection, Promotion } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete, Connection, Promotion, Reading } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
-import type { Server, ServerCreate, ServerUpdate } from '@/types'
+import { useMonitoringStore } from '@/stores/monitoring'
+import type { ProcessInfo, Server, ServerCreate, ServerUpdate } from '@/types'
 import { REGION_OPTIONS } from '@/types'
 
 const serversStore = useServersStore()
+const monitoringStore = useMonitoringStore()
+
+interface ServerMetrics {
+  cpu?: number
+  memoryPercent?: number
+  memoryUsed?: number
+  memoryTotal?: number
+  diskPercent?: number
+  diskUsed?: number
+  diskTotal?: number
+}
 
 // Form related
 const formRef = ref<FormInstance>()
@@ -70,6 +83,16 @@ const commandLoading = ref(false)
 const pendingStatusChecks = ref(0)
 const statusCheckRunId = ref(0)
 const isStatusChecking = computed(() => pendingStatusChecks.value > 0)
+const serverMetrics = ref<Record<number, ServerMetrics>>({})
+const metricLoadingIds = ref<Set<number>>(new Set())
+
+// Process drawer state
+const processDrawerVisible = ref(false)
+const currentProcessServer = ref<Server | null>(null)
+const processList = ref<ProcessInfo[]>([])
+const processLoading = ref(false)
+const processLimit = ref(20)
+const processSortBy = ref<'cpu' | 'memory'>('cpu')
 
 // Sort servers by host:port
 const sortedServers = computed(() => {
@@ -131,6 +154,7 @@ function refreshServerStatuses() {
   const servers = [...serversStore.servers]
   const runId = statusCheckRunId.value + 1
   statusCheckRunId.value = runId
+  serverMetrics.value = {}
   pendingStatusChecks.value = servers.length
 
   if (servers.length === 0) {
@@ -144,8 +168,15 @@ function refreshServerStatuses() {
 
 async function checkServerStatus(server: Server, runId: number) {
   try {
-    await serversStore.testConnection(server.id, { useGlobalLoading: false })
+    const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
+    if (statusCheckRunId.value !== runId) return
+    if (result.success) {
+      await fetchServerMetrics(server, runId)
+    } else {
+      clearServerMetrics(server.id)
+    }
   } catch (error) {
+    clearServerMetrics(server.id)
     // Keep the page responsive; each failed host is marked offline in the store.
   } finally {
     if (statusCheckRunId.value === runId) {
@@ -156,6 +187,73 @@ async function checkServerStatus(server: Server, runId: number) {
 
 function getServerStatus(server: Server) {
   return serversStore.isTestingServer(server.id) ? 'loading' : server.status
+}
+
+function setMetricLoading(id: number, isLoading: boolean) {
+  const next = new Set(metricLoadingIds.value)
+  if (isLoading) {
+    next.add(id)
+  } else {
+    next.delete(id)
+  }
+  metricLoadingIds.value = next
+}
+
+function isMetricLoading(id: number) {
+  return metricLoadingIds.value.has(id)
+}
+
+function getServerMetrics(serverId: number) {
+  return serverMetrics.value[serverId] || {}
+}
+
+function clearServerMetrics(serverId: number) {
+  const next = { ...serverMetrics.value }
+  delete next[serverId]
+  serverMetrics.value = next
+  setMetricLoading(serverId, false)
+}
+
+async function fetchServerMetrics(server: Server, runId = statusCheckRunId.value) {
+  setMetricLoading(server.id, true)
+  try {
+    const status = await monitoringStore.fetchRemoteStatus(server.id)
+    if (statusCheckRunId.value !== runId || !status) return
+    serverMetrics.value = {
+      ...serverMetrics.value,
+      [server.id]: {
+        cpu: status.cpu_percent,
+        memoryPercent: status.memory?.percent,
+        memoryUsed: status.memory?.used,
+        memoryTotal: status.memory?.total,
+        diskPercent: status.disk?.percent,
+        diskUsed: status.disk?.used,
+        diskTotal: status.disk?.total
+      }
+    }
+  } catch {
+    clearServerMetrics(server.id)
+  } finally {
+    setMetricLoading(server.id, false)
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function getProgressColor(percent: number): string {
+  if (percent < 50) return '#67c23a'
+  if (percent < 80) return '#e6a23c'
+  return '#f56c6c'
+}
+
+function sortByMetric(key: keyof ServerMetrics) {
+  return (a: Server, b: Server) => (getServerMetrics(a.id)[key] ?? -1) - (getServerMetrics(b.id)[key] ?? -1)
 }
 
 // Open create dialog
@@ -265,13 +363,49 @@ async function testConnection(server: Server) {
   try {
     const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
     if (result.success) {
+      await fetchServerMetrics(server)
       ElMessage.success(`Connection successful: ${result.message}`)
     } else {
+      clearServerMetrics(server.id)
       ElMessage.error(`Connection failed: ${result.message}`)
     }
   } catch (error) {
+    clearServerMetrics(server.id)
     ElMessage.error('Failed to test connection')
   }
+}
+
+async function openProcessDrawer(server: Server) {
+  currentProcessServer.value = server
+  processDrawerVisible.value = true
+  processList.value = []
+  await fetchProcessList()
+}
+
+async function fetchProcessList() {
+  if (!currentProcessServer.value) return
+
+  processLoading.value = true
+  try {
+    const result = await monitoringStore.fetchRemoteProcesses(
+      currentProcessServer.value.id,
+      { limit: processLimit.value, sort_by: processSortBy.value }
+    )
+    processList.value = result?.processes || []
+  } catch {
+    ElMessage.error('Failed to fetch process list')
+    processList.value = []
+  } finally {
+    processLoading.value = false
+  }
+}
+
+async function handleProcessLimitChange() {
+  await fetchProcessList()
+}
+
+async function handleProcessSortChange() {
+  await fetchProcessList()
 }
 
 // Open command dialog
@@ -396,7 +530,88 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="150" align="center">
+            <ElTableColumn
+              label="CPU"
+              width="100"
+              align="center"
+              sortable
+              :sort-method="sortByMetric('cpu')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell" v-if="getServerMetrics(row.id).cpu !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).cpu || 0}%`, background: getProgressColor(getServerMetrics(row.id).cpu || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).cpu || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).cpu || 0) }}%
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn
+              label="Memory"
+              width="240"
+              align="center"
+              sortable
+              :sort-method="sortByMetric('memoryPercent')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell metric-cell-composite" v-if="getServerMetrics(row.id).memoryPercent !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).memoryPercent || 0}%`, background: getProgressColor(getServerMetrics(row.id).memoryPercent || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).memoryPercent || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).memoryPercent || 0) }}%
+                  </span>
+                  <span
+                    v-if="getServerMetrics(row.id).memoryUsed !== undefined && getServerMetrics(row.id).memoryTotal !== undefined"
+                    class="metric-detail"
+                  >
+                    {{ formatBytes(getServerMetrics(row.id).memoryUsed || 0) }}/{{ formatBytes(getServerMetrics(row.id).memoryTotal || 0) }}
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn
+              label="Disk"
+              width="240"
+              align="center"
+              sortable
+              :sort-method="sortByMetric('diskPercent')"
+            >
+              <template #default="{ row }">
+                <div class="metric-cell metric-cell-composite" v-if="getServerMetrics(row.id).diskPercent !== undefined">
+                  <div class="metric-bar">
+                    <div
+                      class="bar-fill"
+                      :style="{ width: `${getServerMetrics(row.id).diskPercent || 0}%`, background: getProgressColor(getServerMetrics(row.id).diskPercent || 0) }"
+                    ></div>
+                  </div>
+                  <span class="metric-value" :class="{ high: (getServerMetrics(row.id).diskPercent || 0) > 80 }">
+                    {{ Math.round(getServerMetrics(row.id).diskPercent || 0) }}%
+                  </span>
+                  <span
+                    v-if="getServerMetrics(row.id).diskUsed !== undefined && getServerMetrics(row.id).diskTotal !== undefined"
+                    class="metric-detail"
+                  >
+                    {{ formatBytes(getServerMetrics(row.id).diskUsed || 0) }}/{{ formatBytes(getServerMetrics(row.id).diskTotal || 0) }}
+                  </span>
+                </div>
+                <span v-else class="metric-error">{{ isMetricLoading(row.id) ? '...' : '-' }}</span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn label="Actions" width="180" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <ElTooltip content="Test Connection" placement="top">
@@ -413,6 +628,15 @@ async function executeCommand() {
                       size="small"
                       :icon="Promotion"
                       @click="openCommandDialog(row)"
+                      link
+                    />
+                  </ElTooltip>
+                  <ElTooltip content="Process Monitor" placement="top">
+                    <ElButton
+                      size="small"
+                      :icon="Reading"
+                      @click="openProcessDrawer(row)"
+                      :disabled="getServerStatus(row) !== 'online'"
                       link
                     />
                   </ElTooltip>
@@ -444,8 +668,6 @@ async function executeCommand() {
         <span>No servers found</span>
       </div>
     </div>
-
-    <MonitorView />
 
     <!-- Add/Edit Server Dialog -->
     <ElDialog
@@ -602,6 +824,60 @@ async function executeCommand() {
         </div>
       </template>
     </ElDialog>
+
+    <!-- Process Management Drawer -->
+    <ElDrawer
+      v-model="processDrawerVisible"
+      :title="`进程管理 - ${currentProcessServer?.name || ''}`"
+      size="50%"
+      direction="rtl"
+    >
+      <div class="process-drawer-content">
+        <div class="process-controls">
+          <ElSelect v-model="processLimit" placeholder="数量" style="width: 80px" size="small" @change="handleProcessLimitChange">
+            <ElOption :value="20" label="20" />
+            <ElOption :value="50" label="50" />
+            <ElOption :value="100" label="100" />
+            <ElOption :value="500" label="所有" />
+          </ElSelect>
+          <ElSelect v-model="processSortBy" placeholder="取值" style="width: 110px" size="small" @change="handleProcessSortChange">
+            <ElOption value="cpu" label="CPU（默认）" />
+            <ElOption value="memory" label="MEM" />
+          </ElSelect>
+          <ElButton @click="fetchProcessList" :loading="processLoading" size="small">
+            刷新
+          </ElButton>
+        </div>
+
+        <ElTable
+          :data="processList"
+          v-loading="processLoading"
+          stripe
+          style="width: 100%; margin-top: 12px"
+          size="small"
+          class="process-table"
+        >
+          <ElTableColumn prop="pid" label="PID" width="70" />
+          <ElTableColumn prop="name" label="名称" min-width="180" show-overflow-tooltip />
+          <ElTableColumn prop="cpu_percent" label="CPU %" width="90" sortable>
+            <template #default="{ row }">
+              <span :class="{ 'high-usage': row.cpu_percent > 50 }" style="font-size:12px">
+                {{ row.cpu_percent.toFixed(1) }}%
+              </span>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn prop="memory_percent" label="Mem %" width="90" sortable>
+            <template #default="{ row }">
+              <span :class="{ 'high-usage': row.memory_percent > 50 }" style="font-size:12px">
+                {{ row.memory_percent.toFixed(1) }}%
+              </span>
+            </template>
+          </ElTableColumn>
+        </ElTable>
+
+        <ElEmpty v-if="!processLoading && processList.length === 0" description="无进程数据" />
+      </div>
+    </ElDrawer>
   </div>
 </template>
 
@@ -769,6 +1045,73 @@ async function executeCommand() {
   color: #059669;
 }
 
+.metric-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.metric-cell-composite {
+  display: grid;
+  grid-template-columns: 70px 38px 112px;
+  gap: 8px;
+}
+
+.metric-cell-composite .metric-bar {
+  width: 70px;
+}
+
+.metric-cell-composite .metric-value {
+  text-align: right;
+}
+
+.metric-cell-composite .metric-detail {
+  min-width: 0;
+  text-align: left;
+}
+
+.metric-bar {
+  width: 50px;
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.metric-value {
+  font-weight: 500;
+  font-size: 11px;
+  color: #303133;
+}
+
+.metric-value.high,
+.high-usage {
+  color: #f56c6c;
+}
+
+.metric-detail {
+  display: inline-block;
+  min-width: 80px;
+  font-size: 10px;
+  color: #909399;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.metric-error {
+  font-weight: 500;
+  font-size: 11px;
+  color: #c0c4cc;
+}
+
 .status-icon {
   display: inline-flex;
   align-items: center;
@@ -858,6 +1201,22 @@ async function executeCommand() {
   text-align: center;
   padding: 40px;
   color: #94a3b8;
+}
+
+.process-drawer-content {
+  padding: 0 16px;
+}
+
+.process-controls {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.process-table :deep(.el-table__cell),
+.process-table :deep(.el-table__header-cell) {
+  padding: 4px 0;
 }
 
 /* Enhanced Dialog Styles */
