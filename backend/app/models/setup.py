@@ -8,12 +8,12 @@ from sqlalchemy import Engine
 from .database import Base
 
 
-def migrate_add_region_column(engine: Engine) -> None:
+def migrate_servers_table_columns(engine: Engine) -> None:
     """
-    Add region column to existing servers table if missing.
+    Add missing columns to existing servers table.
 
-    This migration handles the case where the servers table exists
-    but doesn't have the region column (for existing databases).
+    This migration handles older local databases where the servers table
+    already exists but does not yet match the current SQLAlchemy model.
 
     Args:
         engine: SQLAlchemy engine to use for the migration
@@ -26,13 +26,16 @@ def migrate_add_region_column(engine: Engine) -> None:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Check if region column exists
         cursor.execute("PRAGMA table_info(servers)")
         columns = [row[1] for row in cursor.fetchall()]
 
+        if "tags" not in columns:
+            cursor.execute("ALTER TABLE servers ADD COLUMN tags VARCHAR(200)")
+
         if "region" not in columns:
             cursor.execute("ALTER TABLE servers ADD COLUMN region VARCHAR(20) DEFAULT '私有云'")
-            conn.commit()
+
+        conn.commit()
 
         conn.close()
     except sqlite3.OperationalError:
@@ -60,4 +63,4 @@ def init_db(engine: Engine = None) -> None:
     Base.metadata.create_all(bind=engine)
 
     # Run migrations for existing databases
-    migrate_add_region_column(engine)
+    migrate_servers_table_columns(engine)

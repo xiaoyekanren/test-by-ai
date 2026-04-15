@@ -16,8 +16,7 @@ const menuGroups = [
   {
     title: '运维管理',
     items: [
-      { index: '/servers', title: '服务器管理', icon: Setting },
-      { index: '/monitor', title: '系统监控', icon: Monitor }
+      { index: '/servers', title: '服务器管理', icon: Setting }
     ]
   },
   {

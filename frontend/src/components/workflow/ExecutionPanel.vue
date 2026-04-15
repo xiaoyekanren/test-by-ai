@@ -916,8 +916,9 @@ onUnmounted(() => {
   padding: 12px;
   border-radius: 8px;
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
   color: #e2e8f0;
   line-height: 1.5;
 }

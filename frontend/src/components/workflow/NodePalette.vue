@@ -2,7 +2,9 @@
 import { ref, computed } from 'vue'
 import {
   ElCollapse,
-  ElCollapseItem
+  ElCollapseItem,
+  ElInput,
+  ElTooltip
 } from 'element-plus'
 import {
   Monitor,
@@ -30,6 +32,7 @@ const emit = defineEmits<{
 
 // Active categories for collapse
 const activeCategories = ref<string[]>(['basic', 'iotdb', 'control', 'result'])
+const searchText = ref('')
 
 // Icon mapping
 const iconMap: Record<string, typeof Monitor> = {
@@ -59,7 +62,7 @@ const categoryLabels: Record<NodeCategory, string> = {
 }
 
 // Group nodes by category
-const nodeCategories = computed(() => {
+const filteredNodeCategories = computed(() => {
   const categories: Record<NodeCategory, NodeTypeConfig[]> = {
     basic: [],
     iotdb: [],
@@ -67,11 +70,29 @@ const nodeCategories = computed(() => {
     result: []
   }
 
+  const query = searchText.value.trim().toLowerCase()
   Object.values(NODE_CONFIGS).forEach(config => {
-    categories[config.category].push(config)
+    const matchesSearch = !query || [
+      config.label,
+      config.type,
+      config.category,
+      config.description
+    ].some(value => String(value).toLowerCase().includes(query))
+
+    if (matchesSearch) {
+      categories[config.category].push(config)
+    }
   })
 
   return categories
+})
+
+const visibleCategoryEntries = computed(() => {
+  return Object.entries(filteredNodeCategories.value).filter(([, nodes]) => nodes.length > 0)
+})
+
+const totalVisibleNodes = computed(() => {
+  return visibleCategoryEntries.value.reduce((total, [, nodes]) => total + nodes.length, 0)
 })
 
 // Handle drag start
@@ -87,17 +108,38 @@ const handleDragStart = (event: DragEvent, nodeType: NodeType) => {
 const getIcon = (iconName: string) => {
   return iconMap[iconName] || Monitor
 }
+
+const getPaletteLabel = (node: NodeTypeConfig) => {
+  if (node.category !== 'iotdb') {
+    return node.label
+  }
+
+  return node.label.replace(/^IoTDB\s+/, '')
+}
+
+const isWideNode = (node: NodeTypeConfig) => {
+  const label = getPaletteLabel(node)
+  return label.length > 12 || label.startsWith('Cluster ')
+}
 </script>
 
 <template>
   <div class="node-palette">
     <div class="palette-header">
       <span class="title">Node Types</span>
+      <span class="total-count">{{ totalVisibleNodes }}</span>
+      <ElInput
+        v-model="searchText"
+        placeholder="Search nodes"
+        size="small"
+        clearable
+        class="node-search"
+      />
     </div>
     <div class="palette-content">
       <ElCollapse v-model="activeCategories" class="category-collapse">
         <ElCollapseItem
-          v-for="(nodes, category) in nodeCategories"
+          v-for="[category, nodes] in visibleCategoryEntries"
           :key="category"
           :name="category"
         >
@@ -106,24 +148,30 @@ const getIcon = (iconName: string) => {
             <span class="category-count">{{ nodes.length }}</span>
           </template>
           <div class="node-list">
-            <div
+            <ElTooltip
               v-for="node in nodes"
               :key="node.type"
-              class="node-item"
-              draggable="true"
-              @dragstart="handleDragStart($event, node.type)"
+              :content="`${node.label}: ${node.description}`"
+              placement="right"
+              :show-after="250"
             >
-              <div class="node-icon" :style="{ backgroundColor: node.color }">
-                <component :is="getIcon(node.icon)" class="icon" />
+              <div
+                class="node-item"
+                :class="{ 'is-wide': isWideNode(node) }"
+                draggable="true"
+                @dragstart="handleDragStart($event, node.type)"
+              >
+                <span class="node-color" :style="{ backgroundColor: node.color }"></span>
+                <div class="node-icon" :style="{ color: node.color }">
+                  <component :is="getIcon(node.icon)" class="icon" />
+                </div>
+                <span class="node-label">{{ getPaletteLabel(node) }}</span>
               </div>
-              <div class="node-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-            </div>
+            </ElTooltip>
           </div>
         </ElCollapseItem>
       </ElCollapse>
+      <div v-if="totalVisibleNodes === 0" class="empty-search">No nodes found</div>
     </div>
   </div>
 </template>
@@ -141,7 +189,10 @@ const getIcon = (iconName: string) => {
 }
 
 .palette-header {
-  padding: 9px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 8px 10px;
   border-bottom: 1px solid #dcdfe6;
   background: #f5f7fa;
 }
@@ -150,6 +201,24 @@ const getIcon = (iconName: string) => {
   font-size: 13px;
   font-weight: 600;
   color: #303133;
+}
+
+.total-count {
+  align-self: center;
+  font-size: 10px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.node-search {
+  grid-column: 1 / -1;
+}
+
+.node-search :deep(.el-input__wrapper) {
+  min-height: 26px;
+  border-radius: 6px;
 }
 
 .palette-content {
@@ -163,8 +232,8 @@ const getIcon = (iconName: string) => {
 }
 
 .category-collapse :deep(.el-collapse-item__header) {
-  padding: 0 12px;
-  height: 32px;
+  padding: 0 10px;
+  height: 28px;
   background: #fafafa;
   border-bottom: 1px solid #ebeef5;
 }
@@ -193,24 +262,29 @@ const getIcon = (iconName: string) => {
 }
 
 .node-list {
-  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 4px 6px;
 }
 
 .node-item {
   display: flex;
   align-items: center;
-  padding: 7px 8px;
-  margin-bottom: 4px;
+  gap: 4px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 6px;
   background: #fff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid transparent;
   border-radius: 6px;
   cursor: grab;
-  transition: all 0.2s ease;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
 .node-item:hover {
   border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  background: #f8fafc;
   transform: translateY(-1px);
 }
 
@@ -218,10 +292,21 @@ const getIcon = (iconName: string) => {
   cursor: grabbing;
 }
 
+.node-item.is-wide {
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.node-color {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .node-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,34 +314,25 @@ const getIcon = (iconName: string) => {
 }
 
 .node-icon .icon {
-  width: 15px;
-  height: 15px;
-  color: #fff;
-}
-
-.node-info {
-  margin-left: 8px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
+  width: 13px;
+  height: 13px;
 }
 
 .node-label {
   font-size: 12px;
   font-weight: 500;
   color: #303133;
+  min-width: 0;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.node-desc {
-  font-size: 10px;
-  color: #909399;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 1px;
+.empty-search {
+  padding: 18px 10px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
 }
 </style>
