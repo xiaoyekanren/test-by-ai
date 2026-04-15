@@ -3,10 +3,12 @@ import os
 import random
 import shlex
 import time
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from threading import RLock
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.database import Execution, NodeExecution, Server, Workflow
 from app.services.ssh_service import SSHService
@@ -17,9 +19,20 @@ logger = logging.getLogger(__name__)
 class ExecutionEngine:
     """Service for managing workflow executions."""
 
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        session_factory: Optional[Callable[[], Session]] = None,
+        reservation_lock: Optional[RLock] = None
+    ):
         self.db = db
         self.ssh_service = SSHService()
+        self.session_factory = session_factory or sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=db.get_bind()
+        )
+        self.reservation_lock = reservation_lock or RLock()
 
     def create_execution(
         self,
@@ -90,93 +103,83 @@ class ExecutionEngine:
         self.db.commit()
 
         nodes = workflow.nodes or []
+        edges = workflow.edges or []
         passed_count = 0
         failed_count = 0
-        context: Dict[str, Any] = {}
+        skipped_count = 0
 
         try:
-            for node in nodes:
-                node_id = node.get("id")
-                node_type = node.get("type", "shell")
-                # Copy config to avoid mutating original workflow definition
-                config = dict(node.get("config", {}) or {})
-                config["_execution_id"] = execution_id
-                config["_node_id"] = node_id
+            node_order, nodes_by_id, parents, children = self._build_execution_graph(nodes, edges)
+            pending: Set[str] = set(node_order)
+            running: Dict[Future, str] = {}
+            statuses: Dict[str, str] = {}
+            context_updates: Dict[str, Dict[str, Any]] = {}
 
-                if self._node_requires_server(node_type):
-                    explicit_region = config.get("region") not in (None, "")
-                    server = self._resolve_server_with_region(config, context)
-                    if server:
-                        self._write_server_config(config, server)
-                        context["server_id"] = server.id
-                        context["server_name"] = server.name
-                        context["host"] = server.host
-                        context["region"] = server.region
-                        logger.info(
-                            "Resolved server %s (%s) in region %s for node %s",
-                            server.id, server.name, server.region, node_id
+            max_workers = max(1, min(8, len(node_order) or 1))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                while pending or running:
+                    blocked = [
+                        node_id for node_id in node_order
+                        if node_id in pending and any(statuses.get(parent_id) in {"failed", "skipped"} for parent_id in parents[node_id])
+                    ]
+                    for node_id in blocked:
+                        pending.remove(node_id)
+                        statuses[node_id] = "skipped"
+                        skipped_count += 1
+                        self._create_skipped_node_execution(
+                            execution_id,
+                            nodes_by_id[node_id],
+                            "Skipped because an upstream node did not complete successfully"
                         )
-                    elif config.get("region") in (None, ""):
-                        config["region"] = self._target_region(config, context)
-                    merge_context = context
-                    if explicit_region and not server:
-                        logger.warning(
-                            "No idle server found in explicit region %s for node %s; inherited server context will not be used",
-                            config.get("region"),
-                            node_id
+
+                    ready = [
+                        node_id for node_id in node_order
+                        if node_id in pending and all(statuses.get(parent_id) == "success" for parent_id in parents[node_id])
+                    ]
+                    for node_id in ready:
+                        pending.remove(node_id)
+                        context = self._merge_parent_contexts(parents[node_id], context_updates)
+                        future = executor.submit(
+                            self._execute_workflow_node,
+                            execution_id,
+                            nodes_by_id[node_id],
+                            context
                         )
-                        merge_context = {
-                            key: value
-                            for key, value in context.items()
-                            if key not in {"server_id", "server_name", "host"}
-                        }
-                    config = self._merge_config_with_context(config, merge_context)
+                        running[future] = node_id
 
-                node_execution = NodeExecution(
-                    execution_id=execution_id,
-                    node_id=node_id,
-                    node_type=node_type,
-                    status="running",
-                    started_at=datetime.utcnow(),
-                    input_data=config
-                )
-                self.db.add(node_execution)
-                self.db.commit()
-                self.db.refresh(node_execution)
+                    if not running:
+                        if pending:
+                            for node_id in list(pending):
+                                pending.remove(node_id)
+                                statuses[node_id] = "skipped"
+                                skipped_count += 1
+                                self._create_skipped_node_execution(
+                                    execution_id,
+                                    nodes_by_id[node_id],
+                                    "Skipped because workflow graph contains a cycle or unreachable dependency"
+                                )
+                        break
 
-                try:
-                    result = self._execute_node(node_type, config, context)
-                    node_execution.output_data = result
-                    exit_status = result.get("exit_status", -1)
-                    node_execution.status = "success" if exit_status == 0 else "failed"
-                    if exit_status != 0:
-                        node_execution.error_message = (
-                            result.get("error")
-                            or result.get("stderr")
-                            or "Unknown error"
-                        )
-                    else:
-                        context.update(self._build_context_updates(node_type, config, result))
+                    done, _ = wait(running.keys(), return_when=FIRST_COMPLETED)
+                    for future in done:
+                        node_id = running.pop(future)
+                        try:
+                            node_result = future.result()
+                        except Exception as exc:
+                            logger.exception("Error executing node %s", node_id)
+                            node_result = {
+                                "status": "failed",
+                                "context": {},
+                                "error": str(exc)
+                            }
 
-                    if node_execution.status == "success":
-                        passed_count += 1
-                    else:
-                        failed_count += 1
-                except Exception as exc:
-                    logger.exception("Error executing node %s", node_id)
-                    node_execution.status = "failed"
-                    node_execution.error_message = str(exc)
-                    node_execution.output_data = {"exit_status": -1, "error": str(exc)}
-                    failed_count += 1
-
-                node_execution.finished_at = datetime.utcnow()
-                node_execution.duration = int(
-                    (node_execution.finished_at - node_execution.started_at).total_seconds()
-                )
-                self.db.commit()
-
-                if node_execution.status != "success":
-                    break
+                        status_value = str(node_result.get("status") or "failed")
+                        statuses[node_id] = status_value
+                        if status_value == "success":
+                            passed_count += 1
+                            context_updates[node_id] = dict(node_result.get("context") or {})
+                        else:
+                            failed_count += 1
 
             execution.finished_at = datetime.utcnow()
             execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
@@ -184,9 +187,10 @@ class ExecutionEngine:
                 "total": len(nodes),
                 "passed": passed_count,
                 "failed": failed_count,
+                "skipped": skipped_count,
             }
 
-            if failed_count == 0:
+            if failed_count == 0 and skipped_count == 0:
                 execution.status = "completed"
                 execution.result = "passed"
             else:
@@ -203,6 +207,184 @@ class ExecutionEngine:
             execution.result = "failed"
             execution.summary = {"error": str(exc)}
             self.db.commit()
+
+    def _build_execution_graph(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]]
+    ) -> tuple[List[str], Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
+        node_order: List[str] = []
+        nodes_by_id: Dict[str, Dict[str, Any]] = {}
+
+        for index, node in enumerate(nodes):
+            node_id = str(node.get("id") or f"node-{index}")
+            if node_id in nodes_by_id:
+                node_id = f"{node_id}-{index}"
+                node = {**node, "id": node_id}
+            node_order.append(node_id)
+            nodes_by_id[node_id] = node
+
+        parents: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
+        children: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
+
+        valid_edge_count = 0
+        for edge in edges:
+            from_id = edge.get("from")
+            to_id = edge.get("to")
+            if from_id not in nodes_by_id or to_id not in nodes_by_id:
+                continue
+            if from_id not in parents[to_id]:
+                parents[to_id].append(from_id)
+            if to_id not in children[from_id]:
+                children[from_id].append(to_id)
+            valid_edge_count += 1
+
+        # Preserve the old sequential behavior for legacy workflows that have
+        # nodes but no explicit edges.
+        if valid_edge_count == 0:
+            for from_id, to_id in zip(node_order, node_order[1:]):
+                parents[to_id].append(from_id)
+                children[from_id].append(to_id)
+
+        return node_order, nodes_by_id, parents, children
+
+    def _merge_parent_contexts(
+        self,
+        parent_ids: List[str],
+        context_updates: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        context: Dict[str, Any] = {}
+        for parent_id in parent_ids:
+            context.update(context_updates.get(parent_id, {}))
+        return context
+
+    def _create_skipped_node_execution(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        reason: str
+    ) -> None:
+        now = datetime.utcnow()
+        node_execution = NodeExecution(
+            execution_id=execution_id,
+            node_id=str(node.get("id")),
+            node_type=str(node.get("type", "shell")),
+            status="skipped",
+            started_at=now,
+            finished_at=now,
+            duration=0,
+            input_data=dict(node.get("config", {}) or {}),
+            output_data={"exit_status": -1, "skipped": True, "reason": reason},
+            error_message=reason
+        )
+        self.db.add(node_execution)
+        self.db.commit()
+
+    def _execute_workflow_node(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        db = self.session_factory()
+        try:
+            worker = ExecutionEngine(
+                db,
+                session_factory=self.session_factory,
+                reservation_lock=self.reservation_lock
+            )
+            worker.ssh_service = self.ssh_service
+            return worker._execute_workflow_node_in_session(execution_id, node, context)
+        finally:
+            db.close()
+
+    def _execute_workflow_node_in_session(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        node_id = node.get("id")
+        node_type = node.get("type", "shell")
+        config = dict(node.get("config", {}) or {})
+        config["_execution_id"] = execution_id
+        config["_node_id"] = node_id
+
+        with self.reservation_lock:
+            if self._node_requires_server(node_type):
+                explicit_region = config.get("region") not in (None, "")
+                server = self._resolve_server_with_region(config, context)
+                if server:
+                    self._write_server_config(config, server)
+                    logger.info(
+                        "Resolved server %s (%s) in region %s for node %s",
+                        server.id, server.name, server.region, node_id
+                    )
+                elif config.get("region") in (None, ""):
+                    config["region"] = self._target_region(config, context)
+                merge_context = context
+                if explicit_region and not server:
+                    logger.warning(
+                        "No idle server found in explicit region %s for node %s; inherited server context will not be used",
+                        config.get("region"),
+                        node_id
+                    )
+                    merge_context = {
+                        key: value
+                        for key, value in context.items()
+                        if key not in {"server_id", "server_name", "host"}
+                    }
+                config = self._merge_config_with_context(config, merge_context)
+
+            node_execution = NodeExecution(
+                execution_id=execution_id,
+                node_id=node_id,
+                node_type=node_type,
+                status="running",
+                started_at=datetime.utcnow(),
+                input_data=config
+            )
+            self.db.add(node_execution)
+            self.db.commit()
+            self.db.refresh(node_execution)
+
+        try:
+            result = self._execute_node(node_type, config, context)
+            node_execution.output_data = result
+            exit_status = result.get("exit_status", -1)
+            node_execution.status = "success" if exit_status == 0 else "failed"
+            if exit_status != 0:
+                node_execution.error_message = (
+                    result.get("error")
+                    or result.get("stderr")
+                    or "Unknown error"
+                )
+            with self.reservation_lock:
+                context_update = (
+                    self._build_context_updates(node_type, config, result)
+                    if node_execution.status == "success"
+                    else {}
+                )
+        except Exception as exc:
+            logger.exception("Error executing node %s", node_id)
+            node_execution.status = "failed"
+            node_execution.error_message = str(exc)
+            node_execution.output_data = {"exit_status": -1, "error": str(exc)}
+            context_update = {}
+
+        with self.reservation_lock:
+            node_execution.finished_at = datetime.utcnow()
+            node_execution.duration = int(
+                (node_execution.finished_at - node_execution.started_at).total_seconds()
+            )
+            self.db.commit()
+
+        return {
+            "node_id": node_id,
+            "status": node_execution.status,
+            "context": context_update,
+            "error": node_execution.error_message,
+        }
 
     def _execute_node(self, node_type: str, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         merged = self._merge_config_with_context(config, context)
