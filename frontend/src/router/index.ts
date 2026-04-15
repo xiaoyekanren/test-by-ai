@@ -31,7 +31,7 @@ const router = createRouter({
     {
       path: '/monitor',
       name: 'monitor',
-      component: () => import('@/views/MonitorView.vue')
+      redirect: '/servers'
     },
     {
       path: '/settings',

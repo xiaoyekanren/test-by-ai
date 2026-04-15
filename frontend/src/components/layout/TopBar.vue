@@ -9,9 +9,8 @@ const router = useRouter()
 const pageTitle = computed(() => {
   const routeMap: Record<string, string> = {
     '/': '首页',
-    '/servers': '服务器管理',
+    '/servers': '服务器管理 / 系统监控',
     '/workflows': '工作流管理',
-    '/monitor': '系统监控',
     '/settings': '系统设置'
   }
   if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
@@ -26,7 +25,6 @@ const breadcrumbs = computed(() => {
     const routeMap: Record<string, string> = {
       '/servers': '服务器管理',
       '/workflows': '工作流管理',
-      '/monitor': '系统监控',
       '/settings': '系统设置'
     }
     if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
