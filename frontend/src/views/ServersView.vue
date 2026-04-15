@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
+import MonitorView from './MonitorView.vue'
 import {
   ElTable,
   ElTableColumn,
@@ -444,6 +445,8 @@ async function executeCommand() {
       </div>
     </div>
 
+    <MonitorView />
+
     <!-- Add/Edit Server Dialog -->
     <ElDialog
       v-model="dialogVisible"
@@ -666,9 +669,10 @@ async function executeCommand() {
 .server-info {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .server-type-tag {
@@ -679,9 +683,9 @@ async function executeCommand() {
 }
 
 .server-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -836,7 +840,7 @@ async function executeCommand() {
 }
 
 .grouped-view {
-  margin-top: 0;
+  margin-top: 10px;
 }
 
 .group-header {
