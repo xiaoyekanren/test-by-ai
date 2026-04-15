@@ -429,44 +429,63 @@ onUnmounted(() => {
     <!-- Create Workflow Dialog -->
     <ElDialog
       v-model="createDialogVisible"
-      title="Create Workflow"
-      width="500px"
+      width="520px"
       :close-on-click-modal="false"
+      class="enhanced-dialog"
     >
+      <template #header>
+        <div class="dialog-header-enhanced">
+          <div class="dialog-header-accent"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon">
+              <ElIcon :size="20"><Plus /></ElIcon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">新建工作流</h3>
+              <p class="dialog-subtitle">创建一个新的工作流配置</p>
+            </div>
+          </div>
+        </div>
+      </template>
       <ElForm
         ref="createFormRef"
         :model="createForm"
         :rules="createFormRules"
         label-position="top"
+        class="dialog-form-enhanced"
       >
-        <ElFormItem label="Name" prop="name">
+        <ElFormItem label="名称" prop="name">
           <ElInput
             v-model="createForm.name"
-            placeholder="Enter workflow name"
+            placeholder="请输入工作流名称"
             maxlength="100"
             show-word-limit
           />
         </ElFormItem>
-        <ElFormItem label="Description" prop="description">
+        <ElFormItem label="描述" prop="description">
           <ElInput
             v-model="createForm.description"
             type="textarea"
             :rows="4"
-            placeholder="Enter workflow description (optional)"
+            placeholder="请输入工作流描述（可选）"
             maxlength="500"
             show-word-limit
           />
         </ElFormItem>
       </ElForm>
       <template #footer>
-        <ElButton @click="createDialogVisible = false">Cancel</ElButton>
-        <ElButton
-          type="primary"
-          @click="handleCreate"
-          :loading="isCreating"
-        >
-          Create
-        </ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton @click="createDialogVisible = false" class="btn-cancel">取消</ElButton>
+          <ElButton
+            type="primary"
+            @click="handleCreate"
+            :loading="isCreating"
+            class="btn-primary"
+          >
+            <ElIcon><Plus /></ElIcon>
+            创建
+          </ElButton>
+        </div>
       </template>
     </ElDialog>
 
@@ -517,59 +536,87 @@ onUnmounted(() => {
     <!-- Execution Dialog -->
     <ElDialog
       v-model="executionDialogVisible"
-      :title="`Execute: ${currentExecutionWorkflow?.name || ''}`"
-      width="600px"
+      width="640px"
       :close-on-click-modal="false"
       @close="handleCloseExecutionDialog"
+      class="enhanced-dialog execution-dialog"
     >
-      <div class="execution-content">
+      <template #header>
+        <div class="dialog-header-enhanced execution-header">
+          <div class="dialog-header-accent" :class="currentDialogExecution?.status || 'pending'"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon execution-icon">
+              <ElIcon :size="20">
+                <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'running' ? Loading : Clock" />
+              </ElIcon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">{{ currentExecutionWorkflow?.name || '工作流执行' }}</h3>
+              <p class="dialog-subtitle">
+                <ElTag size="small" effect="plain" class="execution-id-tag">#{{ currentDialogExecution?.id }}</ElTag>
+                执行详情监控
+              </p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="execution-content-enhanced">
         <!-- Status Header -->
-        <div class="execution-status-header">
-          <div class="status-badge" :class="currentDialogExecution?.status || 'pending'">
+        <div class="execution-status-header-enhanced">
+          <div class="status-badge-enhanced" :class="currentDialogExecution?.status || 'pending'">
             <ElIcon :class="{ 'is-loading': currentDialogExecution?.status === 'running' }">
               <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'running' ? Loading : Clock" />
             </ElIcon>
-            <span>{{ currentDialogExecution?.status || 'pending' }}</span>
+            <span class="status-text">{{ currentDialogExecution?.status || 'pending' }}</span>
           </div>
-          <div class="execution-time">
+          <div class="execution-time-enhanced">
             <ElIcon><Timer /></ElIcon>
             <span>{{ formatDuration(currentDialogExecution?.duration ?? null) }}</span>
           </div>
         </div>
 
         <!-- Progress -->
-        <div class="execution-progress">
+        <div class="execution-progress-enhanced">
+          <div class="progress-label">
+            <span>执行进度</span>
+            <span class="progress-value">{{ dialogExecutionProgress }}%</span>
+          </div>
           <ElProgress
             :percentage="dialogExecutionProgress"
             :status="currentDialogExecution?.status === 'failed' ? 'exception' : currentDialogExecution?.status === 'completed' ? 'success' : undefined"
-            :stroke-width="10"
+            :stroke-width="8"
           />
         </div>
 
         <!-- Node Executions -->
-        <div class="node-executions-section">
-          <h4>Node Executions</h4>
-          <ElScrollbar class="node-executions-list">
+        <div class="node-executions-section-enhanced">
+          <div class="section-header">
+            <h4>节点执行状态</h4>
+            <span class="section-count">{{ dialogNodeExecutions.length }} 个节点</span>
+          </div>
+          <ElScrollbar class="node-executions-list-enhanced">
             <div
               v-for="nodeExec in dialogNodeExecutions"
               :key="nodeExec.id"
-              class="node-exec-item"
+              class="node-exec-item-enhanced"
             >
-              <div class="node-exec-info">
-                <ElIcon
-                  :class="{ 'is-loading': nodeExec.status === 'running' }"
-                  :style="{ color: nodeExec.status === 'completed' ? '#67C23A' : nodeExec.status === 'failed' ? '#F56C6C' : '#909399' }"
-                >
-                  <component :is="nodeExec.status === 'completed' ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
-                </ElIcon>
-                <span class="node-type">{{ nodeExec.node_type }}</span>
-                <span class="node-id">{{ nodeExec.node_id.slice(0, 8) }}</span>
+              <div class="node-exec-info-enhanced">
+                <div class="node-exec-icon" :class="nodeExec.status">
+                  <ElIcon :class="{ 'is-loading': nodeExec.status === 'running' }">
+                    <component :is="nodeExec.status === 'completed' ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
+                  </ElIcon>
+                </div>
+                <div class="node-exec-details">
+                  <span class="node-type-enhanced">{{ nodeExec.node_type }}</span>
+                  <span class="node-id-enhanced">{{ nodeExec.node_id.slice(0, 8) }}</span>
+                </div>
               </div>
-              <div class="node-exec-meta">
-                <span class="duration">{{ formatDuration(nodeExec.duration) }}</span>
+              <div class="node-exec-meta-enhanced">
+                <span class="duration-enhanced">{{ formatDuration(nodeExec.duration) }}</span>
                 <ElTag
                   size="small"
                   :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'"
+                  effect="plain"
                 >
                   {{ nodeExec.status }}
                 </ElTag>
@@ -580,23 +627,28 @@ onUnmounted(() => {
       </div>
 
       <template #footer>
-        <ElButton
-          v-if="currentDialogExecution"
-          @click="openExecutionInsights"
-        >
-          View Analysis
-        </ElButton>
-        <ElButton
-          v-if="currentDialogExecution?.status === 'running' || currentDialogExecution?.status === 'pending'"
-          type="danger"
-          :icon="VideoPause"
-          @click="handleStopExecution"
-        >
-          Stop
-        </ElButton>
-        <ElButton @click="handleCloseExecutionDialog">
-          Close
-        </ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton
+            v-if="currentDialogExecution"
+            @click="openExecutionInsights"
+            class="btn-secondary"
+          >
+            <ElIcon><Timer /></ElIcon>
+            查看分析
+          </ElButton>
+          <ElButton
+            v-if="currentDialogExecution?.status === 'running' || currentDialogExecution?.status === 'pending'"
+            type="danger"
+            :icon="VideoPause"
+            @click="handleStopExecution"
+            class="btn-danger"
+          >
+            停止执行
+          </ElButton>
+          <ElButton @click="handleCloseExecutionDialog" class="btn-cancel">
+            关闭
+          </ElButton>
+        </div>
       </template>
     </ElDialog>
   </div>
@@ -852,5 +904,325 @@ onUnmounted(() => {
 .duration {
   font-size: 12px;
   color: #909399;
+}
+
+/* Enhanced Dialog Styles */
+.dialog-header-enhanced {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+  margin: -20px -20px 0 -20px;
+}
+
+.dialog-header-accent {
+  width: 4px;
+  height: 48px;
+  background: linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dialog-header-accent.completed {
+  background: linear-gradient(180deg, #10b981 0%, #34d399 100%);
+}
+
+.dialog-header-accent.failed {
+  background: linear-gradient(180deg, #ef4444 0%, #f87171 100%);
+}
+
+.dialog-header-accent.running {
+  background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.dialog-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.dialog-header-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 10px;
+  color: #3b82f6;
+}
+
+.execution-icon {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.dialog-header-text {
+  flex: 1;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.dialog-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.execution-id-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.dialog-form-enhanced {
+  padding: 8px 0;
+}
+
+.dialog-footer-enhanced {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  margin: 0 -20px -20px -20px;
+}
+
+.btn-cancel {
+  background: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  color: #606266 !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+}
+
+.btn-secondary {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border: none !important;
+}
+
+/* Enhanced Execution Dialog */
+.execution-content-enhanced {
+  padding: 20px 24px;
+}
+
+.execution-status-header-enhanced {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.status-badge-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.status-badge-enhanced .is-loading {
+  animation: spin 1s linear infinite;
+}
+
+.status-text {
+  text-transform: capitalize;
+}
+
+.status-badge-enhanced.pending {
+  background: linear-gradient(135deg, #f4f4f5 0%, #e4e7ed 100%);
+  color: #909399;
+}
+
+.status-badge-enhanced.running {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
+}
+
+.status-badge-enhanced.completed {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #059669;
+}
+
+.status-badge-enhanced.failed {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #dc2626;
+}
+
+.execution-time-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.execution-progress-enhanced {
+  margin-bottom: 24px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.progress-value {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.node-executions-section-enhanced {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 12px 12px 0 0;
+}
+
+.section-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.section-count {
+  font-size: 11px;
+  color: #64748b;
+  padding: 2px 8px;
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+
+.node-executions-list-enhanced {
+  max-height: 280px;
+  padding: 8px;
+}
+
+.node-exec-item-enhanced {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.node-exec-item-enhanced:last-child {
+  margin-bottom: 0;
+}
+
+.node-exec-item-enhanced:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.node-exec-info-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.node-exec-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.node-exec-icon.completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.node-exec-icon.failed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.node-exec-icon.running {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.node-exec-icon.pending {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.node-exec-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.node-type-enhanced {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.node-id-enhanced {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.node-exec-meta-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.duration-enhanced {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
 }
 </style>

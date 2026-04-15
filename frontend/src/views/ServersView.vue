@@ -607,55 +607,71 @@ function parseTags(tags: string | null): string[] {
     <!-- Add/Edit Server Dialog -->
     <ElDialog
       v-model="dialogVisible"
-      :title="dialogMode === 'create' ? 'Add Server' : 'Edit Server'"
-      width="500px"
+      width="520px"
       :close-on-click-modal="false"
+      class="enhanced-dialog"
     >
+      <template #header>
+        <div class="dialog-header-enhanced">
+          <div class="dialog-header-accent"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon">
+              <ElIcon :size="20">
+                <component :is="dialogMode === 'create' ? Plus : Edit" />
+              </ElIcon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">{{ dialogMode === 'create' ? '新增服务器' : '编辑服务器' }}</h3>
+              <p class="dialog-subtitle">{{ dialogMode === 'create' ? '添加一个新的 SSH 服务器配置' : '修改服务器配置信息' }}</p>
+            </div>
+          </div>
+        </div>
+      </template>
       <ElForm
         ref="formRef"
         :model="formData"
         :rules="formRules"
-        label-width="100px"
-        label-position="right"
+        label-position="top"
+        class="dialog-form-enhanced"
       >
-        <ElFormItem label="Name" prop="name">
-          <ElInput v-model="formData.name" placeholder="Server name" />
+        <ElFormItem label="名称" prop="name">
+          <ElInput v-model="formData.name" placeholder="请输入服务器名称" />
         </ElFormItem>
 
         <ElFormItem label="Host" prop="host">
-          <ElInput v-model="formData.host" placeholder="IP address or hostname" />
+          <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
         </ElFormItem>
 
         <ElFormItem label="Port" prop="port">
           <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
         </ElFormItem>
 
-        <ElFormItem label="Username" prop="username">
-          <ElInput v-model="formData.username" placeholder="SSH username" />
+        <ElFormItem label="用户名" prop="username">
+          <ElInput v-model="formData.username" placeholder="SSH 用户名" />
         </ElFormItem>
 
-        <ElFormItem label="Password" prop="password">
+        <ElFormItem label="密码" prop="password">
           <ElInput
             v-model="formData.password"
             type="password"
             show-password
-            :placeholder="dialogMode === 'edit' ? 'Leave empty to keep current' : 'SSH password'"
+            :placeholder="dialogMode === 'edit' ? '留空保持当前密码' : 'SSH 密码'"
           />
         </ElFormItem>
 
-        <ElFormItem label="Description" prop="description">
+        <ElFormItem label="描述" prop="description">
           <ElInput
             v-model="formData.description"
             type="textarea"
             :rows="2"
-            placeholder="Server description (optional)"
+            placeholder="服务器描述（可选）"
           />
         </ElFormItem>
 
-        <ElFormItem label="Tags" prop="tags">
+        <ElFormItem label="标签" prop="tags">
           <ElInput
             v-model="formData.tags"
-            placeholder="Comma separated tags (e.g. production, web)"
+            placeholder="逗号分隔的标签（如: production, web）"
           />
         </ElFormItem>
 
@@ -673,47 +689,81 @@ function parseTags(tags: string | null): string[] {
       </ElForm>
 
       <template #footer>
-        <ElButton @click="dialogVisible = false">Cancel</ElButton>
-        <ElButton type="primary" @click="submitForm" :loading="serversStore.loading">
-          {{ dialogMode === 'create' ? 'Create' : 'Save' }}
-        </ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton @click="dialogVisible = false" class="btn-cancel">取消</ElButton>
+          <ElButton type="primary" @click="submitForm" :loading="serversStore.loading" class="btn-primary">
+            <ElIcon><component :is="dialogMode === 'create' ? Plus : Edit" /></ElIcon>
+            {{ dialogMode === 'create' ? '创建' : '保存' }}
+          </ElButton>
+        </div>
       </template>
     </ElDialog>
 
     <!-- Execute Command Dialog -->
     <ElDialog
       v-model="commandDialogVisible"
-      :title="`Execute Command on ${commandServerName}`"
-      width="600px"
+      width="640px"
       :close-on-click-modal="false"
+      class="enhanced-dialog command-dialog"
     >
-      <div class="command-section">
-        <ElInput
-          v-model="commandInput"
-          type="textarea"
-          :rows="3"
-          placeholder="Enter command to execute..."
-          @keydown.ctrl.enter="executeCommand"
-        />
-        <div class="command-actions">
-          <ElButton
-            type="primary"
-            @click="executeCommand"
-            :loading="commandLoading"
-            :disabled="!commandInput.trim()"
-          >
-            Execute
-          </ElButton>
+      <template #header>
+        <div class="dialog-header-enhanced command-header">
+          <div class="dialog-header-accent command-accent"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon command-icon">
+              <ElIcon :size="20"><Promotion /></ElIcon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">执行命令</h3>
+              <p class="dialog-subtitle">
+                <ElTag size="small" effect="plain">{{ commandServerName }}</ElTag>
+                远程命令执行
+              </p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="command-content-enhanced">
+        <div class="command-section-enhanced">
+          <div class="command-input-wrapper">
+            <ElInput
+              v-model="commandInput"
+              type="textarea"
+              :rows="3"
+              placeholder="输入要执行的命令..."
+              @keydown.ctrl.enter="executeCommand"
+              class="command-input-enhanced"
+            />
+          </div>
+          <div class="command-actions-enhanced">
+            <span class="command-hint">Ctrl + Enter 快速执行</span>
+            <ElButton
+              type="primary"
+              @click="executeCommand"
+              :loading="commandLoading"
+              :disabled="!commandInput.trim()"
+              class="btn-primary"
+            >
+              <ElIcon><Promotion /></ElIcon>
+              执行
+            </ElButton>
+          </div>
+        </div>
+
+        <div v-if="commandResult" class="result-section-enhanced">
+          <div class="result-header">
+            <span class="result-label">执行结果</span>
+          </div>
+          <ElScrollbar class="result-scroll">
+            <pre class="result-output-enhanced">{{ commandResult }}</pre>
+          </ElScrollbar>
         </div>
       </div>
 
-      <div v-if="commandResult" class="result-section">
-        <div class="result-label">Output:</div>
-        <pre class="result-output">{{ commandResult }}</pre>
-      </div>
-
       <template #footer>
-        <ElButton @click="commandDialogVisible = false">Close</ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton @click="commandDialogVisible = false" class="btn-cancel">关闭</ElButton>
+        </div>
       </template>
     </ElDialog>
   </div>
@@ -991,5 +1041,164 @@ function parseTags(tags: string | null): string[] {
   text-align: center;
   padding: 40px;
   color: #94a3b8;
+}
+
+/* Enhanced Dialog Styles */
+.dialog-header-enhanced {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+  margin: -20px -20px 0 -20px;
+}
+
+.dialog-header-accent {
+  width: 4px;
+  height: 48px;
+  background: linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.command-accent {
+  background: linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%);
+}
+
+.dialog-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.dialog-header-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 10px;
+  color: #3b82f6;
+}
+
+.command-icon {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.dialog-header-text {
+  flex: 1;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.dialog-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-form-enhanced {
+  padding: 8px 0;
+}
+
+.dialog-footer-enhanced {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  margin: 0 -20px -20px -20px;
+}
+
+.btn-cancel {
+  background: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  color: #606266 !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+}
+
+/* Command Dialog Enhanced */
+.command-content-enhanced {
+  padding: 20px 24px;
+}
+
+.command-section-enhanced {
+  margin-bottom: 20px;
+}
+
+.command-input-wrapper {
+  margin-bottom: 12px;
+}
+
+.command-input-enhanced {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+.command-actions-enhanced {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.command-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.result-section-enhanced {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #1e293b;
+}
+
+.result-header {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px 12px 0 0;
+}
+
+.result-label {
+  font-weight: 500;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.result-scroll {
+  max-height: 280px;
+}
+
+.result-output-enhanced {
+  padding: 16px;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  min-height: 80px;
 }
 </style>
