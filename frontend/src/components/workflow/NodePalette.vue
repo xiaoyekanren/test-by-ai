@@ -118,7 +118,8 @@ const getPaletteLabel = (node: NodeTypeConfig) => {
 }
 
 const isWideNode = (node: NodeTypeConfig) => {
-  return getPaletteLabel(node).length > 14
+  const label = getPaletteLabel(node)
+  return label.length > 12 || label.startsWith('Cluster ')
 }
 </script>
 
