@@ -528,6 +528,7 @@ async function executeCommand() {
               label="CPU"
               width="100"
               align="center"
+              class-name="metric-divider-column"
               sortable
               :sort-method="sortByMetric('cpu')"
             >
@@ -551,6 +552,7 @@ async function executeCommand() {
               label="Memory"
               width="240"
               align="center"
+              class-name="metric-divider-column"
               sortable
               :sort-method="sortByMetric('memoryPercent')"
             >
@@ -580,6 +582,7 @@ async function executeCommand() {
               label="Disk"
               width="240"
               align="center"
+              class-name="metric-divider-column metric-divider-end-column"
               sortable
               :sort-method="sortByMetric('diskPercent')"
             >
@@ -605,7 +608,7 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="180" align="center">
+            <ElTableColumn label="Actions" width="220" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <ElTooltip content="Test Connection" placement="top">
@@ -996,6 +999,31 @@ async function executeCommand() {
   padding-right: 4px;
 }
 
+.server-table :deep(.metric-divider-column .cell) {
+  position: relative;
+  padding-left: 10px;
+}
+
+.server-table :deep(.metric-divider-column .cell::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  width: 1px;
+  height: 50%;
+  background: #cbd5e1;
+}
+
+.server-table :deep(.metric-divider-end-column .cell::after) {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 25%;
+  width: 1px;
+  height: 50%;
+  background: #cbd5e1;
+}
+
 .status-tag {
   display: inline-flex;
   align-items: center;
@@ -1132,13 +1160,16 @@ async function executeCommand() {
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   justify-content: center;
   align-items: center;
+  white-space: nowrap;
 }
 
 .action-buttons :deep(.el-button) {
   font-size: 18px;
+  width: 22px;
+  min-width: 22px;
   padding: 4px;
 }
 
