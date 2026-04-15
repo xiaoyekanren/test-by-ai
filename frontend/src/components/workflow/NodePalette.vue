@@ -109,8 +109,18 @@ const getIcon = (iconName: string) => {
   return iconMap[iconName] || Monitor
 }
 
+const getPaletteLabel = (node: NodeTypeConfig) => {
+  if (node.category !== 'iotdb') {
+    return node.label
+  }
+
+  return node.label
+    .replace(/^IoTDB\s+/, '')
+    .replace(/\s+IoT\s+Benchmark$/, ' Benchmark')
+}
+
 const isWideNode = (node: NodeTypeConfig) => {
-  return node.label.length > 14
+  return getPaletteLabel(node).length > 15
 }
 </script>
 
@@ -142,7 +152,7 @@ const isWideNode = (node: NodeTypeConfig) => {
             <ElTooltip
               v-for="node in nodes"
               :key="node.type"
-              :content="node.description"
+              :content="`${node.label}: ${node.description}`"
               placement="right"
               :show-after="250"
             >
@@ -156,7 +166,7 @@ const isWideNode = (node: NodeTypeConfig) => {
                 <div class="node-icon" :style="{ color: node.color }">
                   <component :is="getIcon(node.icon)" class="icon" />
                 </div>
-                <span class="node-label">{{ node.label }}</span>
+                <span class="node-label">{{ getPaletteLabel(node) }}</span>
                 <span class="node-chip">{{ node.category }}</span>
               </div>
             </ElTooltip>
