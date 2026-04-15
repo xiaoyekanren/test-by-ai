@@ -77,16 +77,40 @@ const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#40
 const configDialogNodeOptions = computed(() => {
   return workflowsStore.editorNodes.map(node => {
     const config = NODE_CONFIGS[node.data.nodeType]
+    const label = node.data.label || config?.label || node.id
     return {
       value: node.id,
-      label: node.data.label || config?.label || node.id,
+      label,
       typeLabel: config?.label || node.data.nodeType,
+      typeKey: node.data.nodeType,
+      color: config?.color || '#409eff',
+      iconSymbol: label.charAt(0).toUpperCase() || 'N',
       shortId: node.id.slice(0, 12)
     }
   })
 })
 const configDialogOtherNodeOptions = computed(() => {
   return configDialogNodeOptions.value.filter(option => option.value !== workflowsStore.selectedNodeId)
+})
+const configDialogNodeGroups = computed(() => {
+  const groups = new Map<string, {
+    typeLabel: string
+    color: string
+    options: typeof configDialogOtherNodeOptions.value
+  }>()
+
+  configDialogOtherNodeOptions.value.forEach(option => {
+    if (!groups.has(option.typeKey)) {
+      groups.set(option.typeKey, {
+        typeLabel: option.typeLabel,
+        color: option.color,
+        options: []
+      })
+    }
+    groups.get(option.typeKey)?.options.push(option)
+  })
+
+  return Array.from(groups.values())
 })
 const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
@@ -540,7 +564,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
 
     <ElDialog
       v-model="nodeSwitcherDialogVisible"
-      width="420px"
+      width="680px"
       top="16vh"
       append-to-body
       class="node-switch-dialog"
@@ -549,16 +573,34 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       <div class="node-switch-dialog-body">
         <div class="node-switch-dialog-hint">选择要编辑的其他卡片</div>
         <ElScrollbar class="node-switch-list">
-          <button
-            v-for="option in configDialogOtherNodeOptions"
-            :key="option.value"
-            class="node-switch-card"
-            type="button"
-            @click="handleConfigNodeSwitch(option.value)"
+          <section
+            v-for="group in configDialogNodeGroups"
+            :key="group.typeLabel"
+            class="node-switch-group"
           >
-            <span class="node-switch-card-title">{{ option.label }}</span>
-            <span class="node-switch-card-meta">{{ option.typeLabel }} · {{ option.shortId }}</span>
-          </button>
+            <div class="node-switch-group-title">
+              <span class="node-switch-group-mark" :style="{ background: group.color }"></span>
+              <span>{{ group.typeLabel }}</span>
+              <span class="node-switch-group-count">{{ group.options.length }}</span>
+            </div>
+            <div class="node-switch-grid">
+              <button
+                v-for="option in group.options"
+                :key="option.value"
+                class="node-switch-card"
+                type="button"
+                @click="handleConfigNodeSwitch(option.value)"
+              >
+                <span class="node-switch-card-icon" :style="{ background: option.color }">
+                  {{ option.iconSymbol }}
+                </span>
+                <span class="node-switch-card-main">
+                  <span class="node-switch-card-title">{{ option.label }}</span>
+                  <span class="node-switch-card-meta">{{ option.shortId }}</span>
+                </span>
+              </button>
+            </div>
+          </section>
         </ElScrollbar>
       </div>
     </ElDialog>
@@ -763,20 +805,62 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
 }
 
 .node-switch-list {
-  max-height: min(52vh, 420px);
+  height: min(58vh, 520px);
+}
+
+.node-switch-group {
+  padding-right: 8px;
+  margin-bottom: 18px;
+}
+
+.node-switch-group:last-child {
+  margin-bottom: 0;
+}
+
+.node-switch-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.node-switch-group-mark {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.node-switch-group-count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.node-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .node-switch-card {
   width: 100%;
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  margin-bottom: 8px;
   background: #fff;
   cursor: pointer;
   text-align: left;
@@ -787,11 +871,32 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   background: #f8fafc;
 }
 
+.node-switch-card-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.node-switch-card-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .node-switch-card-title {
   max-width: 100%;
   overflow: hidden;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -802,7 +907,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   max-width: 100%;
   overflow: hidden;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -817,6 +922,10 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   .config-dialog-switch-button {
     top: 14px;
     right: 44px;
+  }
+
+  .node-switch-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
