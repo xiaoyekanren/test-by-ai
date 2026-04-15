@@ -1627,7 +1627,7 @@ function formatSize(size: number): string {
     </ElDialog>
 
     <!-- Manage Targets Dialog -->
-    <ElDialog v-model="manageTargetsDialogVisible" width="640px" class="enhanced-dialog manage-dialog">
+    <ElDialog v-model="manageTargetsDialogVisible" width="720px" class="enhanced-dialog manage-dialog">
       <template #header>
         <div class="dialog-header-enhanced manage-header">
           <div class="dialog-header-accent manage-accent"></div>
@@ -1666,7 +1666,11 @@ function formatSize(size: number): string {
               <div class="target-card-nodes-enhanced">
                 <div v-for="node in target.nodes" :key="node.id" class="node-line-enhanced">
                   <span class="node-main-enhanced">{{ node.name || getNodeTitle(node) }}</span>
-                  <span class="node-sub-enhanced">{{ serversStore.servers.find(s => s.id === node.serverId)?.host || `Server ${node.serverId}` }} · {{ node.iotdbHome }}</span>
+                  <div class="node-sub-enhanced">
+                    <span class="node-host">{{ serversStore.servers.find(s => s.id === node.serverId)?.host || `Server ${node.serverId}` }}</span>
+                    <span class="node-separator"></span>
+                    <span class="node-path">{{ node.iotdbHome }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2606,15 +2610,20 @@ function formatSize(size: number): string {
 .target-card-info-enhanced {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .target-card-name-enhanced {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: #1e293b;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e2e8f0;
 }
 
 .target-name-text {
@@ -2647,9 +2656,27 @@ function formatSize(size: number): string {
 }
 
 .node-sub-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   color: #64748b;
+}
+
+.node-host {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: #3b82f6;
+}
+
+.node-separator {
+  width: 1px;
+  height: 12px;
+  background: linear-gradient(to bottom, transparent, #94a3b8, transparent);
+}
+
+.node-path {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: #64748b;
 }
 
 .target-card-actions-enhanced {
