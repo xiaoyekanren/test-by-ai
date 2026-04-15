@@ -108,6 +108,10 @@ const handleDragStart = (event: DragEvent, nodeType: NodeType) => {
 const getIcon = (iconName: string) => {
   return iconMap[iconName] || Monitor
 }
+
+const isWideNode = (node: NodeTypeConfig) => {
+  return node.label.length > 14
+}
 </script>
 
 <template>
@@ -144,6 +148,7 @@ const getIcon = (iconName: string) => {
             >
               <div
                 class="node-item"
+                :class="{ 'is-wide': isWideNode(node) }"
                 draggable="true"
                 @dragstart="handleDragStart($event, node.type)"
               >
@@ -249,16 +254,19 @@ const getIcon = (iconName: string) => {
 }
 
 .node-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
   padding: 4px 6px;
 }
 
 .node-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 34px;
-  padding: 0 7px;
-  margin-bottom: 3px;
+  min-width: 0;
+  padding: 0 6px;
   background: #fff;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -276,6 +284,11 @@ const getIcon = (iconName: string) => {
   cursor: grabbing;
 }
 
+.node-item.is-wide {
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
 .node-color {
   width: 3px;
   height: 18px;
@@ -284,8 +297,8 @@ const getIcon = (iconName: string) => {
 }
 
 .node-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -293,8 +306,8 @@ const getIcon = (iconName: string) => {
 }
 
 .node-icon .icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .node-label {
@@ -309,6 +322,7 @@ const getIcon = (iconName: string) => {
 }
 
 .node-chip {
+  display: none;
   flex-shrink: 0;
   max-width: 50px;
   font-size: 9px;
@@ -321,6 +335,10 @@ const getIcon = (iconName: string) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-item.is-wide .node-chip {
+  display: inline-block;
 }
 
 .empty-search {
