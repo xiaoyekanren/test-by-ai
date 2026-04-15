@@ -58,10 +58,10 @@ const normalizeClusterNodeListForEditor = (
 
   return value
     .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .map((item, index) => ({
+    .map(item => ({
       ...item,
       node_role: item.node_role || role,
-      install_dir: item.install_dir || `${baseInstallDir.replace(/\/+$/, '')}/${role}-${index + 1}`
+      install_dir: item.install_dir || baseInstallDir.replace(/\/+$/, '')
     }))
 }
 
