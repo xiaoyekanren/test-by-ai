@@ -476,14 +476,20 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       :close-on-click-modal="true"
       :close-on-press-escape="false"
       @closed="handleConfigDialogClosed"
+      class="config-dialog-enhanced"
     >
       <template #header>
-        <div class="config-dialog-header" :style="{ '--node-color': selectedNodeColor }">
-          <span class="config-dialog-accent" />
-          <div class="config-dialog-title-block">
-            <div class="config-dialog-meta">{{ selectedNodeCategory || 'Workflow Node' }}</div>
-            <div class="config-dialog-title">{{ selectedNodeTitle }}</div>
-            <div v-if="selectedNodeDescription" class="config-dialog-description">
+        <div class="config-dialog-header-enhanced" :style="{ '--node-color': selectedNodeColor }">
+          <div class="config-dialog-accent-enhanced"></div>
+          <div class="config-dialog-icon-wrapper">
+            <div class="config-dialog-icon" :style="{ background: selectedNodeColor }">
+              <span class="icon-symbol">{{ selectedNodeCategory?.charAt(0)?.toUpperCase() || 'N' }}</span>
+            </div>
+          </div>
+          <div class="config-dialog-title-block-enhanced">
+            <div class="config-dialog-meta-enhanced">{{ selectedNodeCategory || 'Workflow Node' }}</div>
+            <div class="config-dialog-title-enhanced">{{ selectedNodeTitle }}</div>
+            <div v-if="selectedNodeDescription" class="config-dialog-description-enhanced">
               {{ selectedNodeDescription }}
             </div>
           </div>
@@ -491,9 +497,12 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       </template>
       <NodeConfigPanel />
       <template #footer>
-        <span class="config-dialog-footer">
-          Click outside the dialog to save and close. Press the close button to close with current changes kept.
-        </span>
+        <div class="config-dialog-footer-enhanced">
+          <span class="footer-hint">
+            <ElIcon><span class="hint-icon">💡</span></ElIcon>
+            点击弹窗外区域保存并关闭
+          </span>
+        </div>
       </template>
     </ElDialog>
   </div>
@@ -553,53 +562,110 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   font-size: 12px;
 }
 
+.config-dialog-footer-enhanced {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.hint-icon {
+  font-size: 14px;
+}
+
 :deep(.el-dialog) {
   max-width: calc(100vw - 32px);
+  border-radius: 16px !important;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15) !important;
 }
 
 :deep(.el-dialog__header) {
   margin-right: 0;
-  padding: 18px 22px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0;
+  border-bottom: none;
 }
 
 :deep(.el-dialog__body) {
   padding: 0;
 }
 
-.config-dialog-header {
+:deep(.el-dialog__footer) {
+  padding: 0;
+}
+
+.config-dialog-header-enhanced {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: flex-start;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.config-dialog-accent {
-  width: 6px;
-  min-height: 54px;
-  background: var(--node-color);
-  border-radius: 999px;
+.config-dialog-accent-enhanced {
+  width: 4px;
+  height: 60px;
+  background: linear-gradient(180deg, var(--node-color) 0%, color-mix(in srgb, var(--node-color) 70%, white) 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
-.config-dialog-title-block {
+.config-dialog-icon-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.config-dialog-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.icon-symbol {
+  font-size: 20px;
+}
+
+.config-dialog-title-block-enhanced {
   min-width: 0;
+  flex: 1;
 }
 
-.config-dialog-meta {
+.config-dialog-meta-enhanced {
   color: #64748b;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.config-dialog-title {
+.config-dialog-title-enhanced {
   color: #0f172a;
   font-size: 18px;
   font-weight: 600;
   line-height: 1.35;
+  margin-top: 4px;
 }
 
-.config-dialog-description {
-  margin-top: 3px;
+.config-dialog-description-enhanced {
+  margin-top: 6px;
   color: #64748b;
   font-size: 13px;
   line-height: 1.5;
