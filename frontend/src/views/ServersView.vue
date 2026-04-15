@@ -500,7 +500,7 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Host:Port" width="162" show-overflow-tooltip>
+            <ElTableColumn label="Host:Port" width="148" class-name="host-port-column" show-overflow-tooltip>
               <template #default="{ row }">
                 <code class="host-port">{{ row.host }}:{{ row.port }}</code>
               </template>
@@ -983,12 +983,17 @@ async function executeCommand() {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
   background: #f1f5f9;
-  padding: 2px 6px;
+  padding: 1px 3px;
   border-radius: 4px;
   color: #475569;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.server-table :deep(.host-port-column .cell) {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .status-tag {
