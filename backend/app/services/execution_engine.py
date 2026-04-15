@@ -311,7 +311,7 @@ class ExecutionEngine:
         config["_node_id"] = node_id
 
         with self.reservation_lock:
-            if self._node_requires_server(node_type):
+            if self._node_uses_top_level_server(node_type):
                 explicit_region = config.get("region") not in (None, "")
                 server = self._resolve_server_with_region(config, context)
                 if server:
@@ -1639,6 +1639,13 @@ class ExecutionEngine:
                 server_id = ne.input_data.get("server_id")
                 if server_id is not None:
                     busy_ids.append(int(server_id))
+                for field in ("config_nodes", "data_nodes"):
+                    raw_nodes = ne.input_data.get(field)
+                    if not isinstance(raw_nodes, list):
+                        continue
+                    for item in raw_nodes:
+                        if isinstance(item, dict) and item.get("server_id") is not None:
+                            busy_ids.append(int(item["server_id"]))
 
         return list(set(busy_ids))
 
@@ -1652,6 +1659,16 @@ class ExecutionEngine:
             "iot_benchmark_wait"
         }
         return node_type in server_required_types
+
+    def _node_uses_top_level_server(self, node_type: str) -> bool:
+        """Check if generic server resolution should run before node execution."""
+        cluster_topology_types = {
+            "iotdb_cluster_deploy",
+            "iotdb_cluster_start",
+            "iotdb_cluster_check",
+            "iotdb_cluster_stop",
+        }
+        return self._node_requires_server(node_type) and node_type not in cluster_topology_types
 
     def _required_str(self, config: Dict[str, Any], *keys: str) -> str:
         for key in keys:
