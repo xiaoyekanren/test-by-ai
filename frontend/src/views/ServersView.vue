@@ -516,12 +516,6 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="region" label="Region" width="100" align="center">
-              <template #default="{ row }">
-                <ElTag size="small" type="info">{{ row.region || '私有云' }}</ElTag>
-              </template>
-            </ElTableColumn>
-
             <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
               <template #default="{ row }">
                 <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
