@@ -3,6 +3,7 @@ import pytest
 import sys
 import os
 from pathlib import Path
+import sqlite3
 
 sys.path.insert(0, 'backend')
 
@@ -151,3 +152,45 @@ class TestDatabaseSetup:
         required_tables = {"servers", "workflows", "executions", "node_executions"}
         assert required_tables.issubset(tables), \
             "Tables should exist after multiple init_db calls"
+
+    def test_init_db_migrates_legacy_servers_table(self, tmp_path):
+        """Verify init_db adds missing columns to an existing servers table."""
+        test_db_path = tmp_path / "legacy_app.db"
+        conn = sqlite3.connect(test_db_path)
+        conn.execute(
+            """
+            CREATE TABLE servers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                host VARCHAR(100) NOT NULL,
+                port INTEGER,
+                username VARCHAR(50),
+                password VARCHAR(100),
+                description TEXT,
+                role VARCHAR(20),
+                status VARCHAR(20),
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO servers (name, host, port, username, status)
+            VALUES ('legacy-server', '127.0.0.1', 22, 'root', 'offline')
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        test_engine = create_engine(f"sqlite:///{test_db_path}", connect_args={"check_same_thread": False})
+        init_db(test_engine)
+
+        inspector = inspect(test_engine)
+        columns = {col["name"] for col in inspector.get_columns("servers")}
+        assert {"tags", "region"}.issubset(columns)
+
+        conn = sqlite3.connect(test_db_path)
+        row = conn.execute("SELECT name, host, tags, region FROM servers").fetchone()
+        conn.close()
+        assert row == ("legacy-server", "127.0.0.1", None, "私有云")
