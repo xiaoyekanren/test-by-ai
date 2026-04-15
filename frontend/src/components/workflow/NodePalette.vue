@@ -114,13 +114,11 @@ const getPaletteLabel = (node: NodeTypeConfig) => {
     return node.label
   }
 
-  return node.label
-    .replace(/^IoTDB\s+/, '')
-    .replace(/\s+IoT\s+Benchmark$/, ' Benchmark')
+  return node.label.replace(/^IoTDB\s+/, '')
 }
 
 const isWideNode = (node: NodeTypeConfig) => {
-  return getPaletteLabel(node).length > 15
+  return getPaletteLabel(node).length > 14
 }
 </script>
 
