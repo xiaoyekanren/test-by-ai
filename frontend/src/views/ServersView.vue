@@ -73,6 +73,13 @@ const formRules: FormRules = {
   ]
 }
 
+const serverDialogCopy = computed(() => ({
+  title: dialogMode.value === 'create' ? '新增服务器' : '编辑服务器',
+  subtitle: dialogMode.value === 'create' ? '添加一个新的 SSH 服务器配置' : '修改服务器配置信息',
+  actionText: dialogMode.value === 'create' ? '创建' : '保存',
+  icon: dialogMode.value === 'create' ? Plus : Edit
+}))
+
 // Command execution dialog
 const commandDialogVisible = ref(false)
 const commandInput = ref('')
@@ -669,7 +676,7 @@ async function executeCommand() {
     <!-- Add/Edit Server Dialog -->
     <ElDialog
       v-model="dialogVisible"
-      width="520px"
+      width="560px"
       :close-on-click-modal="false"
       class="enhanced-dialog"
     >
@@ -679,12 +686,12 @@ async function executeCommand() {
           <div class="dialog-header-content">
             <div class="dialog-header-icon">
               <ElIcon :size="20">
-                <component :is="dialogMode === 'create' ? Plus : Edit" />
+                <component :is="serverDialogCopy.icon" />
               </ElIcon>
             </div>
             <div class="dialog-header-text">
-              <h3 class="dialog-title">{{ dialogMode === 'create' ? '新增服务器' : '编辑服务器' }}</h3>
-              <p class="dialog-subtitle">{{ dialogMode === 'create' ? '添加一个新的 SSH 服务器配置' : '修改服务器配置信息' }}</p>
+              <h3 class="dialog-title">{{ serverDialogCopy.title }}</h3>
+              <p class="dialog-subtitle">{{ serverDialogCopy.subtitle }}</p>
             </div>
           </div>
         </div>
@@ -700,25 +707,40 @@ async function executeCommand() {
           <ElInput v-model="formData.name" placeholder="请输入服务器名称" />
         </ElFormItem>
 
-        <ElFormItem label="Host" prop="host">
-          <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
-        </ElFormItem>
+        <div class="form-row">
+          <ElFormItem label="Host" prop="host" class="form-row-item form-row-item-wide">
+            <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
+          </ElFormItem>
 
-        <ElFormItem label="Port" prop="port">
-          <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
-        </ElFormItem>
+          <ElFormItem label="Port" prop="port" class="form-row-item form-row-item-port">
+            <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
+          </ElFormItem>
+        </div>
 
-        <ElFormItem label="用户名" prop="username">
-          <ElInput v-model="formData.username" placeholder="SSH 用户名" />
-        </ElFormItem>
+        <div class="form-row">
+          <ElFormItem label="用户名" prop="username" class="form-row-item">
+            <ElInput v-model="formData.username" placeholder="SSH 用户名" />
+          </ElFormItem>
 
-        <ElFormItem label="密码" prop="password">
-          <ElInput
-            v-model="formData.password"
-            type="password"
-            show-password
-            :placeholder="dialogMode === 'edit' ? '留空保持当前密码' : 'SSH 密码'"
-          />
+          <ElFormItem label="密码" prop="password" class="form-row-item">
+            <ElInput
+              v-model="formData.password"
+              type="password"
+              show-password
+              :placeholder="dialogMode === 'edit' ? '留空保持当前密码' : 'SSH 密码'"
+            />
+          </ElFormItem>
+        </div>
+
+        <ElFormItem label="Region" prop="region">
+          <ElSelect v-model="formData.region" placeholder="Select region" style="width: 100%">
+            <ElOption
+              v-for="region in REGION_OPTIONS"
+              :key="region"
+              :label="region"
+              :value="region"
+            />
+          </ElSelect>
         </ElFormItem>
 
         <ElFormItem label="描述" prop="description">
@@ -730,25 +752,14 @@ async function executeCommand() {
           />
         </ElFormItem>
 
-        <ElFormItem label="Region" prop="region">
-          <ElSelect v-model="formData.region" placeholder="Select region" size="small" style="width: 100%">
-            <ElOption
-              v-for="region in REGION_OPTIONS"
-              :key="region"
-              :label="region"
-              :value="region"
-            />
-          </ElSelect>
-        </ElFormItem>
-
       </ElForm>
 
       <template #footer>
         <div class="dialog-footer-enhanced">
           <ElButton @click="dialogVisible = false" class="btn-cancel">取消</ElButton>
           <ElButton type="primary" @click="submitForm" :loading="serversStore.loading" class="btn-primary">
-            <ElIcon><component :is="dialogMode === 'create' ? Plus : Edit" /></ElIcon>
-            {{ dialogMode === 'create' ? '创建' : '保存' }}
+            <ElIcon><component :is="serverDialogCopy.icon" /></ElIcon>
+            {{ serverDialogCopy.actionText }}
           </ElButton>
         </div>
       </template>
@@ -1318,6 +1329,24 @@ async function executeCommand() {
 
 .dialog-form-enhanced {
   padding: 8px 0;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-row-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-row-item-wide {
+  flex: 1 1 auto;
+}
+
+.form-row-item-port {
+  flex: 0 0 150px;
 }
 
 .dialog-footer-enhanced {
