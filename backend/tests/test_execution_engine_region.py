@@ -213,6 +213,28 @@ class TestComputeBusyServerIds:
 
         assert result == []
 
+    def test_compute_busy_server_ids_from_cluster_nodes(self, engine, db_session):
+        """Test that cluster topology node server IDs are also marked busy."""
+        mock_execution = Execution(id=1, workflow_id=1, status="running")
+        db_session.query.return_value.filter.return_value.all.side_effect = [
+            [mock_execution],
+            [
+                NodeExecution(
+                    execution_id=1,
+                    node_id="cluster",
+                    status="running",
+                    input_data={
+                        "config_nodes": [{"server_id": 10}],
+                        "data_nodes": [{"server_id": 11}, {"server_id": 12}],
+                    },
+                )
+            ],
+        ]
+
+        result = engine._compute_busy_server_ids()
+
+        assert sorted(result) == [10, 11, 12]
+
 
 class TestNodeRequiresServer:
     """Tests for _node_requires_server method."""
@@ -263,6 +285,13 @@ class TestNodeRequiresServer:
         assert engine._node_requires_server("iotdb_cluster_start") is True
         assert engine._node_requires_server("iotdb_cluster_check") is True
         assert engine._node_requires_server("iotdb_cluster_stop") is True
+
+    def test_cluster_nodes_do_not_use_top_level_server_resolution(self, engine):
+        """Test that cluster topology nodes resolve servers from config/data nodes."""
+        assert engine._node_uses_top_level_server("iotdb_cluster_deploy") is False
+        assert engine._node_uses_top_level_server("iotdb_cluster_start") is False
+        assert engine._node_uses_top_level_server("iotdb_cluster_check") is False
+        assert engine._node_uses_top_level_server("iotdb_cluster_stop") is False
 
     def test_node_requires_server_unknown_type(self, engine):
         """Test that unknown node types do not require a server."""
