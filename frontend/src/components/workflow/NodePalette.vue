@@ -166,7 +166,6 @@ const isWideNode = (node: NodeTypeConfig) => {
                   <component :is="getIcon(node.icon)" class="icon" />
                 </div>
                 <span class="node-label">{{ getPaletteLabel(node) }}</span>
-                <span class="node-chip">{{ node.category }}</span>
               </div>
             </ElTooltip>
           </div>
@@ -328,26 +327,6 @@ const isWideNode = (node: NodeTypeConfig) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.node-chip {
-  display: none;
-  flex-shrink: 0;
-  max-width: 50px;
-  font-size: 9px;
-  line-height: 16px;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 0 5px;
-  border-radius: 5px;
-  text-transform: uppercase;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-item.is-wide .node-chip {
-  display: inline-block;
 }
 
 .empty-search {
