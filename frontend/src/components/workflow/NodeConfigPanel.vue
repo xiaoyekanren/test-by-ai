@@ -14,7 +14,6 @@ import {
 import { Edit, Plus, Delete } from '@element-plus/icons-vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
-import { REGION_OPTIONS } from '@/types'
 import type { NodeType } from '@/types'
 
 interface KeyValueDraft {
@@ -157,14 +156,7 @@ const updateServerConfig = (value: number | string | null | undefined) => {
   const selectedServer = serversStore.servers.find(server => server.id === serverId)
   workflowsStore.updateNodeConfig(selectedNode.value.id, {
     server_id: serverId,
-    region: selectedServer ? selectedServer.region || '私有云' : getConfigValue('region')
-  })
-}
-
-const updateRegionConfig = (value: string | null | undefined) => {
-  if (!selectedNode.value) return
-  workflowsStore.updateNodeConfig(selectedNode.value.id, {
-    region: value
+    region: selectedServer ? selectedServer.region || '私有云' : null
   })
 }
 
@@ -172,6 +164,11 @@ const updateRegionConfig = (value: string | null | undefined) => {
 const getConfigValue = (field: string): unknown => {
   if (!selectedNode.value) return null
   return selectedNode.value.data.config[field]
+}
+
+const getReadonlyRegionValue = () => {
+  const value = getConfigValue('region')
+  return typeof value === 'string' && value ? value : '选择服务器后自动填充'
 }
 
 const getFieldLayoutClass = (field: FieldDefinition) => {
@@ -669,21 +666,11 @@ const isListField = (field: string): boolean => {
             </template>
 
             <template v-else-if="field.type === 'region'">
-              <ElSelect
-                :model-value="(getConfigValue(field.field) as string | null | undefined)"
-                placeholder="Select region (default: 私有云)"
-                clearable
+              <ElInput
+                :model-value="getReadonlyRegionValue()"
                 size="small"
-                style="width: 100%"
-                @update:model-value="updateRegionConfig($event)"
-              >
-                <ElOption
-                  v-for="region in REGION_OPTIONS"
-                  :key="region"
-                  :label="region"
-                  :value="region"
-                />
-              </ElSelect>
+                disabled
+              />
             </template>
 
             <template v-else-if="field.type === 'select'">
