@@ -14,7 +14,7 @@ import {
   ElTag,
   vLoading
 } from 'element-plus'
-import { Refresh, Platform, Delete } from '@element-plus/icons-vue'
+import { Refresh, Platform, Delete, Plus, Edit, Link } from '@element-plus/icons-vue'
 import { useServersStore } from '@/stores/servers'
 import { useIoTDBStore } from '@/stores/iotdb'
 import { iotdbApi } from '@/api'
@@ -1564,17 +1564,38 @@ function formatSize(size: number): string {
     <!-- Create Target Dialog -->
     <ElDialog
       v-model="createTargetDialogVisible"
-      :title="targetDialogTitle"
-      width="600px"
+      width="640px"
+      class="enhanced-dialog iotdb-dialog"
     >
-      <div class="dialog-form">
-        <div class="form-row">
-          <label>连接名称</label>
+      <template #header>
+        <div class="dialog-header-enhanced">
+          <div class="dialog-header-accent iotdb-accent"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon iotdb-icon">
+              <el-icon :size="20"><Link /></el-icon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">{{ targetDialogTitle }}</h3>
+              <p class="dialog-subtitle">配置 IoTDB 数据库连接</p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="dialog-form-enhanced">
+        <div class="form-row-enhanced">
+          <label class="form-label">连接名称</label>
           <ElInput v-model="newTargetName" placeholder="留空自动生成" clearable />
         </div>
-        <div class="nodes-section">
-          <div v-for="(node, index) in newTargetNodes" :key="index" class="node-row-simple">
-            <ElSelect v-model="node.serverId" placeholder="服务器" class="node-server-select" clearable>
+        <div class="nodes-section-enhanced">
+          <div class="nodes-header">
+            <span class="nodes-title">节点配置</span>
+            <ElButton type="primary" plain size="small" @click="addNewTargetNode">
+              <el-icon><Plus /></el-icon>
+              添加节点
+            </ElButton>
+          </div>
+          <div v-for="(node, index) in newTargetNodes" :key="index" class="node-row-enhanced">
+            <ElSelect v-model="node.serverId" placeholder="选择服务器" class="node-server-select-enhanced" clearable>
               <ElOption
                 v-for="server in serversStore.servers"
                 :key="server.id"
@@ -1582,64 +1603,93 @@ function formatSize(size: number): string {
                 :value="server.id"
               />
             </ElSelect>
-            <ElInput v-model="node.iotdbHome" placeholder="IoTDB 路径" clearable />
+            <ElInput v-model="node.iotdbHome" placeholder="IoTDB 安装路径" clearable class="node-path-input" />
             <ElButton
               v-if="newTargetNodes.length > 1"
               type="danger"
               :icon="Delete"
               @click="removeNewTargetNode(index)"
+              circle
+              size="small"
             />
           </div>
         </div>
-        <ElButton type="primary" plain size="small" @click="addNewTargetNode">
-          添加节点
-        </ElButton>
       </div>
       <template #footer>
-        <ElButton @click="createTargetDialogVisible = false">取消</ElButton>
-        <ElButton type="primary" @click="createTargetFromDialog">保存</ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton @click="createTargetDialogVisible = false" class="btn-cancel">取消</ElButton>
+          <ElButton type="primary" @click="createTargetFromDialog" class="btn-primary">
+            <el-icon><Link /></el-icon>
+            保存连接
+          </ElButton>
+        </div>
       </template>
     </ElDialog>
 
     <!-- Manage Targets Dialog -->
-    <ElDialog v-model="manageTargetsDialogVisible" title="管理连接" width="600px">
-      <div v-if="savedTargets.length === 0" class="manage-empty">
-        <el-icon :size="32"><Platform /></el-icon>
+    <ElDialog v-model="manageTargetsDialogVisible" width="640px" class="enhanced-dialog manage-dialog">
+      <template #header>
+        <div class="dialog-header-enhanced manage-header">
+          <div class="dialog-header-accent manage-accent"></div>
+          <div class="dialog-header-content">
+            <div class="dialog-header-icon manage-icon">
+              <el-icon :size="20"><Platform /></el-icon>
+            </div>
+            <div class="dialog-header-text">
+              <h3 class="dialog-title">管理连接</h3>
+              <p class="dialog-subtitle">{{ savedTargets.length }} 个已保存的连接配置</p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div v-if="savedTargets.length === 0" class="manage-empty-enhanced">
+        <el-icon :size="48"><Platform /></el-icon>
         <p>暂无保存连接</p>
         <span class="manage-empty-tip">点击下方按钮新建连接</span>
       </div>
-      <div v-else class="target-list">
+      <div v-else class="target-list-enhanced">
         <div
           v-for="target in savedTargets"
           :key="target.id"
-          class="target-card"
+          class="target-card-enhanced"
           @click="loadSavedTarget(target)"
         >
-          <div class="target-card-row">
-            <div class="target-card-icon">
-              <el-icon :size="16"><Platform /></el-icon>
+          <div class="target-card-row-enhanced">
+            <div class="target-card-icon-enhanced">
+              <el-icon :size="18"><Platform /></el-icon>
             </div>
-            <div class="target-card-info">
-              <div class="target-card-name">
-                <span>{{ target.name }}</span>
-                <ElTag size="small" effect="plain">{{ target.mode === 'cluster' ? '分布式' : '单机' }}</ElTag>
+            <div class="target-card-info-enhanced">
+              <div class="target-card-name-enhanced">
+                <span class="target-name-text">{{ target.name }}</span>
+                <ElTag size="small" effect="plain" class="mode-tag">{{ target.mode === 'cluster' ? '分布式' : '单机' }}</ElTag>
               </div>
-              <div class="target-card-nodes">
-                <div v-for="node in target.nodes" :key="node.id" class="node-line">
-                  <span class="node-main">{{ node.name || getNodeTitle(node) }}</span>
-                  <span class="node-sub">{{ serversStore.servers.find(s => s.id === node.serverId)?.host || `Server ${node.serverId}` }} · {{ node.iotdbHome }}</span>
+              <div class="target-card-nodes-enhanced">
+                <div v-for="node in target.nodes" :key="node.id" class="node-line-enhanced">
+                  <span class="node-main-enhanced">{{ node.name || getNodeTitle(node) }}</span>
+                  <span class="node-sub-enhanced">{{ serversStore.servers.find(s => s.id === node.serverId)?.host || `Server ${node.serverId}` }} · {{ node.iotdbHome }}</span>
                 </div>
               </div>
             </div>
-            <div class="target-card-actions">
-              <ElButton size="small" @click.stop="openEditTargetDialog(target)">编辑</ElButton>
-              <ElButton size="small" type="danger" :disabled="connected" @click.stop="deleteSavedTarget(target)">删除</ElButton>
+            <div class="target-card-actions-enhanced">
+              <ElButton size="small" @click.stop="openEditTargetDialog(target)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </ElButton>
+              <ElButton size="small" type="danger" :disabled="connected" @click.stop="deleteSavedTarget(target)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </ElButton>
             </div>
           </div>
         </div>
       </div>
       <template #footer>
-        <ElButton type="primary" @click="openCreateTargetDialog">新建连接</ElButton>
+        <div class="dialog-footer-enhanced">
+          <ElButton type="primary" @click="openCreateTargetDialog" class="btn-primary">
+            <el-icon><Plus /></el-icon>
+            新建连接
+          </ElButton>
+        </div>
       </template>
     </ElDialog>
   </div>
@@ -2338,5 +2388,273 @@ function formatSize(size: number): string {
   .node-field-large {
     flex: none;
   }
+}
+
+/* Enhanced Dialog Styles */
+.dialog-header-enhanced {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+  margin: -20px -20px 0 -20px;
+}
+
+.dialog-header-accent {
+  width: 4px;
+  height: 48px;
+  background: linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.iotdb-accent {
+  background: linear-gradient(180deg, #10b981 0%, #34d399 100%);
+}
+
+.manage-accent {
+  background: linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%);
+}
+
+.dialog-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.dialog-header-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 10px;
+  color: #3b82f6;
+}
+
+.iotdb-icon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.manage-icon {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.dialog-header-text {
+  flex: 1;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.dialog-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dialog-form-enhanced {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-row-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.nodes-section-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nodes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.nodes-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.node-row-enhanced {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.node-server-select-enhanced {
+  width: 200px;
+}
+
+.node-path-input {
+  flex: 1;
+}
+
+.dialog-footer-enhanced {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  margin: 0 -20px -20px -20px;
+}
+
+.btn-cancel {
+  background: #ffffff !important;
+  border: 1px solid #dcdfe6 !important;
+  color: #606266 !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+}
+
+/* Manage Dialog Enhanced */
+.manage-empty-enhanced {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.manage-empty-enhanced p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.manage-empty-tip {
+  font-size: 12px;
+}
+
+.target-list-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+}
+
+.target-card-enhanced {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.target-card-enhanced:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.target-card-row-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.target-card-icon-enhanced {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 10px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.target-card-info-enhanced {
+  flex: 1;
+  min-width: 0;
+}
+
+.target-card-name-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.target-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.target-card-nodes-enhanced {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-line-enhanced {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.node-main-enhanced {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.node-sub-enhanced {
+  font-size: 11px;
+  color: #64748b;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+.target-card-actions-enhanced {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 </style>
