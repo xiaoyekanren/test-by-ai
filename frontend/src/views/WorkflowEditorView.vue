@@ -11,7 +11,9 @@ import '@vue-flow/controls/dist/style.css'
 import {
   ElDialog,
   ElMessage,
-  ElMessageBox
+  ElMessageBox,
+  ElOption,
+  ElSelect
 } from 'element-plus'
 import NodePalette from '@/components/workflow/NodePalette.vue'
 import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
@@ -70,6 +72,17 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+const configDialogNodeOptions = computed(() => {
+  return workflowsStore.editorNodes.map(node => {
+    const config = NODE_CONFIGS[node.data.nodeType]
+    return {
+      value: node.id,
+      label: node.data.label || config?.label || node.id,
+      typeLabel: config?.label || node.data.nodeType,
+      shortId: node.id.slice(0, 12)
+    }
+  })
+})
 const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
 const nodeExecutionStatusById = computed(() => {
@@ -226,6 +239,10 @@ const handleNodeDoubleClick = (nodeId: string) => {
 
 const handleConfigDialogClosed = () => {
   configDialogVisible.value = false
+}
+
+const handleConfigNodeSwitch = (nodeId: string) => {
+  workflowsStore.selectNode(nodeId)
 }
 
 // Handle edge click (selection)
@@ -493,6 +510,29 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
               {{ selectedNodeDescription }}
             </div>
           </div>
+          <div v-if="configDialogNodeOptions.length > 1" class="config-dialog-switcher">
+            <span class="switcher-label">切换卡片</span>
+            <ElSelect
+              :model-value="workflowsStore.selectedNodeId"
+              size="small"
+              filterable
+              placeholder="选择节点"
+              popper-class="node-switcher-popper"
+              @change="handleConfigNodeSwitch"
+            >
+              <ElOption
+                v-for="option in configDialogNodeOptions"
+                :key="option.value"
+                :label="`${option.label} (${option.shortId})`"
+                :value="option.value"
+              >
+                <div class="node-switch-option">
+                  <span class="node-switch-name">{{ option.label }}</span>
+                  <span class="node-switch-meta">{{ option.typeLabel }} · {{ option.shortId }}</span>
+                </div>
+              </ElOption>
+            </ElSelect>
+          </div>
         </div>
       </template>
       <NodeConfigPanel />
@@ -605,10 +645,11 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
 }
 
 .config-dialog-header-enhanced {
+  position: relative;
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  padding: 24px;
+  padding: 24px 220px 24px 24px;
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -669,5 +710,72 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   color: #64748b;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.config-dialog-switcher {
+  position: absolute;
+  top: 18px;
+  right: 48px;
+  width: 156px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.switcher-label {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.config-dialog-switcher :deep(.el-select) {
+  width: 100%;
+}
+
+.config-dialog-switcher :deep(.el-select__wrapper) {
+  min-height: 30px;
+  border-radius: 6px;
+}
+
+.node-switch-option {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.node-switch-name {
+  overflow: hidden;
+  color: #303133;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-switch-meta {
+  overflow: hidden;
+  color: #909399;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.node-switcher-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 42px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+@media (max-width: 720px) {
+  .config-dialog-header-enhanced {
+    padding-right: 64px;
+    flex-wrap: wrap;
+  }
+
+  .config-dialog-switcher {
+    position: static;
+    width: 100%;
+    margin-left: 20px;
+  }
 }
 </style>
