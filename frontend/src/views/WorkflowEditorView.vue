@@ -9,12 +9,13 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 
 import {
+  ElButton,
   ElDialog,
   ElMessage,
   ElMessageBox,
-  ElOption,
-  ElSelect
+  ElScrollbar
 } from 'element-plus'
+import { Switch } from '@element-plus/icons-vue'
 import NodePalette from '@/components/workflow/NodePalette.vue'
 import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
@@ -62,6 +63,7 @@ const executionRunRequestId = ref(0)
 const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
 const editorNodeExecutions = ref<NodeExecution[]>([])
 const configDialogVisible = ref(false)
+const nodeSwitcherDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
   const nodeType = workflowsStore.selectedNode?.data.nodeType
@@ -82,6 +84,9 @@ const configDialogNodeOptions = computed(() => {
       shortId: node.id.slice(0, 12)
     }
   })
+})
+const configDialogOtherNodeOptions = computed(() => {
+  return configDialogNodeOptions.value.filter(option => option.value !== workflowsStore.selectedNodeId)
 })
 const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
@@ -239,10 +244,12 @@ const handleNodeDoubleClick = (nodeId: string) => {
 
 const handleConfigDialogClosed = () => {
   configDialogVisible.value = false
+  nodeSwitcherDialogVisible.value = false
 }
 
 const handleConfigNodeSwitch = (nodeId: string) => {
   workflowsStore.selectNode(nodeId)
+  nodeSwitcherDialogVisible.value = false
 }
 
 // Handle edge click (selection)
@@ -510,29 +517,14 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
               {{ selectedNodeDescription }}
             </div>
           </div>
-          <div v-if="configDialogNodeOptions.length > 1" class="config-dialog-switcher">
-            <span class="switcher-label">切换卡片</span>
-            <ElSelect
-              :model-value="workflowsStore.selectedNodeId"
-              size="small"
-              filterable
-              placeholder="选择节点"
-              popper-class="node-switcher-popper"
-              @change="handleConfigNodeSwitch"
-            >
-              <ElOption
-                v-for="option in configDialogNodeOptions"
-                :key="option.value"
-                :label="`${option.label} (${option.shortId})`"
-                :value="option.value"
-              >
-                <div class="node-switch-option">
-                  <span class="node-switch-name">{{ option.label }}</span>
-                  <span class="node-switch-meta">{{ option.typeLabel }} · {{ option.shortId }}</span>
-                </div>
-              </ElOption>
-            </ElSelect>
-          </div>
+          <ElButton
+            v-if="configDialogOtherNodeOptions.length > 0"
+            class="config-dialog-switch-button"
+            :icon="Switch"
+            circle
+            title="切换其他卡片"
+            @click="nodeSwitcherDialogVisible = true"
+          />
         </div>
       </template>
       <NodeConfigPanel />
@@ -544,6 +536,31 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
           </span>
         </div>
       </template>
+    </ElDialog>
+
+    <ElDialog
+      v-model="nodeSwitcherDialogVisible"
+      width="420px"
+      top="16vh"
+      append-to-body
+      class="node-switch-dialog"
+      title="切换卡片"
+    >
+      <div class="node-switch-dialog-body">
+        <div class="node-switch-dialog-hint">选择要编辑的其他卡片</div>
+        <ElScrollbar class="node-switch-list">
+          <button
+            v-for="option in configDialogOtherNodeOptions"
+            :key="option.value"
+            class="node-switch-card"
+            type="button"
+            @click="handleConfigNodeSwitch(option.value)"
+          >
+            <span class="node-switch-card-title">{{ option.label }}</span>
+            <span class="node-switch-card-meta">{{ option.typeLabel }} · {{ option.shortId }}</span>
+          </button>
+        </ElScrollbar>
+      </div>
     </ElDialog>
   </div>
 </template>
@@ -649,7 +666,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  padding: 24px 220px 24px 24px;
+  padding: 24px 96px 24px 24px;
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -712,58 +729,83 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   line-height: 1.5;
 }
 
-.config-dialog-switcher {
+.config-dialog-switch-button {
   position: absolute;
-  top: 18px;
+  top: 16px;
   right: 48px;
-  width: 156px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: #475569;
+}
+
+.config-dialog-switch-button:hover {
+  color: var(--node-color);
+}
+
+.node-switch-dialog :deep(.el-dialog) {
+  border-radius: 8px !important;
+}
+
+.node-switch-dialog :deep(.el-dialog__body) {
+  padding: 0 20px 20px;
+}
+
+.node-switch-dialog-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
 }
 
-.switcher-label {
+.node-switch-dialog-hint {
   color: #64748b;
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 12px;
 }
 
-.config-dialog-switcher :deep(.el-select) {
+.node-switch-list {
+  max-height: min(52vh, 420px);
+}
+
+.node-switch-card {
   width: 100%;
-}
-
-.config-dialog-switcher :deep(.el-select__wrapper) {
-  min-height: 30px;
-  border-radius: 6px;
-}
-
-.node-switch-option {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.node-switch-card:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.node-switch-card-title {
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.3;
-}
-
-.node-switch-name {
-  overflow: hidden;
-  color: #303133;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.node-switch-meta {
+.node-switch-card-meta {
+  max-width: 100%;
   overflow: hidden;
-  color: #909399;
-  font-size: 11px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-:global(.node-switcher-popper .el-select-dropdown__item) {
-  height: auto;
-  min-height: 42px;
-  padding-top: 5px;
-  padding-bottom: 5px;
 }
 
 @media (max-width: 720px) {
@@ -772,10 +814,9 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
     flex-wrap: wrap;
   }
 
-  .config-dialog-switcher {
-    position: static;
-    width: 100%;
-    margin-left: 20px;
+  .config-dialog-switch-button {
+    top: 14px;
+    right: 44px;
   }
 }
 </style>
