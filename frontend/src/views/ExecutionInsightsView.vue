@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
 import {
   ElAlert,
   ElButton,
@@ -26,7 +30,8 @@ import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
 import { NODE_CONFIGS } from '@/types'
-import type { NodeDefinition, NodeExecution } from '@/types'
+import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
+import type { NodeDefinition, NodeExecution, NodeType } from '@/types'
 
 interface WorkflowStateSnapshotNode {
   id: string
@@ -63,21 +68,6 @@ interface ExecutionNodeViewModel {
   outgoingCount: number
   definition: NodeDefinition | null
   execution: NodeExecution | null
-}
-
-interface GraphNodeViewModel extends ExecutionNodeViewModel {
-  x: number
-  y: number
-  color: string
-}
-
-interface GraphEdgeViewModel {
-  id: string
-  fromX: number
-  fromY: number
-  toX: number
-  toY: number
-  status: string
 }
 
 const route = useRoute()
@@ -213,54 +203,38 @@ const executionSummaryDisplay = computed(() => {
   return rest
 })
 
-const workflowGraphLayout = computed(() => {
-  const graphScale = 0.55
-  const padding = 24
-  const nodeWidth = 176
-  const nodeHeight = 64
-  const fallbackColumnGap = 240
-  const fallbackRowGap = 120
-  const rawNodes = executionNodeViewModels.value.map((node, index) => {
-    const position = node.definition?.position
+const workflowStatusFlowNodes = computed(() => {
+  return executionNodeViewModels.value.map((node, index) => ({
+    id: node.nodeId,
+    type: 'workflowNode',
+    position: node.definition?.position || {
+      x: (index % 3) * 260,
+      y: Math.floor(index / 3) * 140
+    },
+    data: {
+      label: node.label,
+      nodeType: node.nodeType as NodeType,
+      config: node.definition?.config || {}
+    },
+    draggable: false,
+    selectable: false
+  }))
+})
+
+const workflowStatusFlowEdges = computed(() => {
+  return workflowEdges.value.map(edge => {
+    const from = executionNodeViewModels.value.find(node => node.nodeId === edge.from)
+    const to = executionNodeViewModels.value.find(node => node.nodeId === edge.to)
+    const status = edge.status || (from && to ? getWorkflowEdgeStatus(from, to) : 'pending')
     return {
-      ...node,
-      rawX: position?.x ?? (index % 3) * fallbackColumnGap,
-      rawY: position?.y ?? Math.floor(index / 3) * fallbackRowGap
+      id: `${edge.from}-${edge.to}`,
+      source: edge.from,
+      target: edge.to,
+      label: edge.label || undefined,
+      animated: status === 'running',
+      class: `status-flow-edge status-flow-edge-${status}`
     }
   })
-
-  if (rawNodes.length === 0) {
-    return { nodes: [] as GraphNodeViewModel[], edges: [] as GraphEdgeViewModel[], width: 0, height: 0 }
-  }
-
-  const minX = Math.min(...rawNodes.map(node => node.rawX))
-  const minY = Math.min(...rawNodes.map(node => node.rawY))
-  const nodes: GraphNodeViewModel[] = rawNodes.map(node => ({
-    ...node,
-    x: Math.round((node.rawX - minX) * graphScale + padding),
-    y: Math.round((node.rawY - minY) * graphScale + padding),
-    color: NODE_CONFIGS[node.nodeType as keyof typeof NODE_CONFIGS]?.color || '#409eff'
-  }))
-  const nodeMap = new Map(nodes.map(node => [node.nodeId, node]))
-  const edges: GraphEdgeViewModel[] = workflowEdges.value
-    .map(edge => {
-      const from = nodeMap.get(edge.from)
-      const to = nodeMap.get(edge.to)
-      if (!from || !to) return null
-      return {
-        id: `${edge.from}-${edge.to}`,
-        fromX: from.x + nodeWidth,
-        fromY: from.y + nodeHeight / 2,
-        toX: to.x,
-        toY: to.y + nodeHeight / 2,
-        status: edge.status || getWorkflowEdgeStatus(from, to)
-      }
-    })
-    .filter((edge): edge is GraphEdgeViewModel => Boolean(edge))
-
-  const width = Math.max(520, Math.max(...nodes.map(node => node.x)) + nodeWidth + padding)
-  const height = Math.max(220, Math.max(...nodes.map(node => node.y)) + nodeHeight + padding)
-  return { nodes, edges, width, height }
 })
 
 const displayExecutionStatus = computed(() => {
@@ -348,6 +322,18 @@ function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeVi
   if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
   if (to.status === 'running') return 'running'
   return 'pending'
+}
+
+function getNodeViewById(nodeId: string) {
+  return executionNodeViewModels.value.find(node => node.nodeId === nodeId) || null
+}
+
+function getFlowExecutionStatus(nodeId: string): 'running' | 'passed' | 'failed' | null {
+  const status = getNodeViewById(nodeId)?.status
+  if (status === 'running') return 'running'
+  if (status === 'failed') return 'failed'
+  if (status && ['success', 'completed'].includes(status)) return 'passed'
+  return null
 }
 
 function getStatusTone(status: string) {
@@ -670,41 +656,36 @@ onUnmounted(() => {
 
             <div
               v-else
-              class="workflow-status-map"
-              :style="{ height: `${workflowGraphLayout.height}px` }"
+              class="workflow-status-canvas"
             >
-              <svg
-                class="workflow-status-edges"
-                :viewBox="`0 0 ${workflowGraphLayout.width} ${workflowGraphLayout.height}`"
-                preserveAspectRatio="none"
+              <VueFlow
+                :nodes="workflowStatusFlowNodes"
+                :edges="workflowStatusFlowEdges"
+                :nodes-draggable="false"
+                :nodes-connectable="false"
+                :elements-selectable="false"
+                :min-zoom="0.2"
+                :max-zoom="1.5"
+                :fit-view-on-init="true"
+                :fit-view-options="{ padding: 0.25, maxZoom: 1 }"
+                class="workflow-status-flow"
               >
-                <path
-                  v-for="edge in workflowGraphLayout.edges"
-                  :key="edge.id"
-                  class="workflow-status-edge"
-                  :class="edge.status"
-                  :d="`M ${edge.fromX} ${edge.fromY} C ${edge.fromX + 48} ${edge.fromY}, ${edge.toX - 48} ${edge.toY}, ${edge.toX} ${edge.toY}`"
-                />
-              </svg>
+                <Background pattern-color="#cbd5e1" :gap="16" />
 
-              <button
-                v-for="node in workflowGraphLayout.nodes"
-                :key="node.nodeId"
-                type="button"
-                class="status-map-node"
-                :class="[node.status, { active: rawNodeId === node.nodeId }]"
-                :style="{ left: `${node.x}px`, top: `${node.y}px`, '--node-color': node.color }"
-                @click="rawNodeId = node.nodeId"
-              >
-                <div class="status-map-node-top">
-                  <span class="status-map-node-index">{{ node.sequence }}</span>
-                  <ElTag :type="getStatusTone(node.status)" effect="plain" size="small">
-                    {{ node.status }}
-                  </ElTag>
-                </div>
-                <div class="status-map-node-title">{{ node.label }}</div>
-                <div class="status-map-node-meta">{{ node.nodeType }}</div>
-              </button>
+                <template #node-workflowNode="nodeProps">
+                  <div class="status-flow-node-shell">
+                    <span class="status-flow-node-sequence">
+                      {{ getNodeViewById(nodeProps.id)?.sequence || '' }}
+                    </span>
+                    <WorkflowNode
+                      v-bind="nodeProps"
+                      :selected="rawNodeId === nodeProps.id"
+                      :execution-status="getFlowExecutionStatus(nodeProps.id)"
+                      @click="rawNodeId = nodeProps.id"
+                    />
+                  </div>
+                </template>
+              </VueFlow>
             </div>
 
             <div v-if="executionNodeViewModels.length > 0" class="timeline-list">
@@ -1025,114 +1006,52 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.workflow-status-map {
-  position: relative;
-  min-height: 220px;
+.workflow-status-canvas {
+  height: 380px;
   margin-bottom: 12px;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
-  background:
-    radial-gradient(circle, #d1d5db 1px, transparent 1px) 0 0 / 22px 22px,
-    #f8fafc;
+  background: #f8fafc;
 }
 
-.workflow-status-edges {
-  position: absolute;
-  inset: 0;
+.workflow-status-flow {
   width: 100%;
   height: 100%;
-  pointer-events: none;
 }
 
-.workflow-status-edge {
-  fill: none;
-  stroke: #cbd5e1;
-  stroke-width: 2;
+.status-flow-node-shell {
+  position: relative;
 }
 
-.workflow-status-edge.passed {
-  stroke: #10b981;
-}
-
-.workflow-status-edge.failed {
-  stroke: #ef4444;
-}
-
-.workflow-status-edge.running {
-  stroke: #f59e0b;
-  stroke-dasharray: 8 5;
-}
-
-.status-map-node {
+.status-flow-node-sequence {
   position: absolute;
-  width: 176px;
-  min-height: 64px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 2px solid var(--node-color);
-  background: #fff;
-  color: #1e293b;
-  text-align: left;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
-  cursor: pointer;
-}
-
-.status-map-node.active {
-  outline: 3px solid rgba(59, 130, 246, 0.25);
-}
-
-.status-map-node.failed {
-  background: #fff5f5;
-}
-
-.status-map-node.running {
-  background: #fffbeb;
-}
-
-.status-map-node.not-run {
-  border-color: #cbd5e1;
-  background: #f8fafc;
-  color: #64748b;
-}
-
-.status-map-node-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-map-node-index {
+  top: -10px;
+  left: -10px;
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: #e2e8f0;
-  color: #475569;
+  background: #1e293b;
+  color: #fff;
   font-size: 11px;
   font-weight: 700;
 }
 
-.status-map-node-title {
-  margin-top: 6px;
-  overflow: hidden;
-  color: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.workflow-status-flow :deep(.status-flow-edge-passed .vue-flow__edge-path) {
+  stroke: #10b981;
 }
 
-.status-map-node-meta {
-  margin-top: 2px;
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.workflow-status-flow :deep(.status-flow-edge-failed .vue-flow__edge-path) {
+  stroke: #ef4444;
+}
+
+.workflow-status-flow :deep(.status-flow-edge-running .vue-flow__edge-path) {
+  stroke: #f59e0b;
+  stroke-dasharray: 8 5;
 }
 
 .timeline-list {
