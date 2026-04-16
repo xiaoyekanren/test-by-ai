@@ -156,25 +156,27 @@ const workflowEdges = computed<WorkflowStateSnapshotEdge[]>(() => {
 
 const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
   const snapshotNodes = workflowStateSnapshot.value?.nodes || []
-  return snapshotNodes.map((node, index) => {
-    const execution = nodeExecutionMap.value.get(node.id) || null
-    return {
-      nodeId: node.id,
-      label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
-      nodeType: node.type,
-      status: node.status || execution?.status || 'not-run',
-      sequence: node.sequence || index + 1,
-      incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
-      outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
-      definition: {
-        id: node.id,
-        type: node.type as NodeDefinition['type'],
-        config: node.config || {},
-        position: node.position || null
-      },
-      execution
-    }
-  })
+  return snapshotNodes
+    .map((node, index) => {
+      const execution = nodeExecutionMap.value.get(node.id) || null
+      return {
+        nodeId: node.id,
+        label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
+        nodeType: node.type,
+        status: node.status || execution?.status || 'not-run',
+        sequence: node.sequence || index + 1,
+        incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
+        outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
+        definition: {
+          id: node.id,
+          type: node.type as NodeDefinition['type'],
+          config: node.config || {},
+          position: node.position || null
+        },
+        execution
+      }
+    })
+    .sort((left, right) => left.sequence - right.sequence)
 })
 
 const selectedNodeExecution = computed(() => {
