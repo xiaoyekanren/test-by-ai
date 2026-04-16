@@ -40,6 +40,21 @@ interface ExecutionNodeViewModel {
   execution: NodeExecution | null
 }
 
+interface GraphNodeViewModel extends ExecutionNodeViewModel {
+  x: number
+  y: number
+  color: string
+}
+
+interface GraphEdgeViewModel {
+  id: string
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  status: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const executionsStore = useExecutionsStore()
@@ -175,6 +190,56 @@ const failedNodeCount = computed(() => {
   return executionNodeViewModels.value.filter(node => node.status === 'failed').length
 })
 
+const workflowGraphLayout = computed(() => {
+  const graphScale = 0.55
+  const padding = 24
+  const nodeWidth = 176
+  const nodeHeight = 64
+  const fallbackColumnGap = 240
+  const fallbackRowGap = 120
+  const rawNodes = executionNodeViewModels.value.map((node, index) => {
+    const position = node.definition?.position
+    return {
+      ...node,
+      rawX: position?.x ?? (index % 3) * fallbackColumnGap,
+      rawY: position?.y ?? Math.floor(index / 3) * fallbackRowGap
+    }
+  })
+
+  if (rawNodes.length === 0) {
+    return { nodes: [] as GraphNodeViewModel[], edges: [] as GraphEdgeViewModel[], width: 0, height: 0 }
+  }
+
+  const minX = Math.min(...rawNodes.map(node => node.rawX))
+  const minY = Math.min(...rawNodes.map(node => node.rawY))
+  const nodes: GraphNodeViewModel[] = rawNodes.map(node => ({
+    ...node,
+    x: Math.round((node.rawX - minX) * graphScale + padding),
+    y: Math.round((node.rawY - minY) * graphScale + padding),
+    color: NODE_CONFIGS[node.nodeType as keyof typeof NODE_CONFIGS]?.color || '#409eff'
+  }))
+  const nodeMap = new Map(nodes.map(node => [node.nodeId, node]))
+  const edges: GraphEdgeViewModel[] = workflowEdges.value
+    .map(edge => {
+      const from = nodeMap.get(edge.from)
+      const to = nodeMap.get(edge.to)
+      if (!from || !to) return null
+      return {
+        id: `${edge.from}-${edge.to}`,
+        fromX: from.x + nodeWidth,
+        fromY: from.y + nodeHeight / 2,
+        toX: to.x,
+        toY: to.y + nodeHeight / 2,
+        status: getWorkflowEdgeStatus(from, to)
+      }
+    })
+    .filter((edge): edge is GraphEdgeViewModel => Boolean(edge))
+
+  const width = Math.max(520, Math.max(...nodes.map(node => node.x)) + nodeWidth + padding)
+  const height = Math.max(220, Math.max(...nodes.map(node => node.y)) + nodeHeight + padding)
+  return { nodes, edges, width, height }
+})
+
 const displayExecutionStatus = computed(() => {
   const execution = currentExecution.value
   if (!execution) return ''
@@ -257,6 +322,13 @@ function formatDuration(seconds: number | null) {
 
 function getWorkflowNodeLabel(node: NodeDefinition) {
   return NODE_CONFIGS[node.type]?.label || node.type
+}
+
+function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeViewModel) {
+  if (from.status === 'failed') return 'failed'
+  if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
+  if (to.status === 'running') return 'running'
+  return 'pending'
 }
 
 function getStatusTone(status: string) {
@@ -571,7 +643,7 @@ onUnmounted(() => {
           <ElCard class="panel" shadow="never">
             <template #header>
               <div class="panel-title">
-                <span>工作流节点执行视图</span>
+                <span>工作流运行状态图</span>
                 <ElTag type="info" effect="plain">{{ executionNodeViewModels.length }} 节点</ElTag>
               </div>
             </template>
@@ -580,7 +652,46 @@ onUnmounted(() => {
               <span class="empty-text">该执行尚未产生工作流节点信息</span>
             </div>
 
-            <div v-else class="timeline-list">
+            <div
+              v-else
+              class="workflow-status-map"
+              :style="{ height: `${workflowGraphLayout.height}px` }"
+            >
+              <svg
+                class="workflow-status-edges"
+                :viewBox="`0 0 ${workflowGraphLayout.width} ${workflowGraphLayout.height}`"
+                preserveAspectRatio="none"
+              >
+                <path
+                  v-for="edge in workflowGraphLayout.edges"
+                  :key="edge.id"
+                  class="workflow-status-edge"
+                  :class="edge.status"
+                  :d="`M ${edge.fromX} ${edge.fromY} C ${edge.fromX + 48} ${edge.fromY}, ${edge.toX - 48} ${edge.toY}, ${edge.toX} ${edge.toY}`"
+                />
+              </svg>
+
+              <button
+                v-for="node in workflowGraphLayout.nodes"
+                :key="node.nodeId"
+                type="button"
+                class="status-map-node"
+                :class="[node.status, { active: rawNodeId === node.nodeId }]"
+                :style="{ left: `${node.x}px`, top: `${node.y}px`, '--node-color': node.color }"
+                @click="rawNodeId = node.nodeId"
+              >
+                <div class="status-map-node-top">
+                  <span class="status-map-node-index">{{ node.sequence }}</span>
+                  <ElTag :type="getStatusTone(node.status)" effect="plain" size="small">
+                    {{ node.status }}
+                  </ElTag>
+                </div>
+                <div class="status-map-node-title">{{ node.label }}</div>
+                <div class="status-map-node-meta">{{ node.nodeType }}</div>
+              </button>
+            </div>
+
+            <div v-if="executionNodeViewModels.length > 0" class="timeline-list">
               <button
                 v-for="node in executionNodeViewModels"
                 :key="node.nodeId"
@@ -896,6 +1007,116 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   word-break: break-word;
+}
+
+.workflow-status-map {
+  position: relative;
+  min-height: 220px;
+  margin-bottom: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background:
+    radial-gradient(circle, #d1d5db 1px, transparent 1px) 0 0 / 22px 22px,
+    #f8fafc;
+}
+
+.workflow-status-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.workflow-status-edge {
+  fill: none;
+  stroke: #cbd5e1;
+  stroke-width: 2;
+}
+
+.workflow-status-edge.passed {
+  stroke: #10b981;
+}
+
+.workflow-status-edge.failed {
+  stroke: #ef4444;
+}
+
+.workflow-status-edge.running {
+  stroke: #f59e0b;
+  stroke-dasharray: 8 5;
+}
+
+.status-map-node {
+  position: absolute;
+  width: 176px;
+  min-height: 64px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 2px solid var(--node-color);
+  background: #fff;
+  color: #1e293b;
+  text-align: left;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.status-map-node.active {
+  outline: 3px solid rgba(59, 130, 246, 0.25);
+}
+
+.status-map-node.failed {
+  background: #fff5f5;
+}
+
+.status-map-node.running {
+  background: #fffbeb;
+}
+
+.status-map-node.not-run {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.status-map-node-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-map-node-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-map-node-title {
+  margin-top: 6px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-map-node-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-list {
