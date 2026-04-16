@@ -241,6 +241,7 @@ class ExecutionEngine:
         executions_by_node_id = {execution.node_id: execution for execution in node_executions}
         seen_node_ids: Set[str] = set()
         snapshot_nodes: List[Dict[str, Any]] = []
+        sequence_by_node_id = self._snapshot_sequence_by_topology(nodes, edges)
 
         for index, node in enumerate(nodes):
             node_id = str(node.get("id") or f"node-{index}")
@@ -252,7 +253,7 @@ class ExecutionEngine:
                 "type": str(node.get("type", "shell")),
                 "config": node.get("config", {}) or {},
                 "position": node.get("position"),
-                "sequence": index + 1,
+                "sequence": sequence_by_node_id.get(node_id, index + 1),
                 "status": status,
                 "node_execution_id": node_execution.id if node_execution else None,
                 "started_at": node_execution.started_at.isoformat() if node_execution and node_execution.started_at else None,
@@ -260,6 +261,8 @@ class ExecutionEngine:
                 "duration": node_execution.duration if node_execution else None,
                 "error_message": node_execution.error_message if node_execution else None,
             })
+
+        snapshot_nodes.sort(key=lambda item: int(item.get("sequence") or 0))
 
         for node_execution in node_executions:
             if node_execution.node_id in seen_node_ids:
@@ -301,6 +304,61 @@ class ExecutionEngine:
             "nodes": snapshot_nodes,
             "edges": snapshot_edges,
         }
+
+    def _snapshot_sequence_by_topology(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]]
+    ) -> Dict[str, int]:
+        node_ids: List[str] = []
+        node_index: Dict[str, int] = {}
+        node_positions: Dict[str, Dict[str, Any]] = {}
+
+        for index, node in enumerate(nodes):
+            node_id = str(node.get("id") or f"node-{index}")
+            if node_id in node_index:
+                node_id = f"{node_id}-{index}"
+            node_ids.append(node_id)
+            node_index[node_id] = index
+            node_positions[node_id] = node.get("position") or {}
+
+        parents: Dict[str, Set[str]] = {node_id: set() for node_id in node_ids}
+        children: Dict[str, Set[str]] = {node_id: set() for node_id in node_ids}
+        for edge in edges:
+            from_node = str(edge.get("from") or edge.get("from_node") or "")
+            to_node = str(edge.get("to") or "")
+            if from_node not in parents or to_node not in parents:
+                continue
+            parents[to_node].add(from_node)
+            children[from_node].add(to_node)
+
+        def sort_key(node_id: str) -> tuple[float, float, int]:
+            position = node_positions.get(node_id) or {}
+            return (
+                float(position.get("x") or 0),
+                float(position.get("y") or 0),
+                node_index.get(node_id, 0)
+            )
+
+        ready = sorted([node_id for node_id in node_ids if not parents[node_id]], key=sort_key)
+        remaining = {node_id: set(parent_ids) for node_id, parent_ids in parents.items()}
+        ordered: List[str] = []
+
+        while ready:
+            node_id = ready.pop(0)
+            if node_id in ordered:
+                continue
+            ordered.append(node_id)
+            for child_id in sorted(children[node_id], key=sort_key):
+                remaining[child_id].discard(node_id)
+                if not remaining[child_id] and child_id not in ordered and child_id not in ready:
+                    ready.append(child_id)
+            ready.sort(key=sort_key)
+
+        for node_id in sorted([node_id for node_id in node_ids if node_id not in ordered], key=sort_key):
+            ordered.append(node_id)
+
+        return {node_id: index + 1 for index, node_id in enumerate(ordered)}
 
     def _snapshot_edge_status(self, from_status: str, to_status: str) -> str:
         if from_status == "failed":
