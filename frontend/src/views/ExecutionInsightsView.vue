@@ -109,41 +109,6 @@ const displayExecutionStatus = computed(() => {
   return execution.status
 })
 
-const executionHeadline = computed(() => {
-  const execution = currentExecution.value
-  if (!execution) return null
-
-  if (execution.status === 'failed' && execution.result === 'partial') {
-    return {
-      type: 'warning' as const,
-      title: '本次执行整体失败，但在失败前已有部分节点执行成功。',
-      description: '可以重点查看下方失败节点和原始输入输出，不必把它理解成“完全没有执行起来”。'
-    }
-  }
-
-  if (execution.status === 'failed') {
-    return {
-      type: 'error' as const,
-      title: '本次执行失败。',
-      description: '建议优先查看下方失败节点、报错信息和原始输入输出。'
-    }
-  }
-
-  if (execution.status === 'completed') {
-    return {
-      type: 'success' as const,
-      title: '本次执行已完成。',
-      description: '下方分析区域主要用于复盘执行路径和查看节点输出。'
-    }
-  }
-
-  return {
-    type: 'info' as const,
-    title: '本次执行仍在进行中。',
-    description: '页面会自动刷新，你可以先观察已完成节点的输出。'
-  }
-})
-
 function stringifyData(value: unknown) {
   if (value === null || value === undefined) return 'N/A'
   if (typeof value === 'string') return value
@@ -470,16 +435,6 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <ElAlert
-            v-if="executionHeadline"
-            class="analysis-headline"
-            :title="executionHeadline.title"
-            :description="executionHeadline.description"
-            :type="executionHeadline.type"
-            :closable="false"
-            show-icon
-          />
-
           <div class="overview-grid">
             <div class="metric-card">
               <div class="metric-label">工作流</div>
@@ -775,10 +730,6 @@ onUnmounted(() => {
 .metric-value {
   margin-top: 2px;
   font-size: 14px;
-}
-
-.analysis-headline {
-  margin-bottom: 10px;
 }
 
 .raw-label {
