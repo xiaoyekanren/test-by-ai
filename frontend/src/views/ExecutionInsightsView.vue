@@ -289,15 +289,19 @@ function goToWorkflowEditor() {
 
 async function loadExecution(executionId: number, syncRoute = true) {
   loadingDetail.value = true
+  const previousNodeId = rawNodeId.value
   try {
     selectedExecutionId.value = executionId
-    rawNodeId.value = null
     const execution = await executionsStore.fetchExecution(executionId)
     await Promise.all([
       workflowsStore.fetchWorkflow(execution.workflow_id),
       executionsStore.fetchNodeExecutions(executionId)
     ])
-    rawNodeId.value = executionNodeViewModels.value[0]?.nodeId || null
+
+    const nextNodes = executionNodeViewModels.value
+    rawNodeId.value = nextNodes.some(node => node.nodeId === previousNodeId)
+      ? previousNodeId
+      : nextNodes[0]?.nodeId || null
 
     if (syncRoute) {
       await router.replace({
@@ -1002,6 +1006,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 520px;
 }
 
 .raw-block {
