@@ -25,6 +25,20 @@ import {
 import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
+import { NODE_CONFIGS } from '@/types'
+import type { EdgeDefinition, NodeDefinition, NodeExecution } from '@/types'
+
+interface ExecutionNodeViewModel {
+  nodeId: string
+  label: string
+  nodeType: string
+  status: string
+  sequence: number
+  incomingCount: number
+  outgoingCount: number
+  definition: NodeDefinition | null
+  execution: NodeExecution | null
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -79,18 +93,86 @@ const filteredExecutions = computed(() => {
 const currentExecution = computed(() => executionsStore.currentExecution)
 const nodeExecutions = computed(() => executionsStore.nodeExecutions)
 
+const currentWorkflowDefinition = computed(() => {
+  const execution = currentExecution.value
+  if (!execution) return null
+
+  if (workflowsStore.currentWorkflow?.id === execution.workflow_id) {
+    return workflowsStore.currentWorkflow
+  }
+
+  return workflowsStore.workflows.find(workflow => workflow.id === execution.workflow_id) || null
+})
+
+const nodeExecutionMap = computed(() => {
+  return new Map(nodeExecutions.value.map(node => [node.node_id, node]))
+})
+
+const workflowEdges = computed<EdgeDefinition[]>(() => currentWorkflowDefinition.value?.edges || [])
+
+const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
+  const workflowNodes = currentWorkflowDefinition.value?.nodes || []
+  const seenNodeIds = new Set<string>()
+
+  const fromWorkflow = workflowNodes.map((node, index) => {
+    const execution = nodeExecutionMap.value.get(node.id) || null
+    seenNodeIds.add(node.id)
+
+    return {
+      nodeId: node.id,
+      label: getWorkflowNodeLabel(node),
+      nodeType: node.type,
+      status: execution?.status || 'not-run',
+      sequence: index + 1,
+      incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
+      outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
+      definition: node,
+      execution
+    }
+  })
+
+  const orphanExecutions = nodeExecutions.value
+    .filter(node => !seenNodeIds.has(node.node_id))
+    .map((node, index) => ({
+      nodeId: node.node_id,
+      label: NODE_CONFIGS[node.node_type as keyof typeof NODE_CONFIGS]?.label || node.node_type,
+      nodeType: node.node_type,
+      status: node.status,
+      sequence: fromWorkflow.length + index + 1,
+      incomingCount: 0,
+      outgoingCount: 0,
+      definition: null,
+      execution: node
+    }))
+
+  return [...fromWorkflow, ...orphanExecutions]
+})
+
 const selectedNodeExecution = computed(() => {
   if (!rawNodeId.value) return null
   return nodeExecutions.value.find(node => node.node_id === rawNodeId.value) || null
 })
 
+const selectedNodeView = computed(() => {
+  if (!rawNodeId.value) return null
+  return executionNodeViewModels.value.find(node => node.nodeId === rawNodeId.value) || null
+})
+
 const completedNodeCount = computed(() => {
-  return nodeExecutions.value.filter(node => ['success', 'completed', 'failed', 'skipped'].includes(node.status)).length
+  return executionNodeViewModels.value.filter(node => ['success', 'completed', 'failed', 'skipped'].includes(node.status)).length
 })
 
 const progressPercent = computed(() => {
-  if (nodeExecutions.value.length === 0) return 0
-  return Math.round((completedNodeCount.value / nodeExecutions.value.length) * 100)
+  if (executionNodeViewModels.value.length === 0) return 0
+  return Math.round((completedNodeCount.value / executionNodeViewModels.value.length) * 100)
+})
+
+const notRunNodeCount = computed(() => {
+  return executionNodeViewModels.value.filter(node => node.status === 'not-run').length
+})
+
+const failedNodeCount = computed(() => {
+  return executionNodeViewModels.value.filter(node => node.status === 'failed').length
 })
 
 const displayExecutionStatus = computed(() => {
@@ -173,6 +255,10 @@ function formatDuration(seconds: number | null) {
   return remain === 0 ? `${minutes}m` : `${minutes}m ${remain}s`
 }
 
+function getWorkflowNodeLabel(node: NodeDefinition) {
+  return NODE_CONFIGS[node.type]?.label || node.type
+}
+
 function getStatusTone(status: string) {
   switch (status) {
     case 'completed':
@@ -182,14 +268,18 @@ function getStatusTone(status: string) {
       return 'danger'
     case 'running':
       return 'warning'
+    case 'not-run':
+    case 'skipped':
+      return 'info'
     default:
       return 'info'
   }
 }
 
 function getServerLabel(serverId: unknown) {
-  if (typeof serverId !== 'number') return 'Unknown server'
-  return serverNameMap.value.get(serverId) || `Server #${serverId}`
+  const numericServerId = Number(serverId)
+  if (!Number.isFinite(numericServerId)) return 'Unknown server'
+  return serverNameMap.value.get(numericServerId) || `Server #${numericServerId}`
 }
 
 function goToWorkflowEditor() {
@@ -202,9 +292,12 @@ async function loadExecution(executionId: number, syncRoute = true) {
   try {
     selectedExecutionId.value = executionId
     rawNodeId.value = null
-    await executionsStore.fetchExecution(executionId)
-    await executionsStore.fetchNodeExecutions(executionId)
-    rawNodeId.value = executionsStore.nodeExecutions[0]?.node_id || null
+    const execution = await executionsStore.fetchExecution(executionId)
+    await Promise.all([
+      workflowsStore.fetchWorkflow(execution.workflow_id),
+      executionsStore.fetchNodeExecutions(executionId)
+    ])
+    rawNodeId.value = executionNodeViewModels.value[0]?.nodeId || null
 
     if (syncRoute) {
       await router.replace({
@@ -452,6 +545,14 @@ onUnmounted(() => {
               <div class="metric-label">节点进度</div>
               <div class="metric-value">{{ progressPercent }}%</div>
             </div>
+            <div class="metric-card">
+              <div class="metric-label">未执行节点</div>
+              <div class="metric-value">{{ notRunNodeCount }}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">失败节点</div>
+              <div class="metric-value">{{ failedNodeCount }}</div>
+            </div>
           </div>
 
           <ElDescriptions :column="2" border class="execution-descriptions">
@@ -466,30 +567,31 @@ onUnmounted(() => {
           <ElCard class="panel" shadow="never">
             <template #header>
               <div class="panel-title">
-                <span>节点时间线</span>
-                <ElTag type="info" effect="plain">{{ nodeExecutions.length }} 节点</ElTag>
+                <span>工作流节点执行视图</span>
+                <ElTag type="info" effect="plain">{{ executionNodeViewModels.length }} 节点</ElTag>
               </div>
             </template>
 
-            <div v-if="nodeExecutions.length === 0" class="panel-empty">
-              <span class="empty-text">该执行尚未产生节点记录</span>
+            <div v-if="executionNodeViewModels.length === 0" class="panel-empty">
+              <span class="empty-text">该执行尚未产生工作流节点信息</span>
             </div>
 
             <div v-else class="timeline-list">
               <button
-                v-for="node in nodeExecutions"
-                :key="node.node_id"
+                v-for="node in executionNodeViewModels"
+                :key="node.nodeId"
                 type="button"
                 class="timeline-item"
-                :class="{ active: rawNodeId === node.node_id }"
-                @click="rawNodeId = node.node_id"
+                :class="{ active: rawNodeId === node.nodeId, 'not-run': node.status === 'not-run' }"
+                @click="rawNodeId = node.nodeId"
               >
+                <div class="timeline-sequence">{{ node.sequence }}</div>
                 <div class="timeline-dot" :class="node.status" />
                 <div class="timeline-main">
                   <div class="timeline-title-row">
                     <div>
-                      <div class="timeline-title">{{ node.node_type }}</div>
-                      <div class="timeline-id">{{ node.node_id }}</div>
+                      <div class="timeline-title">{{ node.label }}</div>
+                      <div class="timeline-id">{{ node.nodeType }} · {{ node.nodeId }}</div>
                     </div>
                     <ElTag :type="getStatusTone(node.status)" effect="plain">
                       {{ node.status }}
@@ -497,12 +599,16 @@ onUnmounted(() => {
                   </div>
 
                   <div class="timeline-meta">
-                    <span><Clock class="inline-icon" /> {{ formatDuration(node.duration) }}</span>
-                    <span><Monitor class="inline-icon" /> {{ getServerLabel(node.input_data?.server_id) }}</span>
+                    <span><Clock class="inline-icon" /> {{ formatDuration(node.execution?.duration ?? null) }}</span>
+                    <span><Monitor class="inline-icon" /> {{ getServerLabel(node.execution?.input_data?.server_id) }}</span>
+                    <span>{{ node.incomingCount }} 入 / {{ node.outgoingCount }} 出</span>
                   </div>
 
-                  <div v-if="node.error_message" class="timeline-error">
-                    {{ node.error_message }}
+                  <div v-if="node.status === 'not-run'" class="timeline-note">
+                    该节点属于当前工作流，但本次执行尚未运行到这里。
+                  </div>
+                  <div v-if="node.execution?.error_message" class="timeline-error">
+                    {{ node.execution.error_message }}
                   </div>
                 </div>
               </button>
@@ -518,37 +624,70 @@ onUnmounted(() => {
                     type="info"
                     effect="plain"
                     class="panel-node-tag"
-                    :class="{ 'is-empty': !selectedNodeExecution }"
+                    :class="{ 'is-empty': !selectedNodeView }"
                   >
-                    {{ selectedNodeExecution?.node_type || 'placeholder-node' }}
+                    {{ selectedNodeView?.label || 'placeholder-node' }}
                   </ElTag>
                 </div>
               </div>
             </template>
 
-            <div v-if="!selectedNodeExecution" class="panel-empty">
+            <div v-if="!selectedNodeView" class="panel-empty">
               <span class="empty-text">选择左侧节点查看原始信息</span>
             </div>
 
             <template v-else>
+              <div class="node-detail-grid">
+                <div>
+                  <div class="raw-label">节点</div>
+                  <div class="detail-value">{{ selectedNodeView.label }}</div>
+                </div>
+                <div>
+                  <div class="raw-label">类型</div>
+                  <div class="detail-value">{{ selectedNodeView.nodeType }}</div>
+                </div>
+                <div>
+                  <div class="raw-label">状态</div>
+                  <ElTag :type="getStatusTone(selectedNodeView.status)" effect="plain">
+                    {{ selectedNodeView.status }}
+                  </ElTag>
+                </div>
+                <div>
+                  <div class="raw-label">拓扑</div>
+                  <div class="detail-value">{{ selectedNodeView.incomingCount }} 入 / {{ selectedNodeView.outgoingCount }} 出</div>
+                </div>
+              </div>
+
               <div class="raw-summary">
                 <ElAlert
-                  v-if="selectedNodeExecution.error_message"
+                  v-if="selectedNodeExecution?.error_message"
                   :title="selectedNodeExecution.error_message"
                   type="error"
                   :closable="false"
                   show-icon
                 />
+                <ElAlert
+                  v-else-if="!selectedNodeExecution"
+                  title="该节点还没有执行记录，通常表示执行尚未到达这里，或前序节点失败后工作流已停止。"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                />
+              </div>
+
+              <div v-if="selectedNodeView.definition" class="raw-block">
+                <div class="raw-label">Workflow Config</div>
+                <pre class="raw-pre">{{ stringifyData(selectedNodeView.definition.config) }}</pre>
               </div>
 
               <div class="raw-block">
                 <div class="raw-label">Input</div>
-                <pre class="raw-pre">{{ stringifyData(selectedNodeExecution.input_data) }}</pre>
+                <pre class="raw-pre">{{ stringifyData(selectedNodeExecution?.input_data) }}</pre>
               </div>
 
               <div class="raw-block">
                 <div class="raw-label">Output</div>
-                <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution.output_data) }}</pre>
+                <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution?.output_data) }}</pre>
               </div>
             </template>
           </ElCard>
@@ -716,7 +855,7 @@ onUnmounted(() => {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -737,6 +876,22 @@ onUnmounted(() => {
   color: #64748b;
   font-size: 10px;
   font-weight: 600;
+}
+
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.detail-value {
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-word;
 }
 
 .timeline-list {
@@ -770,6 +925,24 @@ onUnmounted(() => {
   border-color: #3b82f6;
 }
 
+.timeline-item.not-run {
+  background: #f8fafc;
+}
+
+.timeline-sequence {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .timeline-dot {
   width: 10px;
   height: 10px;
@@ -791,6 +964,11 @@ onUnmounted(() => {
   background: #f59e0b;
 }
 
+.timeline-dot.not-run,
+.timeline-dot.skipped {
+  background: #cbd5e1;
+}
+
 .timeline-main {
   flex: 1;
 }
@@ -805,6 +983,12 @@ onUnmounted(() => {
 .timeline-error {
   margin-top: 6px;
   color: #ef4444;
+  font-size: 10px;
+}
+
+.timeline-note {
+  margin-top: 6px;
+  color: #64748b;
   font-size: 10px;
 }
 
@@ -841,7 +1025,8 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .page-grid,
   .detail-grid,
-  .overview-grid {
+  .overview-grid,
+  .node-detail-grid {
     grid-template-columns: 1fr;
   }
 }
