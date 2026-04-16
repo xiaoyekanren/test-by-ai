@@ -82,28 +82,6 @@ const nodeCategoryLabels = {
 } as const
 const nodeCategoryOrder = ['basic', 'iotdb', 'control', 'result'] as const
 
-// 画布上已有节点的选项（用于节点切换）
-const configDialogNodeOptions = computed(() => {
-  return workflowsStore.editorNodes.map(node => {
-    const config = NODE_CONFIGS[node.data.nodeType]
-    const label = node.data.label || config?.label || node.id
-    const category = config?.category || 'basic'
-    return {
-      value: node.id,
-      label,
-      typeLabel: config?.label || node.data.nodeType,
-      category,
-      categoryLabel: nodeCategoryLabels[category],
-      color: config?.color || '#409eff',
-      iconSymbol: label.charAt(0).toUpperCase() || 'N',
-      shortId: node.id.slice(0, 12)
-    }
-  })
-})
-const configDialogOtherNodeOptions = computed(() => {
-  return configDialogNodeOptions.value.filter(option => option.value !== workflowsStore.selectedNodeId)
-})
-
 // 所有支持的卡片类型选项（用于卡片类型浏览）
 const allNodeTypeOptions = computed(() => {
   return Object.values(NODE_CONFIGS).map(config => ({
