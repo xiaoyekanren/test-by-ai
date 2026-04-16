@@ -26,7 +26,32 @@ import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
 import { NODE_CONFIGS } from '@/types'
-import type { EdgeDefinition, NodeDefinition, NodeExecution } from '@/types'
+import type { NodeDefinition, NodeExecution } from '@/types'
+
+interface WorkflowStateSnapshotNode {
+  id: string
+  type: string
+  config?: Record<string, unknown>
+  position?: { x: number; y: number } | null
+  sequence?: number
+  status?: string
+  duration?: number | null
+  error_message?: string | null
+}
+
+interface WorkflowStateSnapshotEdge {
+  from: string
+  to: string
+  label?: string | null
+  status?: string
+}
+
+interface WorkflowStateSnapshot {
+  version: number
+  captured_at?: string
+  nodes: WorkflowStateSnapshotNode[]
+  edges: WorkflowStateSnapshotEdge[]
+}
 
 interface ExecutionNodeViewModel {
   nodeId: string
@@ -108,6 +133,19 @@ const filteredExecutions = computed(() => {
 const currentExecution = computed(() => executionsStore.currentExecution)
 const nodeExecutions = computed(() => executionsStore.nodeExecutions)
 
+const workflowStateSnapshot = computed<WorkflowStateSnapshot | null>(() => {
+  const value = currentExecution.value?.summary?.workflow_state
+  if (!value || typeof value !== 'object') return null
+  const snapshot = value as Partial<WorkflowStateSnapshot>
+  if (!Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return null
+  return {
+    version: Number(snapshot.version || 1),
+    captured_at: snapshot.captured_at,
+    nodes: snapshot.nodes,
+    edges: snapshot.edges
+  }
+})
+
 const currentWorkflowDefinition = computed(() => {
   const execution = currentExecution.value
   if (!execution) return null
@@ -123,9 +161,35 @@ const nodeExecutionMap = computed(() => {
   return new Map(nodeExecutions.value.map(node => [node.node_id, node]))
 })
 
-const workflowEdges = computed<EdgeDefinition[]>(() => currentWorkflowDefinition.value?.edges || [])
+const workflowEdges = computed<WorkflowStateSnapshotEdge[]>(() => {
+  if (workflowStateSnapshot.value) return workflowStateSnapshot.value.edges
+  return currentWorkflowDefinition.value?.edges || []
+})
 
 const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
+  if (workflowStateSnapshot.value) {
+    const snapshotNodes = workflowStateSnapshot.value.nodes
+    return snapshotNodes.map((node, index) => {
+      const execution = nodeExecutionMap.value.get(node.id) || null
+      return {
+        nodeId: node.id,
+        label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
+        nodeType: node.type,
+        status: node.status || execution?.status || 'not-run',
+        sequence: node.sequence || index + 1,
+        incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
+        outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
+        definition: {
+          id: node.id,
+          type: node.type as NodeDefinition['type'],
+          config: node.config || {},
+          position: node.position || null
+        },
+        execution
+      }
+    })
+  }
+
   const workflowNodes = currentWorkflowDefinition.value?.nodes || []
   const seenNodeIds = new Set<string>()
 
@@ -190,6 +254,13 @@ const failedNodeCount = computed(() => {
   return executionNodeViewModels.value.filter(node => node.status === 'failed').length
 })
 
+const executionSummaryDisplay = computed(() => {
+  const summary = currentExecution.value?.summary
+  if (!summary) return null
+  const { workflow_state: _workflowState, ...rest } = summary
+  return rest
+})
+
 const workflowGraphLayout = computed(() => {
   const graphScale = 0.55
   const padding = 24
@@ -230,7 +301,7 @@ const workflowGraphLayout = computed(() => {
         fromY: from.y + nodeHeight / 2,
         toX: to.x,
         toY: to.y + nodeHeight / 2,
-        status: getWorkflowEdgeStatus(from, to)
+        status: edge.status || getWorkflowEdgeStatus(from, to)
       }
     })
     .filter((edge): edge is GraphEdgeViewModel => Boolean(edge))
@@ -365,10 +436,14 @@ async function loadExecution(executionId: number, syncRoute = true) {
   try {
     selectedExecutionId.value = executionId
     const execution = await executionsStore.fetchExecution(executionId)
-    await Promise.all([
-      workflowsStore.fetchWorkflow(execution.workflow_id),
-      executionsStore.fetchNodeExecutions(executionId)
-    ])
+    if (execution.summary?.workflow_state && typeof execution.summary.workflow_state === 'object') {
+      await executionsStore.fetchNodeExecutions(executionId)
+    } else {
+      await Promise.all([
+        workflowsStore.fetchWorkflow(execution.workflow_id),
+        executionsStore.fetchNodeExecutions(executionId)
+      ])
+    }
 
     const nextNodes = executionNodeViewModels.value
     rawNodeId.value = nextNodes.some(node => node.nodeId === previousNodeId)
@@ -635,7 +710,7 @@ onUnmounted(() => {
             <ElDescriptionsItem label="创建时间">{{ formatDate(currentExecution.created_at) }}</ElDescriptionsItem>
             <ElDescriptionsItem label="开始时间">{{ formatDate(currentExecution.started_at) }}</ElDescriptionsItem>
             <ElDescriptionsItem label="结束时间">{{ formatDate(currentExecution.finished_at) }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="摘要">{{ stringifyData(currentExecution.summary) }}</ElDescriptionsItem>
+            <ElDescriptionsItem label="摘要">{{ stringifyData(executionSummaryDisplay) }}</ElDescriptionsItem>
           </ElDescriptions>
         </ElCard>
 
