@@ -60,18 +60,17 @@ const navigateTo = (path: string) => {
         </div>
 
         <!-- 主连接线 -->
-        <svg class="line-main" width="716" height="36" viewBox="0 0 716 36">
-          <line x1="358" y1="0" x2="358" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="110" y1="12" x2="606" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="110" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="358" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="606" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="110" y1="12" x2="110" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="358" y1="12" x2="358" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
-          <line x1="606" y1="12" x2="606" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
+        <svg class="line-main" width="600" height="36" viewBox="0 0 600 36">
+          <line x1="300" y1="0" x2="300" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="143" y1="12" x2="457" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="143" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="300" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="457" cy="12" r="3" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="143" y1="12" x2="143" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
+          <line x1="457" y1="12" x2="457" y2="36" stroke="#cbd5e1" stroke-width="1.5"/>
         </svg>
 
-        <!-- 三个分支卡片 -->
+        <!-- 两个分支卡片 -->
         <div class="branch-row">
           <div
             v-for="feature in branches"
@@ -92,9 +91,9 @@ const navigateTo = (path: string) => {
         </div>
 
         <!-- 工作流到运行分析的连接线 -->
-        <svg class="line-sub" width="716" height="30" viewBox="0 0 716 30">
-          <line x1="606" y1="0" x2="606" y2="30" stroke="#cbd5e1" stroke-width="1.5"/>
-          <circle cx="606" cy="30" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
+        <svg class="line-sub" width="600" height="30" viewBox="0 0 600 30">
+          <line x1="457" y1="0" x2="457" y2="30" stroke="#cbd5e1" stroke-width="1.5"/>
+          <circle cx="457" cy="30" r="3" fill="white" stroke="#8b5cf6" stroke-width="1.5"/>
         </svg>
 
         <!-- 运行分析卡片 -->
@@ -200,7 +199,7 @@ const navigateTo = (path: string) => {
 }
 
 .branch-card {
-  width: 220px;
+  width: 286px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -258,11 +257,11 @@ const navigateTo = (path: string) => {
   display: flex;
   justify-content: flex-end;
   width: 100%;
-  max-width: 716px;
+  max-width: 600px;
 }
 
 .sub-card {
-  width: 220px;
+  width: 286px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -329,7 +328,7 @@ const navigateTo = (path: string) => {
   }
 
   .branch-card {
-    width: 240px;
+    width: 286px;
   }
 
   .line-main {
@@ -346,7 +345,7 @@ const navigateTo = (path: string) => {
   }
 
   .sub-card {
-    width: 240px;
+    width: 286px;
   }
 }
 </style>
