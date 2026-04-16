@@ -99,5 +99,5 @@ def get_node_executions(execution_id: int, db: Session = Depends(get_db)):
 
     node_executions = db.query(NodeExecution).filter(
         NodeExecution.execution_id == execution_id
-    ).all()
+    ).order_by(NodeExecution.id.asc()).all()
     return node_executions
