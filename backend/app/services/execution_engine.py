@@ -253,7 +253,7 @@ class ExecutionEngine:
                 "type": str(node.get("type", "shell")),
                 "config": node.get("config", {}) or {},
                 "position": node.get("position"),
-                "sequence": sequence_by_node_id.get(node_id, index + 1),
+                "sequence": sequence_by_node_id.get(node_id, str(index + 1)),
                 "status": status,
                 "node_execution_id": node_execution.id if node_execution else None,
                 "started_at": node_execution.started_at.isoformat() if node_execution and node_execution.started_at else None,
@@ -262,7 +262,7 @@ class ExecutionEngine:
                 "error_message": node_execution.error_message if node_execution else None,
             })
 
-        snapshot_nodes.sort(key=lambda item: int(item.get("sequence") or 0))
+        snapshot_nodes.sort(key=lambda item: self._sequence_sort_key(str(item.get("sequence") or "")))
 
         for node_execution in node_executions:
             if node_execution.node_id in seen_node_ids:
@@ -309,7 +309,7 @@ class ExecutionEngine:
         self,
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]]
-    ) -> Dict[str, int]:
+    ) -> Dict[str, str]:
         node_ids: List[str] = []
         node_index: Dict[str, int] = {}
         node_positions: Dict[str, Dict[str, Any]] = {}
@@ -340,25 +340,46 @@ class ExecutionEngine:
                 node_index.get(node_id, 0)
             )
 
-        ready = sorted([node_id for node_id in node_ids if not parents[node_id]], key=sort_key)
-        remaining = {node_id: set(parent_ids) for node_id, parent_ids in parents.items()}
-        ordered: List[str] = []
+        remaining = set(node_ids)
+        completed: Set[str] = set()
+        layer = 1
+        sequence_by_node_id: Dict[str, str] = {}
 
-        while ready:
-            node_id = ready.pop(0)
-            if node_id in ordered:
-                continue
-            ordered.append(node_id)
-            for child_id in sorted(children[node_id], key=sort_key):
-                remaining[child_id].discard(node_id)
-                if not remaining[child_id] and child_id not in ordered and child_id not in ready:
-                    ready.append(child_id)
-            ready.sort(key=sort_key)
+        while remaining:
+            ready = [
+                node_id for node_id in remaining
+                if all(parent_id in completed for parent_id in parents[node_id])
+            ]
+            if not ready:
+                ready = list(remaining)
+            ready = sorted(ready, key=sort_key)
 
-        for node_id in sorted([node_id for node_id in node_ids if node_id not in ordered], key=sort_key):
-            ordered.append(node_id)
+            if len(ready) == 1:
+                sequence_by_node_id[ready[0]] = str(layer)
+            else:
+                for index, node_id in enumerate(ready, 1):
+                    sequence_by_node_id[node_id] = f"{layer}-{index}"
 
-        return {node_id: index + 1 for index, node_id in enumerate(ordered)}
+            for node_id in ready:
+                remaining.discard(node_id)
+                completed.add(node_id)
+            layer += 1
+
+        return sequence_by_node_id
+
+    def _sequence_sort_key(self, sequence: str) -> tuple[int, int]:
+        parts = sequence.split("-", 1)
+        try:
+            layer = int(parts[0])
+        except ValueError:
+            layer = 0
+        branch = 0
+        if len(parts) > 1:
+            try:
+                branch = int(parts[1])
+            except ValueError:
+                branch = 0
+        return layer, branch
 
     def _snapshot_edge_status(self, from_status: str, to_status: str) -> str:
         if from_status == "failed":

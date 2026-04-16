@@ -63,7 +63,7 @@ interface ExecutionNodeViewModel {
   label: string
   nodeType: string
   status: string
-  sequence: number
+  sequence: string
   incomingCount: number
   outgoingCount: number
   definition: NodeDefinition | null
@@ -149,12 +149,13 @@ const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
   return snapshotNodes
     .map((node, index) => {
       const execution = nodeExecutionMap.value.get(node.id) || null
+      const sequence = String(node.sequence || index + 1)
       return {
         nodeId: node.id,
         label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
         nodeType: node.type,
         status: node.status || execution?.status || 'not-run',
-        sequence: node.sequence || index + 1,
+        sequence,
         incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
         outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
         definition: {
@@ -166,7 +167,7 @@ const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
         execution
       }
     })
-    .sort((left, right) => left.sequence - right.sequence)
+    .sort((left, right) => compareSequence(left.sequence, right.sequence))
 })
 
 const selectedNodeExecution = computed(() => {
@@ -322,6 +323,21 @@ function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeVi
   if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
   if (to.status === 'running') return 'running'
   return 'pending'
+}
+
+function compareSequence(left: string, right: string) {
+  const parse = (value: string) => {
+    const [layerText, branchText = '0'] = value.split('-', 2)
+    const layer = Number(layerText)
+    const branch = Number(branchText)
+    return [
+      Number.isFinite(layer) ? layer : 0,
+      Number.isFinite(branch) ? branch : 0
+    ]
+  }
+  const [leftLayer, leftBranch] = parse(left)
+  const [rightLayer, rightBranch] = parse(right)
+  return leftLayer - rightLayer || leftBranch - rightBranch
 }
 
 function getNodeViewById(nodeId: string) {
