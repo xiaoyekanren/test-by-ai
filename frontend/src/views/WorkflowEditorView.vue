@@ -9,10 +9,13 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 
 import {
+  ElButton,
   ElDialog,
   ElMessage,
-  ElMessageBox
+  ElMessageBox,
+  ElScrollbar
 } from 'element-plus'
+import { Switch } from '@element-plus/icons-vue'
 import NodePalette from '@/components/workflow/NodePalette.vue'
 import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
@@ -60,6 +63,7 @@ const executionRunRequestId = ref(0)
 const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
 const editorNodeExecutions = ref<NodeExecution[]>([])
 const configDialogVisible = ref(false)
+const nodeSwitcherDialogVisible = ref(false)
 
 const selectedNodeConfig = computed(() => {
   const nodeType = workflowsStore.selectedNode?.data.nodeType
@@ -70,6 +74,50 @@ const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edi
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
+const nodeCategoryLabels = {
+  basic: 'Basic Nodes',
+  iotdb: 'IoTDB Nodes',
+  control: 'Control Nodes',
+  result: 'Result Nodes'
+} as const
+const nodeCategoryOrder = ['basic', 'iotdb', 'control', 'result'] as const
+
+// 所有支持的卡片类型选项（用于卡片类型浏览）
+const allNodeTypeOptions = computed(() => {
+  return Object.values(NODE_CONFIGS).map(config => ({
+    value: config.type,
+    label: config.label,
+    typeLabel: config.label,
+    category: config.category,
+    categoryLabel: nodeCategoryLabels[config.category],
+    color: config.color,
+    iconSymbol: config.label.charAt(0).toUpperCase()
+  }))
+})
+
+// 所有卡片类型按类别分组
+const allNodeTypeGroups = computed(() => {
+  const groups = new Map<string, {
+    categoryLabel: string
+    color: string
+    options: typeof allNodeTypeOptions.value
+  }>()
+
+  allNodeTypeOptions.value.forEach(option => {
+    if (!groups.has(option.category)) {
+      groups.set(option.category, {
+        categoryLabel: option.categoryLabel,
+        color: option.color,
+        options: []
+      })
+    }
+    groups.get(option.category)?.options.push(option)
+  })
+
+  return nodeCategoryOrder
+    .map(category => groups.get(category))
+    .filter((group): group is NonNullable<typeof group> => Boolean(group))
+})
 const fitViewOptions = { padding: 0.2, maxZoom: 2 }
 
 const nodeExecutionStatusById = computed(() => {
@@ -226,6 +274,26 @@ const handleNodeDoubleClick = (nodeId: string) => {
 
 const handleConfigDialogClosed = () => {
   configDialogVisible.value = false
+  nodeSwitcherDialogVisible.value = false
+}
+
+// 点击卡片类型后的处理 - 替换当前节点的类型
+const handleNodeTypeClick = (nodeType: string) => {
+  if (!workflowsStore.selectedNodeId) return
+
+  const newNodeType = nodeType as NodeType
+  const currentNodeType = workflowsStore.selectedNode?.data.nodeType
+
+  if (currentNodeType === newNodeType) {
+    // 类型相同，直接关闭弹窗
+    nodeSwitcherDialogVisible.value = false
+    return
+  }
+
+  // 替换节点类型
+  workflowsStore.replaceNodeType(workflowsStore.selectedNodeId, newNodeType)
+  nodeSwitcherDialogVisible.value = false
+  ElMessage.success(`已替换为「${NODE_CONFIGS[newNodeType]?.label || nodeType}」`)
 }
 
 // Handle edge click (selection)
@@ -493,6 +561,13 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
               {{ selectedNodeDescription }}
             </div>
           </div>
+          <ElButton
+            class="config-dialog-switch-button"
+            :icon="Switch"
+            circle
+            title="查看全部卡片类型"
+            @click="nodeSwitcherDialogVisible = true"
+          />
         </div>
       </template>
       <NodeConfigPanel />
@@ -504,6 +579,49 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
           </span>
         </div>
       </template>
+    </ElDialog>
+
+    <ElDialog
+      v-model="nodeSwitcherDialogVisible"
+      width="680px"
+      top="16vh"
+      append-to-body
+      class="node-switch-dialog"
+      title="卡片类型"
+    >
+      <div class="node-switch-dialog-body">
+        <div class="node-switch-dialog-hint">全部支持的卡片类型（共 {{ allNodeTypeOptions.length }} 种）</div>
+        <ElScrollbar class="node-switch-list">
+          <section
+            v-for="group in allNodeTypeGroups"
+            :key="group.categoryLabel"
+            class="node-switch-group"
+          >
+            <div class="node-switch-group-title">
+              <span class="node-switch-group-mark" :style="{ background: group.color }"></span>
+              <span>{{ group.categoryLabel }}</span>
+              <span class="node-switch-group-count">{{ group.options.length }}</span>
+            </div>
+            <div class="node-switch-grid">
+              <button
+                v-for="option in group.options"
+                :key="option.value"
+                class="node-switch-card"
+                type="button"
+                @click="handleNodeTypeClick(option.value)"
+              >
+                <span class="node-switch-card-icon" :style="{ background: option.color }">
+                  {{ option.iconSymbol }}
+                </span>
+                <span class="node-switch-card-main">
+                  <span class="node-switch-card-title">{{ option.label }}</span>
+                  <span class="node-switch-card-meta">{{ option.typeLabel }}</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        </ElScrollbar>
+      </div>
     </ElDialog>
   </div>
 </template>
@@ -605,10 +723,11 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
 }
 
 .config-dialog-header-enhanced {
+  position: relative;
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  padding: 24px;
+  padding: 24px 96px 24px 24px;
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -669,5 +788,165 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
   color: #64748b;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.config-dialog-switch-button {
+  position: absolute;
+  top: 20px;
+  right: 52px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #475569;
+  background: transparent;
+  border: none;
+}
+
+.config-dialog-switch-button:hover {
+  color: var(--node-color);
+}
+
+.node-switch-dialog :deep(.el-dialog) {
+  border-radius: 8px !important;
+}
+
+.node-switch-dialog :deep(.el-dialog__body) {
+  padding: 0 20px 20px;
+}
+
+.node-switch-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-switch-dialog-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.node-switch-list {
+  height: min(58vh, 520px);
+}
+
+.node-switch-group {
+  padding-right: 8px;
+  margin-bottom: 18px;
+}
+
+.node-switch-group:last-child {
+  margin-bottom: 0;
+}
+
+.node-switch-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.node-switch-group-mark {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.node-switch-group-count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.node-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.node-switch-card {
+  width: 100%;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.node-switch-card:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.node-switch-card-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.node-switch-card-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.node-switch-card-title {
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-switch-card-meta {
+  max-width: 100%;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .config-dialog-header-enhanced {
+    padding-right: 64px;
+    flex-wrap: wrap;
+  }
+
+  .config-dialog-switch-button {
+    top: 14px;
+    right: 44px;
+  }
+
+  .node-switch-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

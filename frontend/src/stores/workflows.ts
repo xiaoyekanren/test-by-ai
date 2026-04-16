@@ -58,10 +58,10 @@ const normalizeClusterNodeListForEditor = (
 
   return value
     .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .map((item, index) => ({
+    .map(item => ({
       ...item,
       node_role: item.node_role || role,
-      install_dir: item.install_dir || `${baseInstallDir.replace(/\/+$/, '')}/${role}-${index + 1}`
+      install_dir: item.install_dir || baseInstallDir.replace(/\/+$/, '')
     }))
 }
 
@@ -542,6 +542,19 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
   }
 
+  // Replace node type (保持节点位置和连接不变)
+  function replaceNodeType(nodeId: string, newNodeType: NodeType) {
+    const node = editorNodes.value.find(n => n.id === nodeId)
+    if (node) {
+      const config = NODE_CONFIGS[newNodeType]
+      node.data.nodeType = newNodeType
+      node.data.label = config.label
+      node.data.config = JSON.parse(JSON.stringify(config.defaultConfig))
+      reapplyInheritedConfig()
+      saveHistory()
+    }
+  }
+
   // Delete node
   function deleteNode(nodeId: string) {
     editorNodes.value = editorNodes.value.filter(n => n.id !== nodeId)
@@ -716,6 +729,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     updateNodePosition,
     updateNodeConfig,
     updateNodeLabel,
+    replaceNodeType,
     deleteNode,
     addEdge,
     deleteEdge,
