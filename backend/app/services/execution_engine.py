@@ -3,10 +3,12 @@ import os
 import random
 import shlex
 import time
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from threading import RLock
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.database import Execution, NodeExecution, Server, Workflow
 from app.services.ssh_service import SSHService
@@ -17,9 +19,20 @@ logger = logging.getLogger(__name__)
 class ExecutionEngine:
     """Service for managing workflow executions."""
 
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        session_factory: Optional[Callable[[], Session]] = None,
+        reservation_lock: Optional[RLock] = None
+    ):
         self.db = db
         self.ssh_service = SSHService()
+        self.session_factory = session_factory or sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=db.get_bind()
+        )
+        self.reservation_lock = reservation_lock or RLock()
 
     def create_execution(
         self,
@@ -90,93 +103,83 @@ class ExecutionEngine:
         self.db.commit()
 
         nodes = workflow.nodes or []
+        edges = workflow.edges or []
         passed_count = 0
         failed_count = 0
-        context: Dict[str, Any] = {}
+        skipped_count = 0
 
         try:
-            for node in nodes:
-                node_id = node.get("id")
-                node_type = node.get("type", "shell")
-                # Copy config to avoid mutating original workflow definition
-                config = dict(node.get("config", {}) or {})
-                config["_execution_id"] = execution_id
-                config["_node_id"] = node_id
+            node_order, nodes_by_id, parents, children = self._build_execution_graph(nodes, edges)
+            pending: Set[str] = set(node_order)
+            running: Dict[Future, str] = {}
+            statuses: Dict[str, str] = {}
+            context_updates: Dict[str, Dict[str, Any]] = {}
 
-                if self._node_requires_server(node_type):
-                    explicit_region = config.get("region") not in (None, "")
-                    server = self._resolve_server_with_region(config, context)
-                    if server:
-                        self._write_server_config(config, server)
-                        context["server_id"] = server.id
-                        context["server_name"] = server.name
-                        context["host"] = server.host
-                        context["region"] = server.region
-                        logger.info(
-                            "Resolved server %s (%s) in region %s for node %s",
-                            server.id, server.name, server.region, node_id
+            max_workers = max(1, min(8, len(node_order) or 1))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                while pending or running:
+                    blocked = [
+                        node_id for node_id in node_order
+                        if node_id in pending and any(statuses.get(parent_id) in {"failed", "skipped"} for parent_id in parents[node_id])
+                    ]
+                    for node_id in blocked:
+                        pending.remove(node_id)
+                        statuses[node_id] = "skipped"
+                        skipped_count += 1
+                        self._create_skipped_node_execution(
+                            execution_id,
+                            nodes_by_id[node_id],
+                            "Skipped because an upstream node did not complete successfully"
                         )
-                    elif config.get("region") in (None, ""):
-                        config["region"] = self._target_region(config, context)
-                    merge_context = context
-                    if explicit_region and not server:
-                        logger.warning(
-                            "No idle server found in explicit region %s for node %s; inherited server context will not be used",
-                            config.get("region"),
-                            node_id
+
+                    ready = [
+                        node_id for node_id in node_order
+                        if node_id in pending and all(statuses.get(parent_id) == "success" for parent_id in parents[node_id])
+                    ]
+                    for node_id in ready:
+                        pending.remove(node_id)
+                        context = self._merge_parent_contexts(parents[node_id], context_updates)
+                        future = executor.submit(
+                            self._execute_workflow_node,
+                            execution_id,
+                            nodes_by_id[node_id],
+                            context
                         )
-                        merge_context = {
-                            key: value
-                            for key, value in context.items()
-                            if key not in {"server_id", "server_name", "host"}
-                        }
-                    config = self._merge_config_with_context(config, merge_context)
+                        running[future] = node_id
 
-                node_execution = NodeExecution(
-                    execution_id=execution_id,
-                    node_id=node_id,
-                    node_type=node_type,
-                    status="running",
-                    started_at=datetime.utcnow(),
-                    input_data=config
-                )
-                self.db.add(node_execution)
-                self.db.commit()
-                self.db.refresh(node_execution)
+                    if not running:
+                        if pending:
+                            for node_id in list(pending):
+                                pending.remove(node_id)
+                                statuses[node_id] = "skipped"
+                                skipped_count += 1
+                                self._create_skipped_node_execution(
+                                    execution_id,
+                                    nodes_by_id[node_id],
+                                    "Skipped because workflow graph contains a cycle or unreachable dependency"
+                                )
+                        break
 
-                try:
-                    result = self._execute_node(node_type, config, context)
-                    node_execution.output_data = result
-                    exit_status = result.get("exit_status", -1)
-                    node_execution.status = "success" if exit_status == 0 else "failed"
-                    if exit_status != 0:
-                        node_execution.error_message = (
-                            result.get("error")
-                            or result.get("stderr")
-                            or "Unknown error"
-                        )
-                    else:
-                        context.update(self._build_context_updates(node_type, config, result))
+                    done, _ = wait(running.keys(), return_when=FIRST_COMPLETED)
+                    for future in done:
+                        node_id = running.pop(future)
+                        try:
+                            node_result = future.result()
+                        except Exception as exc:
+                            logger.exception("Error executing node %s", node_id)
+                            node_result = {
+                                "status": "failed",
+                                "context": {},
+                                "error": str(exc)
+                            }
 
-                    if node_execution.status == "success":
-                        passed_count += 1
-                    else:
-                        failed_count += 1
-                except Exception as exc:
-                    logger.exception("Error executing node %s", node_id)
-                    node_execution.status = "failed"
-                    node_execution.error_message = str(exc)
-                    node_execution.output_data = {"exit_status": -1, "error": str(exc)}
-                    failed_count += 1
-
-                node_execution.finished_at = datetime.utcnow()
-                node_execution.duration = int(
-                    (node_execution.finished_at - node_execution.started_at).total_seconds()
-                )
-                self.db.commit()
-
-                if node_execution.status != "success":
-                    break
+                        status_value = str(node_result.get("status") or "failed")
+                        statuses[node_id] = status_value
+                        if status_value == "success":
+                            passed_count += 1
+                            context_updates[node_id] = dict(node_result.get("context") or {})
+                        else:
+                            failed_count += 1
 
             execution.finished_at = datetime.utcnow()
             execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
@@ -184,9 +187,10 @@ class ExecutionEngine:
                 "total": len(nodes),
                 "passed": passed_count,
                 "failed": failed_count,
+                "skipped": skipped_count,
             }
 
-            if failed_count == 0:
+            if failed_count == 0 and skipped_count == 0:
                 execution.status = "completed"
                 execution.result = "passed"
             else:
@@ -203,6 +207,184 @@ class ExecutionEngine:
             execution.result = "failed"
             execution.summary = {"error": str(exc)}
             self.db.commit()
+
+    def _build_execution_graph(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]]
+    ) -> tuple[List[str], Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
+        node_order: List[str] = []
+        nodes_by_id: Dict[str, Dict[str, Any]] = {}
+
+        for index, node in enumerate(nodes):
+            node_id = str(node.get("id") or f"node-{index}")
+            if node_id in nodes_by_id:
+                node_id = f"{node_id}-{index}"
+                node = {**node, "id": node_id}
+            node_order.append(node_id)
+            nodes_by_id[node_id] = node
+
+        parents: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
+        children: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
+
+        valid_edge_count = 0
+        for edge in edges:
+            from_id = edge.get("from")
+            to_id = edge.get("to")
+            if from_id not in nodes_by_id or to_id not in nodes_by_id:
+                continue
+            if from_id not in parents[to_id]:
+                parents[to_id].append(from_id)
+            if to_id not in children[from_id]:
+                children[from_id].append(to_id)
+            valid_edge_count += 1
+
+        # Preserve the old sequential behavior for legacy workflows that have
+        # nodes but no explicit edges.
+        if valid_edge_count == 0:
+            for from_id, to_id in zip(node_order, node_order[1:]):
+                parents[to_id].append(from_id)
+                children[from_id].append(to_id)
+
+        return node_order, nodes_by_id, parents, children
+
+    def _merge_parent_contexts(
+        self,
+        parent_ids: List[str],
+        context_updates: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        context: Dict[str, Any] = {}
+        for parent_id in parent_ids:
+            context.update(context_updates.get(parent_id, {}))
+        return context
+
+    def _create_skipped_node_execution(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        reason: str
+    ) -> None:
+        now = datetime.utcnow()
+        node_execution = NodeExecution(
+            execution_id=execution_id,
+            node_id=str(node.get("id")),
+            node_type=str(node.get("type", "shell")),
+            status="skipped",
+            started_at=now,
+            finished_at=now,
+            duration=0,
+            input_data=dict(node.get("config", {}) or {}),
+            output_data={"exit_status": -1, "skipped": True, "reason": reason},
+            error_message=reason
+        )
+        self.db.add(node_execution)
+        self.db.commit()
+
+    def _execute_workflow_node(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        db = self.session_factory()
+        try:
+            worker = ExecutionEngine(
+                db,
+                session_factory=self.session_factory,
+                reservation_lock=self.reservation_lock
+            )
+            worker.ssh_service = self.ssh_service
+            return worker._execute_workflow_node_in_session(execution_id, node, context)
+        finally:
+            db.close()
+
+    def _execute_workflow_node_in_session(
+        self,
+        execution_id: int,
+        node: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        node_id = node.get("id")
+        node_type = node.get("type", "shell")
+        config = dict(node.get("config", {}) or {})
+        config["_execution_id"] = execution_id
+        config["_node_id"] = node_id
+
+        with self.reservation_lock:
+            if self._node_uses_top_level_server(node_type):
+                explicit_region = config.get("region") not in (None, "")
+                server = self._resolve_server_with_region(config, context)
+                if server:
+                    self._write_server_config(config, server)
+                    logger.info(
+                        "Resolved server %s (%s) in region %s for node %s",
+                        server.id, server.name, server.region, node_id
+                    )
+                elif config.get("region") in (None, ""):
+                    config["region"] = self._target_region(config, context)
+                merge_context = context
+                if explicit_region and not server:
+                    logger.warning(
+                        "No idle server found in explicit region %s for node %s; inherited server context will not be used",
+                        config.get("region"),
+                        node_id
+                    )
+                    merge_context = {
+                        key: value
+                        for key, value in context.items()
+                        if key not in {"server_id", "server_name", "host"}
+                    }
+                config = self._merge_config_with_context(config, merge_context)
+
+            node_execution = NodeExecution(
+                execution_id=execution_id,
+                node_id=node_id,
+                node_type=node_type,
+                status="running",
+                started_at=datetime.utcnow(),
+                input_data=config
+            )
+            self.db.add(node_execution)
+            self.db.commit()
+            self.db.refresh(node_execution)
+
+        try:
+            result = self._execute_node(node_type, config, context)
+            node_execution.output_data = result
+            exit_status = result.get("exit_status", -1)
+            node_execution.status = "success" if exit_status == 0 else "failed"
+            if exit_status != 0:
+                node_execution.error_message = (
+                    result.get("error")
+                    or result.get("stderr")
+                    or "Unknown error"
+                )
+            with self.reservation_lock:
+                context_update = (
+                    self._build_context_updates(node_type, config, result)
+                    if node_execution.status == "success"
+                    else {}
+                )
+        except Exception as exc:
+            logger.exception("Error executing node %s", node_id)
+            node_execution.status = "failed"
+            node_execution.error_message = str(exc)
+            node_execution.output_data = {"exit_status": -1, "error": str(exc)}
+            context_update = {}
+
+        with self.reservation_lock:
+            node_execution.finished_at = datetime.utcnow()
+            node_execution.duration = int(
+                (node_execution.finished_at - node_execution.started_at).total_seconds()
+            )
+            self.db.commit()
+
+        return {
+            "node_id": node_id,
+            "status": node_execution.status,
+            "context": context_update,
+            "error": node_execution.error_message,
+        }
 
     def _execute_node(self, node_type: str, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         merged = self._merge_config_with_context(config, context)
@@ -584,38 +766,40 @@ class ExecutionEngine:
         seed_cn = config_nodes[0]
         seed = f"{seed_cn['host']}:{seed_cn['cn_internal_port']}"
 
-        for entry in config_nodes + data_nodes:
-            server = self._require_server(entry, context)
+        deploy_targets = self._group_cluster_entries_by_install(config_nodes + data_nodes)
+
+        for target in deploy_targets:
+            server = self._require_server({"server_id": target["server_id"]}, context)
+            entries = target["entries"]
             deploy_result = self._deploy_package_to_server(
                 server=server,
                 artifact_local_path=config.get("artifact_local_path"),
                 remote_package_path=self._required_str(config, "remote_package_path"),
-                install_dir=str(entry["install_dir"]),
+                install_dir=str(target["install_dir"]),
                 package_type=str(config.get("package_type", "auto")),
                 extract_subdir=str(config.get("extract_subdir", "") or "").strip("/"),
                 overwrite=bool(config.get("overwrite", False)),
                 timeout=int(config.get("timeout", 900)),
-                node_role=str(entry["node_role"])
+                node_role="cluster",
+                expected_scripts=[
+                    self._start_script_for_role(str(entry["node_role"]))
+                    for entry in entries
+                ]
             )
-            results.append({"step": "deploy", "node": entry, "result": deploy_result})
+            results.append({"step": "deploy", "node": target, "result": deploy_result})
             stdout_parts.append(deploy_result.get("stdout", ""))
             if deploy_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster deploy failed during package deployment", results, cluster_name, config_nodes, data_nodes)
 
-            replacements = self._build_cluster_replacements(
-                entry=entry,
-                cluster_name=cluster_name,
-                seed_config_node=seed,
-                common_config=common_config
-            )
+            replacements = self._build_cluster_replacements_for_entries(entries, cluster_name, seed, common_config)
             config_result = self._apply_config_file_to_server(
                 server=server,
-                file_path=self._default_config_path(str(entry["install_dir"])),
+                file_path=self._default_config_path(str(target["install_dir"])),
                 replacements=replacements,
                 timeout=int(config.get("timeout", 900)),
                 backup_before_write=bool(config.get("backup_before_write", True))
             )
-            results.append({"step": "config", "node": entry, "result": config_result})
+            results.append({"step": "config", "node": target, "result": config_result})
             stdout_parts.append(config_result.get("stdout", ""))
             if config_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster deploy failed during config write", results, cluster_name, config_nodes, data_nodes)
@@ -1121,7 +1305,8 @@ class ExecutionEngine:
         extract_subdir: str,
         overwrite: bool,
         timeout: int,
-        node_role: str
+        node_role: str,
+        expected_scripts: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         if not remote_package_path:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "remote_package_path is required"}
@@ -1140,7 +1325,7 @@ class ExecutionEngine:
         if detected_type is None:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Unsupported package_type"}
 
-        expected_script = self._start_script_for_role(node_role)
+        scripts_to_check = expected_scripts or [self._start_script_for_role(node_role)]
         tmp_dir = f"{install_dir}.extracting"
         commands = [
             "set -e",
@@ -1163,15 +1348,16 @@ class ExecutionEngine:
         else:
             source_dir_expr = '$(find ' + self._quote(tmp_dir) + " -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 
-        expected_script_path = f"{install_dir.rstrip('/')}/sbin/{expected_script}"
         commands.extend([
             f"source_dir={source_dir_expr}",
             'if [ -z "$source_dir" ]; then source_dir=' + self._quote(tmp_dir) + "; fi",
             f"mkdir -p {self._quote(install_dir)}",
-            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/",
-            f"test -f {self._quote(expected_script_path)}",
-            f"rm -rf {self._quote(tmp_dir)}"
+            f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/"
         ])
+        for script in sorted(set(scripts_to_check)):
+            expected_script_path = f"{install_dir.rstrip('/')}/sbin/{script}"
+            commands.append(f"test -f {self._quote(expected_script_path)}")
+        commands.append(f"rm -rf {self._quote(tmp_dir)}")
 
         result = self.ssh_service.run_command(
             host=server.host,
@@ -1186,7 +1372,8 @@ class ExecutionEngine:
             "remote_package_path": remote_package_path,
             "iotdb_home": install_dir,
             "conf_path": self._default_config_path(install_dir),
-            "expected_start_script": expected_script
+            "expected_start_script": sorted(set(scripts_to_check))[0],
+            "expected_start_scripts": sorted(set(scripts_to_check))
         })
         return payload
 
@@ -1208,7 +1395,7 @@ class ExecutionEngine:
 
             node_role = self._normalize_node_role(item.get("node_role") or role)
             host = str(item.get("host") or server.host)
-            install_dir = str(item.get("install_dir") or f"{base_install_dir.rstrip('/')}/{node_role}-{index + 1}")
+            install_dir = str(item.get("install_dir") or base_install_dir.rstrip("/"))
             normalized_item: Dict[str, Any] = {
                 "server_id": int(server_id),
                 "node_role": node_role,
@@ -1234,6 +1421,20 @@ class ExecutionEngine:
             normalized.append(normalized_item)
 
         return normalized
+
+    def _group_cluster_entries_by_install(self, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        grouped: Dict[tuple[int, str], Dict[str, Any]] = {}
+        for entry in entries:
+            key = (int(entry["server_id"]), str(entry["install_dir"]).rstrip("/"))
+            if key not in grouped:
+                grouped[key] = {
+                    "server_id": key[0],
+                    "host": entry["host"],
+                    "install_dir": key[1],
+                    "entries": []
+                }
+            grouped[key]["entries"].append(entry)
+        return list(grouped.values())
 
     def _build_cluster_replacements(
         self,
@@ -1267,6 +1468,27 @@ class ExecutionEngine:
         if isinstance(entry.get("config_items"), dict):
             for key, value in entry["config_items"].items():
                 replacements[str(key)] = str(value)
+
+        return replacements
+
+    def _build_cluster_replacements_for_entries(
+        self,
+        entries: List[Dict[str, Any]],
+        cluster_name: str,
+        seed_config_node: str,
+        common_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        replacements = {str(key): str(value) for key, value in common_config.items()}
+        replacements["cluster_name"] = cluster_name
+
+        for entry in entries:
+            role_replacements = self._build_cluster_replacements(
+                entry=entry,
+                cluster_name=cluster_name,
+                seed_config_node=seed_config_node,
+                common_config={}
+            )
+            replacements.update(role_replacements)
 
         return replacements
 
@@ -1457,6 +1679,13 @@ class ExecutionEngine:
                 server_id = ne.input_data.get("server_id")
                 if server_id is not None:
                     busy_ids.append(int(server_id))
+                for field in ("config_nodes", "data_nodes"):
+                    raw_nodes = ne.input_data.get(field)
+                    if not isinstance(raw_nodes, list):
+                        continue
+                    for item in raw_nodes:
+                        if isinstance(item, dict) and item.get("server_id") is not None:
+                            busy_ids.append(int(item["server_id"]))
 
         return list(set(busy_ids))
 
@@ -1470,6 +1699,16 @@ class ExecutionEngine:
             "iot_benchmark_wait"
         }
         return node_type in server_required_types
+
+    def _node_uses_top_level_server(self, node_type: str) -> bool:
+        """Check if generic server resolution should run before node execution."""
+        cluster_topology_types = {
+            "iotdb_cluster_deploy",
+            "iotdb_cluster_start",
+            "iotdb_cluster_check",
+            "iotdb_cluster_stop",
+        }
+        return self._node_requires_server(node_type) and node_type not in cluster_topology_types
 
     def _required_str(self, config: Dict[str, Any], *keys: str) -> str:
         for key in keys:
