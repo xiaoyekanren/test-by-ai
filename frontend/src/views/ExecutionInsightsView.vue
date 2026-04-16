@@ -146,85 +146,35 @@ const workflowStateSnapshot = computed<WorkflowStateSnapshot | null>(() => {
   }
 })
 
-const currentWorkflowDefinition = computed(() => {
-  const execution = currentExecution.value
-  if (!execution) return null
-
-  if (workflowsStore.currentWorkflow?.id === execution.workflow_id) {
-    return workflowsStore.currentWorkflow
-  }
-
-  return workflowsStore.workflows.find(workflow => workflow.id === execution.workflow_id) || null
-})
-
 const nodeExecutionMap = computed(() => {
   return new Map(nodeExecutions.value.map(node => [node.node_id, node]))
 })
 
 const workflowEdges = computed<WorkflowStateSnapshotEdge[]>(() => {
-  if (workflowStateSnapshot.value) return workflowStateSnapshot.value.edges
-  return currentWorkflowDefinition.value?.edges || []
+  return workflowStateSnapshot.value?.edges || []
 })
 
 const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
-  if (workflowStateSnapshot.value) {
-    const snapshotNodes = workflowStateSnapshot.value.nodes
-    return snapshotNodes.map((node, index) => {
-      const execution = nodeExecutionMap.value.get(node.id) || null
-      return {
-        nodeId: node.id,
-        label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
-        nodeType: node.type,
-        status: node.status || execution?.status || 'not-run',
-        sequence: node.sequence || index + 1,
-        incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
-        outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
-        definition: {
-          id: node.id,
-          type: node.type as NodeDefinition['type'],
-          config: node.config || {},
-          position: node.position || null
-        },
-        execution
-      }
-    })
-  }
-
-  const workflowNodes = currentWorkflowDefinition.value?.nodes || []
-  const seenNodeIds = new Set<string>()
-
-  const fromWorkflow = workflowNodes.map((node, index) => {
+  const snapshotNodes = workflowStateSnapshot.value?.nodes || []
+  return snapshotNodes.map((node, index) => {
     const execution = nodeExecutionMap.value.get(node.id) || null
-    seenNodeIds.add(node.id)
-
     return {
       nodeId: node.id,
-      label: getWorkflowNodeLabel(node),
+      label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
       nodeType: node.type,
-      status: execution?.status || 'not-run',
-      sequence: index + 1,
+      status: node.status || execution?.status || 'not-run',
+      sequence: node.sequence || index + 1,
       incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
       outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
-      definition: node,
+      definition: {
+        id: node.id,
+        type: node.type as NodeDefinition['type'],
+        config: node.config || {},
+        position: node.position || null
+      },
       execution
     }
   })
-
-  const orphanExecutions = nodeExecutions.value
-    .filter(node => !seenNodeIds.has(node.node_id))
-    .map((node, index) => ({
-      nodeId: node.node_id,
-      label: NODE_CONFIGS[node.node_type as keyof typeof NODE_CONFIGS]?.label || node.node_type,
-      nodeType: node.node_type,
-      status: node.status,
-      sequence: fromWorkflow.length + index + 1,
-      incomingCount: 0,
-      outgoingCount: 0,
-      definition: null,
-      execution: node
-    }))
-
-  return [...fromWorkflow, ...orphanExecutions]
 })
 
 const selectedNodeExecution = computed(() => {
@@ -391,10 +341,6 @@ function formatDuration(seconds: number | null) {
   return remain === 0 ? `${minutes}m` : `${minutes}m ${remain}s`
 }
 
-function getWorkflowNodeLabel(node: NodeDefinition) {
-  return NODE_CONFIGS[node.type]?.label || node.type
-}
-
 function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeViewModel) {
   if (from.status === 'failed') return 'failed'
   if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
@@ -436,14 +382,7 @@ async function loadExecution(executionId: number, syncRoute = true) {
   try {
     selectedExecutionId.value = executionId
     const execution = await executionsStore.fetchExecution(executionId)
-    if (execution.summary?.workflow_state && typeof execution.summary.workflow_state === 'object') {
-      await executionsStore.fetchNodeExecutions(executionId)
-    } else {
-      await Promise.all([
-        workflowsStore.fetchWorkflow(execution.workflow_id),
-        executionsStore.fetchNodeExecutions(executionId)
-      ])
-    }
+    await executionsStore.fetchNodeExecutions(execution.id)
 
     const nextNodes = executionNodeViewModels.value
     rawNodeId.value = nextNodes.some(node => node.nodeId === previousNodeId)
@@ -724,7 +663,7 @@ onUnmounted(() => {
             </template>
 
             <div v-if="executionNodeViewModels.length === 0" class="panel-empty">
-              <span class="empty-text">该执行尚未产生工作流节点信息</span>
+              <span class="empty-text">该执行没有工作流状态快照，请重新运行工作流生成状态图</span>
             </div>
 
             <div
