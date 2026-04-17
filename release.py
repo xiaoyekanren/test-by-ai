@@ -452,7 +452,7 @@ exec "$PYTHON_RUNNER" manage.py "$@"
 '''
 
 RELEASE_RUNTIME_BAT = r'''@echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "SCRIPT_DIR=%~dp0"
 set "VENV_DIR=%SCRIPT_DIR%venv"
@@ -470,7 +470,7 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     call :find_python
     if errorlevel 1 exit /b 1
     echo Virtual environment not found. Creating venv...
-    "%PYTHON_CMD%" -m venv "%VENV_DIR%"
+    "!PYTHON_CMD!" -m venv "%VENV_DIR%"
     if errorlevel 1 exit /b 1
 )
 "%VENV_DIR%\Scripts\python.exe" manage.py %*
@@ -484,7 +484,7 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
 if defined PYTHON_BIN (
     call :find_python
     if errorlevel 1 exit /b 1
-    "%PYTHON_CMD%" manage.py %*
+    "!PYTHON_CMD!" manage.py %*
     exit /b %ERRORLEVEL%
 )
 
@@ -501,7 +501,7 @@ if defined PYTHON_BIN (
         echo Python %PYTHON_MIN_VERSION%+ is required, but PYTHON_BIN is empty.
         exit /b 1
     )
-    "%PYTHON_CMD%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+    "!PYTHON_CMD!" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
     if errorlevel 1 (
         echo Python %PYTHON_MIN_VERSION%+ is required, but PYTHON_BIN=%PYTHON_BIN% is not available or is too old.
         exit /b 1
@@ -736,6 +736,13 @@ This directory is a final release package generated from the source tree.
 ```bash
 ./manage.sh install
 ./manage.sh start
+```
+
+On Windows:
+
+```bat
+manage.bat install
+manage.bat start
 ```
 
 Then open:

@@ -93,10 +93,11 @@
 **Windows:**
 
 ```bash
+manage.bat install
 manage.bat start
 ```
 
-首次部署建议先执行 `./manage.sh install` 检查 Python / Node.js 环境并安装依赖；之后执行 `./manage.sh start` 启动服务。`start` / `restart` 也会自动补齐缺失的后端和前端依赖。脚本会使用满足版本要求的 `python3` 或 `python` 创建虚拟环境，也可以通过 `PYTHON_BIN=/path/to/python ./manage.sh install` 指定 Python。
+首次部署建议先执行 `./manage.sh install` 或 `manage.bat install` 检查 Python / Node.js 环境并安装依赖；之后执行 `./manage.sh start` 或 `manage.bat start` 启动服务。`start` / `restart` 也会自动补齐缺失的后端和前端依赖。脚本会使用满足版本要求的 `python3` 或 `python` 创建虚拟环境，也可以通过 `PYTHON_BIN=/path/to/python ./manage.sh install` 指定 Python。
 
 环境要求：
 
@@ -221,6 +222,8 @@ python3.12 release.py
 - `data/logs/` 里的运行日志
 
 发布包中的 `manage.*` 只负责启动最终服务；源码目录中的 `manage.*` 仍只用于本地快速迭代。
+
+发布包在 Windows 上使用 `manage.bat install` 创建 `venv/` 并安装后端依赖。脚本在括号代码块内使用延迟变量展开读取 Python 解析结果，避免首次创建虚拟环境时把 Python 命令提前展开为空。
 
 ## 开发规范
 
