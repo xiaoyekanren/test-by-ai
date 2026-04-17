@@ -1,5 +1,7 @@
 # backend/tests/test_server_region.py
 import sys
+from datetime import UTC
+
 sys.path.insert(0, 'backend')
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -70,12 +72,14 @@ def test_server_create_schema_region():
         "status": "offline",
         "region": "异构",
         "is_busy": False,
-        "created_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00"
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00"
     }
     response = ServerResponse.model_validate(response_data)
     assert response.region == "异构"
     assert response.is_busy == False
+    assert response.created_at.tzinfo == UTC
+    assert response.updated_at.tzinfo == UTC
 
 
 def test_server_list_is_busy():
@@ -84,7 +88,7 @@ def test_server_list_is_busy():
     from sqlalchemy.orm import sessionmaker
     from app.models.database import Base, Server, Workflow, Execution, NodeExecution
     from app.api.servers import list_servers, _compute_busy_servers
-    from datetime import datetime
+    from app.utils.time import utc_now
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -107,7 +111,7 @@ def test_server_list_is_busy():
     execution = Execution(
         workflow_id=workflow.id,
         status="running",
-        started_at=datetime.utcnow()
+        started_at=utc_now()
     )
     db.add(execution)
     db.commit()
@@ -119,7 +123,7 @@ def test_server_list_is_busy():
         node_id="node1",
         node_type="shell",
         status="running",
-        started_at=datetime.utcnow(),
+        started_at=utc_now(),
         input_data={"server_id": server.id}
     )
     db.add(node_exec)
@@ -171,7 +175,7 @@ def test_get_server_returns_is_busy():
     from sqlalchemy.orm import sessionmaker
     from app.models.database import Base, Server, Workflow, Execution, NodeExecution
     from app.api.servers import get_server
-    from datetime import datetime
+    from app.utils.time import utc_now
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -194,7 +198,7 @@ def test_get_server_returns_is_busy():
     db.commit()
     db.refresh(workflow)
 
-    execution = Execution(workflow_id=workflow.id, status="running", started_at=datetime.utcnow())
+    execution = Execution(workflow_id=workflow.id, status="running", started_at=utc_now())
     db.add(execution)
     db.commit()
     db.refresh(execution)
@@ -204,7 +208,7 @@ def test_get_server_returns_is_busy():
         node_id="node1",
         node_type="shell",
         status="running",
-        started_at=datetime.utcnow(),
+        started_at=utc_now(),
         input_data={"server_id": server.id}
     )
     db.add(node_exec)

@@ -1,4 +1,5 @@
 -- 数据库结构示例文件
+-- 时间字段统一使用带 +00:00 偏移的 UTC ISO 字符串存储
 -- 用于初始化本地数据库: sqlite3 data/app.db < data/app.db.example
 
 CREATE TABLE servers (
@@ -11,8 +12,9 @@ CREATE TABLE servers (
 	description TEXT,
 	tags VARCHAR(200),
 	status VARCHAR(20),
-	created_at DATETIME,
-	updated_at DATETIME,
+	region VARCHAR(20) DEFAULT '私有云',
+	created_at VARCHAR(32),
+	updated_at VARCHAR(32),
 	PRIMARY KEY (id),
 	UNIQUE (name)
 );
@@ -24,8 +26,8 @@ CREATE TABLE workflows (
 	nodes JSON,
 	edges JSON,
 	variables JSON,
-	created_at DATETIME,
-	updated_at DATETIME,
+	created_at VARCHAR(32),
+	updated_at VARCHAR(32),
 	PRIMARY KEY (id),
 	UNIQUE (name)
 );
@@ -36,12 +38,12 @@ CREATE TABLE executions (
 	status VARCHAR(20),
 	trigger_type VARCHAR(20),
 	triggered_by VARCHAR(50),
-	started_at DATETIME,
-	finished_at DATETIME,
+	started_at VARCHAR(32),
+	finished_at VARCHAR(32),
 	duration INTEGER,
 	result VARCHAR(20),
 	summary JSON,
-	created_at DATETIME,
+	created_at VARCHAR(32),
 	PRIMARY KEY (id),
 	FOREIGN KEY(workflow_id) REFERENCES workflows (id)
 );
@@ -52,8 +54,8 @@ CREATE TABLE node_executions (
 	node_id VARCHAR(50) NOT NULL,
 	node_type VARCHAR(30) NOT NULL,
 	status VARCHAR(20),
-	started_at DATETIME,
-	finished_at DATETIME,
+	started_at VARCHAR(32),
+	finished_at VARCHAR(32),
 	duration INTEGER,
 	input_data JSON,
 	output_data JSON,
@@ -68,7 +70,7 @@ CREATE TABLE system_settings (
 	id INTEGER NOT NULL,
 	"key" VARCHAR(100) NOT NULL,
 	value JSON NOT NULL,
-	updated_at DATETIME,
+	updated_at VARCHAR(32),
 	PRIMARY KEY (id),
 	UNIQUE ("key")
 );
