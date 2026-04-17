@@ -36,27 +36,10 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
         exit /b 1
     )
 ) else (
-    if defined PYTHON_BIN (
-        "%PYTHON_BIN%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
-        if errorlevel 1 (
-            echo Python %PYTHON_MIN_VERSION%+ is required, but PYTHON_BIN=%PYTHON_BIN% is not available or is too old.
-            exit /b 1
-        )
-        set "PYTHON_CMD="%PYTHON_BIN%""
-    ) else (
-        set "PYTHON_CMD=python3"
-        python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
-        if errorlevel 1 (
-            set "PYTHON_CMD=python"
-            python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
-            if errorlevel 1 (
-                echo Python %PYTHON_MIN_VERSION%+ is required. Please install Python first.
-                exit /b 1
-            )
-        )
-    )
+    call :find_python
+    if errorlevel 1 exit /b 1
     echo Virtual environment not found. Creating venv...
-    %PYTHON_CMD% -m venv "%VENV_DIR%"
+    "%PYTHON_CMD%" -m venv "%VENV_DIR%"
     if errorlevel 1 exit /b 1
 )
 
@@ -75,25 +58,39 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
 )
 
 if defined PYTHON_BIN (
-    "%PYTHON_BIN%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+    call :find_python
+    if errorlevel 1 exit /b 1
+    "%PYTHON_CMD%" manage.py %*
+    exit /b %ERRORLEVEL%
+)
+
+call :find_python
+if errorlevel 1 exit /b 1
+"%PYTHON_CMD%" manage.py %*
+exit /b %ERRORLEVEL%
+
+:find_python
+set "PYTHON_CMD="
+if defined PYTHON_BIN (
+    set "PYTHON_CMD=%PYTHON_BIN:"=%"
+    if not defined PYTHON_CMD (
+        echo Python %PYTHON_MIN_VERSION%+ is required, but PYTHON_BIN is empty.
+        exit /b 1
+    )
+    "%PYTHON_CMD%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
     if errorlevel 1 (
         echo Python %PYTHON_MIN_VERSION%+ is required, but PYTHON_BIN=%PYTHON_BIN% is not available or is too old.
         exit /b 1
     )
-    "%PYTHON_BIN%" manage.py %*
-    exit /b %ERRORLEVEL%
+    exit /b 0
 )
 
-python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
-if not errorlevel 1 (
-    python3 manage.py %*
-    exit /b %ERRORLEVEL%
-)
-
-python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
-if not errorlevel 1 (
-    python manage.py %*
-    exit /b %ERRORLEVEL%
+for %%P in (python3.12 python3 python) do (
+    %%P -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+    if not errorlevel 1 (
+        set "PYTHON_CMD=%%P"
+        exit /b 0
+    )
 )
 
 echo Python %PYTHON_MIN_VERSION%+ is required. Please install Python first.
