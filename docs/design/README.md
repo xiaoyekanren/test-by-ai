@@ -21,6 +21,7 @@
 | [shared/frontend-architecture.md](shared/frontend-architecture.md) | Vue 3 + Pinia 架构、Store 设计、组件结构 | 2026-04-13 |
 | [shared/backend-architecture.md](shared/backend-architecture.md) | FastAPI + SQLAlchemy 架构、API 路由、数据模型 | 2026-04-13 |
 | [shared/ssh-service.md](shared/ssh-service.md) | SSHService 实现、连接管理、文件传输 | 2026-04-13 |
+| [shared/release-runtime.md](shared/release-runtime.md) | 最终发布包结构、跨平台运行脚本和 Windows batch 变量展开约束 | 2026-04-17 |
 
 ## 调研与对照
 
@@ -37,4 +38,4 @@
 
 ---
 
-此目录自 2026-04-10 创建，于 2026-04-15 按页面入口重新归档。
+此目录自 2026-04-10 创建，于 2026-04-17 补充发布运行脚本设计。

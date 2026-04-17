@@ -4,6 +4,8 @@
 
 前端采用 Vue 3 + TypeScript + Vite 架构，使用 Element Plus 作为 UI 组件库，Vue Flow 实现可视化工作流编辑器。
 
+浏览器页面标题由 `frontend/index.html` 配置，统一显示为 `OpsCenter`。
+
 ## 技术架构
 
 ### 技术栈
@@ -232,4 +234,4 @@ const historyIndex = ref(-1)
 
 ---
 
-最后更新: 2026-04-13
+最后更新: 2026-04-17
