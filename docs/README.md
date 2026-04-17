@@ -8,6 +8,7 @@
 |------|------|------|
 | 开发规范 | [../CLAUDE.md](../CLAUDE.md) | Claude Code 调用的项目规范入口，保留在仓库根目录 |
 | 设计文档 | [design/README.md](design/README.md) | 按页面入口组织的设计索引，包含共享架构和调研文档 |
+| 运行发布 | [design/shared/release-runtime.md](design/shared/release-runtime.md) | 发布包结构、运行脚本和 Windows venv 创建注意事项 |
 | 测试文档 | [testing/backend-tests-summary.md](testing/backend-tests-summary.md) | 后端测试文件和覆盖范围汇总 |
 | 待办事项 | [todos/workflow-editor.md](todos/workflow-editor.md) | 工作流编辑器交互、逻辑和可靠性待办 |
 | 待办事项 | [todos/iotdb-cli.md](todos/iotdb-cli.md) | IoTDB CLI、终端体验和日志分屏待办 |
@@ -51,4 +52,4 @@ docs/
 
 ---
 
-最后更新: 2026-04-15
+最后更新: 2026-04-17
