@@ -1,8 +1,8 @@
 # backend/app/models/database.py
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship, DeclarativeBase
 
-from app.utils.time import utc_now
+from app.utils.time import UTCDateTime, utc_now
 
 class Base(DeclarativeBase):
     pass
@@ -20,8 +20,8 @@ class Server(Base):
     tags = Column(String(200))
     status = Column(String(20), default="offline")  # 'online' | 'offline'
     region = Column(String(20), default="私有云", server_default="私有云")  # 区域字段: 私有云 | 公司-上层 | 公司 | Fit楼 | 公有云 | 异构
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(UTCDateTime(), default=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
     def __init__(self, **kwargs):
         # Set default value for region when creating Python instance
@@ -39,8 +39,8 @@ class Workflow(Base):
     nodes = Column(JSON, default=list)  # [{"id": "node1", "type": "shell", "config": {...}}]
     edges = Column(JSON, default=list)  # [{"from": "node1", "to": "node2"}]
     variables = Column(JSON, default=dict)  # {"var1": "value1"}
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(UTCDateTime(), default=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
     executions = relationship("Execution", back_populates="workflow")
 
@@ -52,12 +52,12 @@ class Execution(Base):
     status = Column(String(20), default="pending")  # 'pending' | 'running' | 'paused' | 'completed' | 'failed'
     trigger_type = Column(String(20), default="manual")  # 'manual' | 'scheduled' | 'api'
     triggered_by = Column(String(50))
-    started_at = Column(DateTime)
-    finished_at = Column(DateTime)
+    started_at = Column(UTCDateTime())
+    finished_at = Column(UTCDateTime())
     duration = Column(Integer)  # seconds
     result = Column(String(20))  # 'passed' | 'failed' | 'partial'
     summary = Column(JSON)  # {"total": 10, "passed": 8, "failed": 2}
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(UTCDateTime(), default=utc_now)
 
     workflow = relationship("Workflow", back_populates="executions")
     node_executions = relationship("NodeExecution", back_populates="execution")
@@ -70,8 +70,8 @@ class NodeExecution(Base):
     node_id = Column(String(50), nullable=False)
     node_type = Column(String(30), nullable=False)
     status = Column(String(20), default="pending")  # 'pending' | 'running' | 'success' | 'failed' | 'skipped'
-    started_at = Column(DateTime)
-    finished_at = Column(DateTime)
+    started_at = Column(UTCDateTime())
+    finished_at = Column(UTCDateTime())
     duration = Column(Integer)
     input_data = Column(JSON)
     output_data = Column(JSON)
@@ -88,4 +88,4 @@ class SystemSetting(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     key = Column(String(100), unique=True, nullable=False)
     value = Column(JSON, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)

@@ -1,5 +1,7 @@
 # backend/tests/test_server_region.py
 import sys
+from datetime import UTC
+
 sys.path.insert(0, 'backend')
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -70,12 +72,14 @@ def test_server_create_schema_region():
         "status": "offline",
         "region": "异构",
         "is_busy": False,
-        "created_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00"
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00"
     }
     response = ServerResponse.model_validate(response_data)
     assert response.region == "异构"
     assert response.is_busy == False
+    assert response.created_at.tzinfo == UTC
+    assert response.updated_at.tzinfo == UTC
 
 
 def test_server_list_is_busy():
