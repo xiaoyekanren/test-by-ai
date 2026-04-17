@@ -4,7 +4,6 @@ import random
 import shlex
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from datetime import datetime
 from threading import RLock
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -12,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.database import Execution, NodeExecution, Server, Workflow
 from app.services.ssh_service import SSHService
+from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class ExecutionEngine:
 
         if execution.status in ["pending", "running"]:
             execution.status = "failed"
-            execution.finished_at = datetime.utcnow()
+            execution.finished_at = utc_now()
             if execution.started_at:
                 execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
             workflow = self.db.query(Workflow).filter(Workflow.id == execution.workflow_id).first()
@@ -105,12 +105,12 @@ class ExecutionEngine:
         if not workflow:
             logger.error("Workflow %s not found", execution.workflow_id)
             execution.status = "failed"
-            execution.finished_at = datetime.utcnow()
+            execution.finished_at = utc_now()
             self.db.commit()
             return
 
         execution.status = "running"
-        execution.started_at = datetime.utcnow()
+        execution.started_at = utc_now()
         self.db.commit()
 
         nodes = workflow.nodes or []
@@ -192,7 +192,7 @@ class ExecutionEngine:
                         else:
                             failed_count += 1
 
-            execution.finished_at = datetime.utcnow()
+            execution.finished_at = utc_now()
             execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
             execution.summary = {
                 "total": len(nodes),
@@ -213,7 +213,7 @@ class ExecutionEngine:
         except Exception as exc:
             logger.exception("Error in execution %s", execution_id)
             execution.status = "failed"
-            execution.finished_at = datetime.utcnow()
+            execution.finished_at = utc_now()
             if execution.started_at:
                 execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
             execution.result = "failed"
@@ -300,7 +300,7 @@ class ExecutionEngine:
 
         return {
             "version": 1,
-            "captured_at": datetime.utcnow().isoformat(),
+            "captured_at": utc_now().isoformat(),
             "nodes": snapshot_nodes,
             "edges": snapshot_edges,
         }
@@ -446,7 +446,7 @@ class ExecutionEngine:
         node: Dict[str, Any],
         reason: str
     ) -> None:
-        now = datetime.utcnow()
+        now = utc_now()
         node_execution = NodeExecution(
             execution_id=execution_id,
             node_id=str(node.get("id")),
@@ -523,7 +523,7 @@ class ExecutionEngine:
                 node_id=node_id,
                 node_type=node_type,
                 status="running",
-                started_at=datetime.utcnow(),
+                started_at=utc_now(),
                 input_data=config
             )
             self.db.add(node_execution)
@@ -555,7 +555,7 @@ class ExecutionEngine:
             context_update = {}
 
         with self.reservation_lock:
-            node_execution.finished_at = datetime.utcnow()
+            node_execution.finished_at = utc_now()
             node_execution.duration = int(
                 (node_execution.finished_at - node_execution.started_at).total_seconds()
             )
@@ -1222,7 +1222,7 @@ class ExecutionEngine:
             "exit_path": exit_path,
             "target_host": target_host,
             "rpc_port": rpc_port,
-            "started_at": datetime.utcnow().isoformat()
+            "started_at": utc_now().isoformat()
         }
         return {
             "exit_status": 0,
@@ -1322,7 +1322,7 @@ class ExecutionEngine:
             "exit_status": result.exit_status,
             "stdout_tail": result.stdout,
             "stderr": result.stderr,
-            "finished_at": datetime.utcnow().isoformat()
+            "finished_at": utc_now().isoformat()
         }
         return payload
 
