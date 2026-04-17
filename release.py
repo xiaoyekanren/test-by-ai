@@ -7,6 +7,7 @@ Usage: python3.12 release.py
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import platform
@@ -574,6 +575,47 @@ def command_output(cmd, cwd: Path | None = None) -> str:
     return result.stdout.strip()
 
 
+def safe_package_component(value: str, label: str) -> str:
+    value = value.strip()
+    if not value:
+        print_error(f"Release {label} cannot be empty.")
+        sys.exit(1)
+
+    invalid_chars = '<>:"/\\|?*'
+    sanitized = "".join("-" if char in invalid_chars or ord(char) < 32 else char for char in value)
+    sanitized = sanitized.strip(" .")
+    if not sanitized:
+        print_error(f"Release {label} does not contain a valid file name component: {value}")
+        sys.exit(1)
+    return sanitized
+
+
+def get_release_version(version: str | None = None) -> str:
+    if version:
+        return safe_package_component(version, "version")
+
+    tag = command_output(["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT_DIR)
+    if tag:
+        return safe_package_component(tag, "version")
+
+    return "0.0.0"
+
+
+def create_release_zip(release_path: Path) -> Path:
+    zip_path = release_path.parent / f"{release_path.name}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+
+    archive_base = zip_path.parent / zip_path.stem
+    shutil.make_archive(
+        str(archive_base),
+        "zip",
+        root_dir=release_path.parent,
+        base_dir=release_path.name,
+    )
+    return zip_path
+
+
 def ensure_python_version() -> None:
     if sys.version_info < PYTHON_MIN_VERSION:
         required = ".".join(str(part) for part in PYTHON_MIN_VERSION)
@@ -766,13 +808,17 @@ The frontend is prebuilt and bundled in `backend/app/frontend_dist/`.
     write_text(release_path / "README.md", content)
 
 
-def write_release_metadata(release_path: Path) -> None:
+def write_release_metadata(release_path: Path, version: str, zip_path: Path) -> None:
     branch = command_output(["git", "branch", "--show-current"], cwd=ROOT_DIR)
     commit = command_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT_DIR)
     dirty = bool(command_output(["git", "status", "--short"], cwd=ROOT_DIR))
     frontend_hash = file_tree_hash(FRONTEND_DIR / "dist")
     metadata = [
         f"created_at={datetime.now().isoformat(timespec='seconds')}",
+        f"project={PROJECT_NAME}",
+        f"version={version}",
+        f"package_dir={release_path.name}",
+        f"package_zip={zip_path.name}",
         f"branch={branch or 'unknown'}",
         f"commit={commit or 'unknown'}",
         f"dirty_worktree={str(dirty).lower()}",
@@ -800,13 +846,14 @@ def file_tree_hash(directory: Path) -> str:
     return digest.hexdigest()
 
 
-def create_release() -> Path:
+def create_release(version: str | None = None) -> tuple[Path, Path]:
     ensure_python_version()
     ensure_project_files()
     build_frontend()
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    release_path = RELEASE_DIR / f"{PROJECT_NAME}-release-{timestamp}"
+    release_version = get_release_version(version)
+    package_name = f"{safe_package_component(PROJECT_NAME, 'project')}-{release_version}"
+    release_path = RELEASE_DIR / package_name
     if release_path.exists():
         shutil.rmtree(release_path)
     release_path.mkdir(parents=True, exist_ok=True)
@@ -821,20 +868,34 @@ def create_release() -> Path:
 
     write_release_runtime(release_path)
     write_release_readme(release_path)
-    write_release_metadata(release_path)
+    zip_path = release_path.parent / f"{release_path.name}.zip"
+    write_release_metadata(release_path, release_version, zip_path)
+    zip_path = create_release_zip(release_path)
 
     print_section("Release Ready")
     print_kv("Directory:", str(release_path.relative_to(ROOT_DIR)))
+    print_kv("Zip:", str(zip_path.relative_to(ROOT_DIR)))
+    print_kv("Version:", release_version)
     print_kv("Frontend:", "bundled into backend")
     print_kv("Data:", "app.db included")
     print()
     print(f"Run ./manage.sh install and ./manage.sh start inside {release_path.relative_to(ROOT_DIR)}.")
-    return release_path
+    return release_path, zip_path
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build a final source release package.")
+    parser.add_argument(
+        "--version",
+        help="Release version used in the package folder and zip name. Defaults to the latest Git tag, then 0.0.0.",
+    )
+    return parser.parse_args(argv)
 
 
 def main() -> None:
     os.chdir(ROOT_DIR)
-    create_release()
+    args = parse_args(sys.argv[1:])
+    create_release(args.version)
 
 
 if __name__ == "__main__":
