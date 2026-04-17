@@ -2,6 +2,8 @@
 
 一个用于 IoTDB 测试自动化平台，提供服务器管理、可视化工作流编排与执行、实时监控等功能。
 
+浏览器页面标题统一使用 `OpsCenter`。
+
 ## 功能概览
 
 - **服务器管理**: 服务器增删改查、SSH 连接测试、标签分组
@@ -93,10 +95,11 @@
 **Windows:**
 
 ```bash
+manage.bat install
 manage.bat start
 ```
 
-首次部署建议先执行 `./manage.sh install` 检查 Python / Node.js 环境并安装依赖；之后执行 `./manage.sh start` 启动服务。`start` / `restart` 也会自动补齐缺失的后端和前端依赖。脚本会使用满足版本要求的 `python3` 或 `python` 创建虚拟环境，也可以通过 `PYTHON_BIN=/path/to/python ./manage.sh install` 指定 Python。
+首次部署建议先执行 `./manage.sh install` 或 `manage.bat install` 检查 Python / Node.js 环境并安装依赖；之后执行 `./manage.sh start` 或 `manage.bat start` 启动服务。`start` / `restart` 也会自动补齐缺失的后端和前端依赖。脚本会使用满足版本要求的 `python3` 或 `python` 创建虚拟环境，也可以通过 `PYTHON_BIN=/path/to/python ./manage.sh install` 指定 Python。
 
 环境要求：
 
@@ -202,7 +205,7 @@ npm run build
 python3.12 release.py
 ```
 
-命令会先执行前端构建，再把运行所需文件收集到 `release/test-by-ai-release-时间戳/` 下。
+命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。版本默认取最近的 Git tag；如需手动指定，可执行 `python3.12 release.py --version 0.1.0`。
 
 发布包默认包含：
 
@@ -213,6 +216,11 @@ python3.12 release.py
 - `RELEASE_INFO.txt`
 - `data/app.db`
 
+发布包目录和 zip 命名规则：
+
+- 文件夹: `仓库-版本/`，例如 `test-by-ai-0.1/`
+- zip 包: `仓库-版本.zip`，例如 `test-by-ai-0.1.zip`
+
 发布包默认不包含：
 
 - `venv/`
@@ -221,6 +229,8 @@ python3.12 release.py
 - `data/logs/` 里的运行日志
 
 发布包中的 `manage.*` 只负责启动最终服务；源码目录中的 `manage.*` 仍只用于本地快速迭代。
+
+发布包在 Windows 上使用 `manage.bat install` 创建 `venv/` 并安装后端依赖。脚本在括号代码块内使用延迟变量展开读取 Python 解析结果，避免首次创建虚拟环境时把 Python 命令提前展开为空。
 
 ## 开发规范
 
