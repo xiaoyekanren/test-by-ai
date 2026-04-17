@@ -203,7 +203,7 @@ npm run build
 python3.12 release.py
 ```
 
-命令会先执行前端构建，再把运行所需文件收集到 `release/test-by-ai-release-时间戳/` 下。
+命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。版本默认取最近的 Git tag；如需手动指定，可执行 `python3.12 release.py --version 0.1.0`。
 
 发布包默认包含：
 
@@ -213,6 +213,11 @@ python3.12 release.py
 - `README.md`
 - `RELEASE_INFO.txt`
 - `data/app.db`
+
+发布包目录和 zip 命名规则：
+
+- 文件夹: `仓库-版本/`，例如 `test-by-ai-0.1/`
+- zip 包: `仓库-版本.zip`，例如 `test-by-ai-0.1.zip`
 
 发布包默认不包含：
 
