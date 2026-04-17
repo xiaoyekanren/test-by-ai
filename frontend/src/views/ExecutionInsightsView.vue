@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
 import {
   ElAlert,
   ElButton,
@@ -25,6 +29,46 @@ import {
 import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
+import { NODE_CONFIGS } from '@/types'
+import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
+import type { NodeDefinition, NodeExecution, NodeType } from '@/types'
+
+interface WorkflowStateSnapshotNode {
+  id: string
+  type: string
+  config?: Record<string, unknown>
+  position?: { x: number; y: number } | null
+  sequence?: number
+  status?: string
+  duration?: number | null
+  error_message?: string | null
+}
+
+interface WorkflowStateSnapshotEdge {
+  from: string
+  to: string
+  label?: string | null
+  status?: string
+}
+
+interface WorkflowStateSnapshot {
+  version: number
+  captured_at?: string
+  nodes: WorkflowStateSnapshotNode[]
+  edges: WorkflowStateSnapshotEdge[]
+}
+
+interface ExecutionNodeViewModel {
+  nodeId: string
+  label: string
+  nodeType: string
+  status: string
+  sequence: string
+  incomingCount: number
+  outgoingCount: number
+  definition: NodeDefinition | null
+  execution: NodeExecution | null
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -79,18 +123,119 @@ const filteredExecutions = computed(() => {
 const currentExecution = computed(() => executionsStore.currentExecution)
 const nodeExecutions = computed(() => executionsStore.nodeExecutions)
 
+const workflowStateSnapshot = computed<WorkflowStateSnapshot | null>(() => {
+  const value = currentExecution.value?.summary?.workflow_state
+  if (!value || typeof value !== 'object') return null
+  const snapshot = value as Partial<WorkflowStateSnapshot>
+  if (!Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return null
+  return {
+    version: Number(snapshot.version || 1),
+    captured_at: snapshot.captured_at,
+    nodes: snapshot.nodes,
+    edges: snapshot.edges
+  }
+})
+
+const nodeExecutionMap = computed(() => {
+  return new Map(nodeExecutions.value.map(node => [node.node_id, node]))
+})
+
+const workflowEdges = computed<WorkflowStateSnapshotEdge[]>(() => {
+  return workflowStateSnapshot.value?.edges || []
+})
+
+const executionNodeViewModels = computed<ExecutionNodeViewModel[]>(() => {
+  const snapshotNodes = workflowStateSnapshot.value?.nodes || []
+  return snapshotNodes
+    .map((node, index) => {
+      const execution = nodeExecutionMap.value.get(node.id) || null
+      const sequence = String(node.sequence || index + 1)
+      return {
+        nodeId: node.id,
+        label: NODE_CONFIGS[node.type as keyof typeof NODE_CONFIGS]?.label || node.type,
+        nodeType: node.type,
+        status: node.status || execution?.status || 'not-run',
+        sequence,
+        incomingCount: workflowEdges.value.filter(edge => edge.to === node.id).length,
+        outgoingCount: workflowEdges.value.filter(edge => edge.from === node.id).length,
+        definition: {
+          id: node.id,
+          type: node.type as NodeDefinition['type'],
+          config: node.config || {},
+          position: node.position || null
+        },
+        execution
+      }
+    })
+    .sort((left, right) => compareSequence(left.sequence, right.sequence))
+})
+
 const selectedNodeExecution = computed(() => {
   if (!rawNodeId.value) return null
   return nodeExecutions.value.find(node => node.node_id === rawNodeId.value) || null
 })
 
+const selectedNodeView = computed(() => {
+  if (!rawNodeId.value) return null
+  return executionNodeViewModels.value.find(node => node.nodeId === rawNodeId.value) || null
+})
+
 const completedNodeCount = computed(() => {
-  return nodeExecutions.value.filter(node => ['success', 'completed', 'failed', 'skipped'].includes(node.status)).length
+  return executionNodeViewModels.value.filter(node => ['success', 'completed', 'failed', 'skipped'].includes(node.status)).length
 })
 
 const progressPercent = computed(() => {
-  if (nodeExecutions.value.length === 0) return 0
-  return Math.round((completedNodeCount.value / nodeExecutions.value.length) * 100)
+  if (executionNodeViewModels.value.length === 0) return 0
+  return Math.round((completedNodeCount.value / executionNodeViewModels.value.length) * 100)
+})
+
+const notRunNodeCount = computed(() => {
+  return executionNodeViewModels.value.filter(node => node.status === 'not-run').length
+})
+
+const failedNodeCount = computed(() => {
+  return executionNodeViewModels.value.filter(node => node.status === 'failed').length
+})
+
+const executionSummaryDisplay = computed(() => {
+  const summary = currentExecution.value?.summary
+  if (!summary) return null
+  const { workflow_state: _workflowState, ...rest } = summary
+  return rest
+})
+
+const workflowStatusFlowNodes = computed(() => {
+  return executionNodeViewModels.value.map((node, index) => ({
+    id: node.nodeId,
+    type: 'workflowNode',
+    position: node.definition?.position || {
+      x: (index % 3) * 260,
+      y: Math.floor(index / 3) * 140
+    },
+    data: {
+      label: node.label,
+      nodeType: node.nodeType as NodeType,
+      config: node.definition?.config || {}
+    },
+    draggable: false,
+    selectable: false
+  }))
+})
+
+const workflowStatusFlowEdges = computed(() => {
+  return workflowEdges.value.map(edge => {
+    const from = executionNodeViewModels.value.find(node => node.nodeId === edge.from)
+    const to = executionNodeViewModels.value.find(node => node.nodeId === edge.to)
+    const status = edge.status || (from && to ? getWorkflowEdgeStatus(from, to) : 'pending')
+    return {
+      id: `${edge.from}-${edge.to}`,
+      source: edge.from,
+      target: edge.to,
+      label: edge.label || undefined,
+      animated: status === 'running',
+      class: `status-flow-edge status-flow-edge-${status}`
+    }
+  })
 })
 
 const displayExecutionStatus = computed(() => {
@@ -107,41 +252,6 @@ const displayExecutionStatus = computed(() => {
   if (execution.status === 'pending') return '等待中'
   if (execution.status === 'paused') return '已暂停'
   return execution.status
-})
-
-const executionHeadline = computed(() => {
-  const execution = currentExecution.value
-  if (!execution) return null
-
-  if (execution.status === 'failed' && execution.result === 'partial') {
-    return {
-      type: 'warning' as const,
-      title: '本次执行整体失败，但在失败前已有部分节点执行成功。',
-      description: '可以重点查看下方失败节点和原始输入输出，不必把它理解成“完全没有执行起来”。'
-    }
-  }
-
-  if (execution.status === 'failed') {
-    return {
-      type: 'error' as const,
-      title: '本次执行失败。',
-      description: '建议优先查看下方失败节点、报错信息和原始输入输出。'
-    }
-  }
-
-  if (execution.status === 'completed') {
-    return {
-      type: 'success' as const,
-      title: '本次执行已完成。',
-      description: '下方分析区域主要用于复盘执行路径和查看节点输出。'
-    }
-  }
-
-  return {
-    type: 'info' as const,
-    title: '本次执行仍在进行中。',
-    description: '页面会自动刷新，你可以先观察已完成节点的输出。'
-  }
 })
 
 function stringifyData(value: unknown) {
@@ -208,6 +318,40 @@ function formatDuration(seconds: number | null) {
   return remain === 0 ? `${minutes}m` : `${minutes}m ${remain}s`
 }
 
+function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeViewModel) {
+  if (from.status === 'failed') return 'failed'
+  if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
+  if (to.status === 'running') return 'running'
+  return 'pending'
+}
+
+function compareSequence(left: string, right: string) {
+  const parse = (value: string) => {
+    const [layerText, branchText = '0'] = value.split('-', 2)
+    const layer = Number(layerText)
+    const branch = Number(branchText)
+    return [
+      Number.isFinite(layer) ? layer : 0,
+      Number.isFinite(branch) ? branch : 0
+    ]
+  }
+  const [leftLayer, leftBranch] = parse(left)
+  const [rightLayer, rightBranch] = parse(right)
+  return leftLayer - rightLayer || leftBranch - rightBranch
+}
+
+function getNodeViewById(nodeId: string) {
+  return executionNodeViewModels.value.find(node => node.nodeId === nodeId) || null
+}
+
+function getFlowExecutionStatus(nodeId: string): 'running' | 'passed' | 'failed' | null {
+  const status = getNodeViewById(nodeId)?.status
+  if (status === 'running') return 'running'
+  if (status === 'failed') return 'failed'
+  if (status && ['success', 'completed'].includes(status)) return 'passed'
+  return null
+}
+
 function getStatusTone(status: string) {
   switch (status) {
     case 'completed':
@@ -217,14 +361,18 @@ function getStatusTone(status: string) {
       return 'danger'
     case 'running':
       return 'warning'
+    case 'not-run':
+    case 'skipped':
+      return 'info'
     default:
       return 'info'
   }
 }
 
 function getServerLabel(serverId: unknown) {
-  if (typeof serverId !== 'number') return 'Unknown server'
-  return serverNameMap.value.get(serverId) || `Server #${serverId}`
+  const numericServerId = Number(serverId)
+  if (!Number.isFinite(numericServerId)) return 'Unknown server'
+  return serverNameMap.value.get(numericServerId) || `Server #${numericServerId}`
 }
 
 function goToWorkflowEditor() {
@@ -234,12 +382,16 @@ function goToWorkflowEditor() {
 
 async function loadExecution(executionId: number, syncRoute = true) {
   loadingDetail.value = true
+  const previousNodeId = rawNodeId.value
   try {
     selectedExecutionId.value = executionId
-    rawNodeId.value = null
-    await executionsStore.fetchExecution(executionId)
-    await executionsStore.fetchNodeExecutions(executionId)
-    rawNodeId.value = executionsStore.nodeExecutions[0]?.node_id || null
+    const execution = await executionsStore.fetchExecution(executionId)
+    await executionsStore.fetchNodeExecutions(execution.id)
+
+    const nextNodes = executionNodeViewModels.value
+    rawNodeId.value = nextNodes.some(node => node.nodeId === previousNodeId)
+      ? previousNodeId
+      : nextNodes[0]?.nodeId || null
 
     if (syncRoute) {
       await router.replace({
@@ -470,16 +622,6 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <ElAlert
-            v-if="executionHeadline"
-            class="analysis-headline"
-            :title="executionHeadline.title"
-            :description="executionHeadline.description"
-            :type="executionHeadline.type"
-            :closable="false"
-            show-icon
-          />
-
           <div class="overview-grid">
             <div class="metric-card">
               <div class="metric-label">工作流</div>
@@ -497,13 +639,21 @@ onUnmounted(() => {
               <div class="metric-label">节点进度</div>
               <div class="metric-value">{{ progressPercent }}%</div>
             </div>
+            <div class="metric-card">
+              <div class="metric-label">未执行节点</div>
+              <div class="metric-value">{{ notRunNodeCount }}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">失败节点</div>
+              <div class="metric-value">{{ failedNodeCount }}</div>
+            </div>
           </div>
 
           <ElDescriptions :column="2" border class="execution-descriptions">
             <ElDescriptionsItem label="创建时间">{{ formatDate(currentExecution.created_at) }}</ElDescriptionsItem>
             <ElDescriptionsItem label="开始时间">{{ formatDate(currentExecution.started_at) }}</ElDescriptionsItem>
             <ElDescriptionsItem label="结束时间">{{ formatDate(currentExecution.finished_at) }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="摘要">{{ stringifyData(currentExecution.summary) }}</ElDescriptionsItem>
+            <ElDescriptionsItem label="摘要">{{ stringifyData(executionSummaryDisplay) }}</ElDescriptionsItem>
           </ElDescriptions>
         </ElCard>
 
@@ -511,30 +661,65 @@ onUnmounted(() => {
           <ElCard class="panel" shadow="never">
             <template #header>
               <div class="panel-title">
-                <span>节点时间线</span>
-                <ElTag type="info" effect="plain">{{ nodeExecutions.length }} 节点</ElTag>
+                <span>工作流运行状态图</span>
+                <ElTag type="info" effect="plain">{{ executionNodeViewModels.length }} 节点</ElTag>
               </div>
             </template>
 
-            <div v-if="nodeExecutions.length === 0" class="panel-empty">
-              <span class="empty-text">该执行尚未产生节点记录</span>
+            <div v-if="executionNodeViewModels.length === 0" class="panel-empty">
+              <span class="empty-text">该执行没有工作流状态快照，请重新运行工作流生成状态图</span>
             </div>
 
-            <div v-else class="timeline-list">
+            <div
+              v-else
+              class="workflow-status-canvas"
+            >
+              <VueFlow
+                :nodes="workflowStatusFlowNodes"
+                :edges="workflowStatusFlowEdges"
+                :nodes-draggable="false"
+                :nodes-connectable="false"
+                :elements-selectable="false"
+                :min-zoom="0.2"
+                :max-zoom="1.5"
+                :fit-view-on-init="true"
+                :fit-view-options="{ padding: 0.25, maxZoom: 1 }"
+                class="workflow-status-flow"
+              >
+                <Background pattern-color="#cbd5e1" :gap="16" />
+
+                <template #node-workflowNode="nodeProps">
+                  <div class="status-flow-node-shell">
+                    <span class="status-flow-node-sequence">
+                      {{ getNodeViewById(nodeProps.id)?.sequence || '' }}
+                    </span>
+                    <WorkflowNode
+                      v-bind="nodeProps"
+                      :selected="rawNodeId === nodeProps.id"
+                      :execution-status="getFlowExecutionStatus(nodeProps.id)"
+                      @click="rawNodeId = nodeProps.id"
+                    />
+                  </div>
+                </template>
+              </VueFlow>
+            </div>
+
+            <div v-if="executionNodeViewModels.length > 0" class="timeline-list">
               <button
-                v-for="node in nodeExecutions"
-                :key="node.node_id"
+                v-for="node in executionNodeViewModels"
+                :key="node.nodeId"
                 type="button"
                 class="timeline-item"
-                :class="{ active: rawNodeId === node.node_id }"
-                @click="rawNodeId = node.node_id"
+                :class="{ active: rawNodeId === node.nodeId, 'not-run': node.status === 'not-run' }"
+                @click="rawNodeId = node.nodeId"
               >
+                <div class="timeline-sequence">{{ node.sequence }}</div>
                 <div class="timeline-dot" :class="node.status" />
                 <div class="timeline-main">
                   <div class="timeline-title-row">
                     <div>
-                      <div class="timeline-title">{{ node.node_type }}</div>
-                      <div class="timeline-id">{{ node.node_id }}</div>
+                      <div class="timeline-title">{{ node.label }}</div>
+                      <div class="timeline-id">{{ node.nodeType }} · {{ node.nodeId }}</div>
                     </div>
                     <ElTag :type="getStatusTone(node.status)" effect="plain">
                       {{ node.status }}
@@ -542,12 +727,16 @@ onUnmounted(() => {
                   </div>
 
                   <div class="timeline-meta">
-                    <span><Clock class="inline-icon" /> {{ formatDuration(node.duration) }}</span>
-                    <span><Monitor class="inline-icon" /> {{ getServerLabel(node.input_data?.server_id) }}</span>
+                    <span><Clock class="inline-icon" /> {{ formatDuration(node.execution?.duration ?? null) }}</span>
+                    <span><Monitor class="inline-icon" /> {{ getServerLabel(node.execution?.input_data?.server_id) }}</span>
+                    <span>{{ node.incomingCount }} 入 / {{ node.outgoingCount }} 出</span>
                   </div>
 
-                  <div v-if="node.error_message" class="timeline-error">
-                    {{ node.error_message }}
+                  <div v-if="node.status === 'not-run'" class="timeline-note">
+                    该节点属于当前工作流，但本次执行尚未运行到这里。
+                  </div>
+                  <div v-if="node.execution?.error_message" class="timeline-error">
+                    {{ node.execution.error_message }}
                   </div>
                 </div>
               </button>
@@ -563,37 +752,70 @@ onUnmounted(() => {
                     type="info"
                     effect="plain"
                     class="panel-node-tag"
-                    :class="{ 'is-empty': !selectedNodeExecution }"
+                    :class="{ 'is-empty': !selectedNodeView }"
                   >
-                    {{ selectedNodeExecution?.node_type || 'placeholder-node' }}
+                    {{ selectedNodeView?.label || 'placeholder-node' }}
                   </ElTag>
                 </div>
               </div>
             </template>
 
-            <div v-if="!selectedNodeExecution" class="panel-empty">
+            <div v-if="!selectedNodeView" class="panel-empty">
               <span class="empty-text">选择左侧节点查看原始信息</span>
             </div>
 
             <template v-else>
+              <div class="node-detail-grid">
+                <div>
+                  <div class="raw-label">节点</div>
+                  <div class="detail-value">{{ selectedNodeView.label }}</div>
+                </div>
+                <div>
+                  <div class="raw-label">类型</div>
+                  <div class="detail-value">{{ selectedNodeView.nodeType }}</div>
+                </div>
+                <div>
+                  <div class="raw-label">状态</div>
+                  <ElTag :type="getStatusTone(selectedNodeView.status)" effect="plain">
+                    {{ selectedNodeView.status }}
+                  </ElTag>
+                </div>
+                <div>
+                  <div class="raw-label">拓扑</div>
+                  <div class="detail-value">{{ selectedNodeView.incomingCount }} 入 / {{ selectedNodeView.outgoingCount }} 出</div>
+                </div>
+              </div>
+
               <div class="raw-summary">
                 <ElAlert
-                  v-if="selectedNodeExecution.error_message"
+                  v-if="selectedNodeExecution?.error_message"
                   :title="selectedNodeExecution.error_message"
                   type="error"
                   :closable="false"
                   show-icon
                 />
+                <ElAlert
+                  v-else-if="!selectedNodeExecution"
+                  title="该节点还没有执行记录，通常表示执行尚未到达这里，或前序节点失败后工作流已停止。"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                />
+              </div>
+
+              <div v-if="selectedNodeView.definition" class="raw-block">
+                <div class="raw-label">Workflow Config</div>
+                <pre class="raw-pre">{{ stringifyData(selectedNodeView.definition.config) }}</pre>
               </div>
 
               <div class="raw-block">
                 <div class="raw-label">Input</div>
-                <pre class="raw-pre">{{ stringifyData(selectedNodeExecution.input_data) }}</pre>
+                <pre class="raw-pre">{{ stringifyData(selectedNodeExecution?.input_data) }}</pre>
               </div>
 
               <div class="raw-block">
                 <div class="raw-label">Output</div>
-                <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution.output_data) }}</pre>
+                <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution?.output_data) }}</pre>
               </div>
             </template>
           </ElCard>
@@ -761,7 +983,7 @@ onUnmounted(() => {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -777,15 +999,75 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.analysis-headline {
-  margin-bottom: 10px;
-}
-
 .raw-label {
   margin-bottom: 4px;
   color: #64748b;
   font-size: 10px;
   font-weight: 600;
+}
+
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.detail-value {
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.workflow-status-canvas {
+  height: 380px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.workflow-status-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.status-flow-node-shell {
+  position: relative;
+}
+
+.status-flow-node-sequence {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-status-flow :deep(.status-flow-edge-passed .vue-flow__edge-path) {
+  stroke: #10b981;
+}
+
+.workflow-status-flow :deep(.status-flow-edge-failed .vue-flow__edge-path) {
+  stroke: #ef4444;
+}
+
+.workflow-status-flow :deep(.status-flow-edge-running .vue-flow__edge-path) {
+  stroke: #f59e0b;
+  stroke-dasharray: 8 5;
 }
 
 .timeline-list {
@@ -819,6 +1101,24 @@ onUnmounted(() => {
   border-color: #3b82f6;
 }
 
+.timeline-item.not-run {
+  background: #f8fafc;
+}
+
+.timeline-sequence {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .timeline-dot {
   width: 10px;
   height: 10px;
@@ -840,6 +1140,11 @@ onUnmounted(() => {
   background: #f59e0b;
 }
 
+.timeline-dot.not-run,
+.timeline-dot.skipped {
+  background: #cbd5e1;
+}
+
 .timeline-main {
   flex: 1;
 }
@@ -857,6 +1162,12 @@ onUnmounted(() => {
   font-size: 10px;
 }
 
+.timeline-note {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 10px;
+}
+
 .inline-icon {
   width: 14px;
   margin-right: 4px;
@@ -867,6 +1178,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 520px;
 }
 
 .raw-block {
@@ -890,7 +1202,8 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .page-grid,
   .detail-grid,
-  .overview-grid {
+  .overview-grid,
+  .node-detail-grid {
     grid-template-columns: 1fr;
   }
 }
