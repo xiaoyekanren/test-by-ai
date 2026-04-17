@@ -194,6 +194,34 @@ cd frontend
 npm run build
 ```
 
+### 生成最终发布包
+
+如果你希望基于当前代码生成一个可交付目录，可以执行：
+
+```bash
+python3.12 release.py
+```
+
+命令会先执行前端构建，再把运行所需文件收集到 `release/test-by-ai-release-时间戳/` 下。
+
+发布包默认包含：
+
+- `backend/app/` 与 `backend/requirements.txt`
+- 构建后的前端产物 `backend/app/frontend_dist/`
+- 发布包专用的 `manage.py`、`manage.sh`、`manage.bat`
+- `README.md`
+- `RELEASE_INFO.txt`
+- `data/app.db`
+
+发布包默认不包含：
+
+- `venv/`
+- `frontend/src/` 和前端配置文件
+- `frontend/node_modules/`
+- `data/logs/` 里的运行日志
+
+发布包中的 `manage.*` 只负责启动最终服务；源码目录中的 `manage.*` 仍只用于本地快速迭代。
+
 ## 开发规范
 
 ### 文档更新要求
