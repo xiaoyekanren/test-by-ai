@@ -132,7 +132,27 @@ def test_dag_skips_join_when_any_upstream_fails(tmp_path, monkeypatch):
     }
 
     assert refreshed.status == "failed"
-    assert refreshed.summary == {"total": 3, "passed": 1, "failed": 1, "skipped": 1}
+    assert refreshed.summary is not None
+    assert refreshed.summary["total"] == 3
+    assert refreshed.summary["passed"] == 1
+    assert refreshed.summary["failed"] == 1
+    assert refreshed.summary["skipped"] == 1
+
+    workflow_state = refreshed.summary["workflow_state"]
+    assert workflow_state["version"] == 1
+    assert [node["id"] for node in workflow_state["nodes"]] == [
+        "start-a",
+        "start-b",
+        "cluster-check",
+    ]
+    assert {
+        node["id"]: node["status"]
+        for node in workflow_state["nodes"]
+    } == {
+        "start-a": "failed",
+        "start-b": "success",
+        "cluster-check": "skipped",
+    }
     assert node_statuses["start-a"] == "failed"
     assert node_statuses["start-b"] == "success"
     assert node_statuses["cluster-check"] == "skipped"
