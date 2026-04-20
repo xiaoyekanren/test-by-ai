@@ -1,11 +1,16 @@
 # backend/tests/test_server_region.py
 import sys
-from datetime import UTC
 
 sys.path.insert(0, 'backend')
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.models.database import Base, Server
+
+
+def assert_utc_datetime(value):
+    assert value.tzinfo is not None
+    assert value.utcoffset() is not None
+    assert value.utcoffset().total_seconds() == 0
 
 def test_server_region_field():
     """Test Server model has region field with default value"""
@@ -78,8 +83,8 @@ def test_server_create_schema_region():
     response = ServerResponse.model_validate(response_data)
     assert response.region == "异构"
     assert response.is_busy == False
-    assert response.created_at.tzinfo == UTC
-    assert response.updated_at.tzinfo == UTC
+    assert_utc_datetime(response.created_at)
+    assert_utc_datetime(response.updated_at)
 
 
 def test_server_list_is_busy():
