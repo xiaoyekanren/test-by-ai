@@ -16,7 +16,7 @@ cd backend
 python3.13 -m pytest --collect-only -q
 ```
 
-最后收集结果：113 tests。
+最后收集结果：128 tests。
 
 ## 测试文件列表
 
@@ -26,6 +26,7 @@ python3.13 -m pytest --collect-only -q
 | `test_db_setup.py` | 9 | 数据库初始化、表结构和 legacy servers 表迁移 |
 | `test_execution_engine_cluster.py` | 3 | IoTDB 集群部署节点、角色配置和必填角色校验 |
 | `test_execution_engine_dag.py` | 3 | DAG 并发、join 等待、失败跳过和无边工作流兼容 |
+| `test_control_nodes.py` | 15 | 控制节点：condition 分支/级联、loop 迭代/失败中断、parallel 透传、assert 命令构建、边标签 |
 | `test_execution_engine_region.py` | 33 | 区域调度、繁忙服务器计算、节点 server 需求和上下文合并 |
 | `test_executions_api.py` | 6 | 执行 API 创建、查询、列表、停止和删除 |
 | `test_main.py` | 2 | FastAPI app 导入和健康检查端点 |
@@ -48,6 +49,7 @@ python3.13 -m pytest --collect-only -q
 | 工作流 API | `test_workflows_api.py` |
 | 执行 API | `test_executions_api.py` |
 | 执行引擎 DAG | `test_execution_engine_dag.py` |
+| 控制节点 | `test_control_nodes.py` |
 | 执行引擎区域调度 | `test_execution_engine_region.py` |
 | IoTDB 集群节点 | `test_execution_engine_cluster.py` |
 | 监控服务和 API | `test_monitoring_api.py` |
@@ -74,6 +76,16 @@ python3.13 -m pytest --collect-only -q
 ### DAG 执行
 
 DAG 测试覆盖 roots 并发执行、join 节点等待全部上游、上游失败时跳过 join，以及无 edges 工作流继续按旧顺序执行。
+
+### 控制节点
+
+控制节点测试覆盖以下行为：
+
+- condition 节点根据 branch 结果跳过未命中的分支，跳过可级联到后代节点
+- loop 节点按 iterations 配置重复执行子节点，循环体失败时提前终止
+- parallel 节点透传执行，子节点由引擎并行调度
+- assert handler 能正确构建 log_contains/file_exists/process_running/port_open/custom 命令
+- 边标签 (edge_labels) 正确收集且无标签边不影响结果
 
 ### 集群部署
 
