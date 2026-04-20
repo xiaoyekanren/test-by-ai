@@ -78,7 +78,7 @@ class UtilsMixin:
     def _deploy_package_to_server(
         self,
         server: Server,
-        artifact_local_path: Any,
+        artifact_local_path: Optional[str],
         remote_package_path: str,
         install_dir: str,
         package_type: str,
@@ -86,10 +86,21 @@ class UtilsMixin:
         overwrite: bool,
         timeout: int,
         node_role: str,
-        expected_scripts: Optional[List[str]] = None
+        expected_scripts: Optional[List[str]] = None,
+        package_url: Optional[str] = None
     ) -> Dict[str, Any]:
         if not remote_package_path:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "remote_package_path is required"}
+
+        artifact_local_path = str(artifact_local_path or "").strip()
+        package_url = str(package_url or "").strip()
+        if artifact_local_path and package_url:
+            return {
+                "exit_status": -1,
+                "stdout": "",
+                "stderr": "",
+                "error": "Use either artifact_local_path or package_url, not both"
+            }
 
         if artifact_local_path:
             upload_result = self._execute_upload_node({
@@ -100,6 +111,15 @@ class UtilsMixin:
             })
             if upload_result.get("exit_status") != 0:
                 return upload_result
+        elif package_url:
+            download_result = self._download_package_to_server(
+                server=server,
+                package_url=package_url,
+                remote_package_path=remote_package_path,
+                timeout=timeout
+            )
+            if download_result.get("exit_status") != 0:
+                return download_result
 
         detected_type = self._detect_package_type(remote_package_path, package_type)
         if detected_type is None:
@@ -150,10 +170,46 @@ class UtilsMixin:
         payload = self._ssh_result_to_dict(result)
         payload.update({
             "remote_package_path": remote_package_path,
+            "package_url": package_url or None,
             "iotdb_home": install_dir,
             "conf_path": self._default_config_path(install_dir),
             "expected_start_script": sorted(set(scripts_to_check))[0],
             "expected_start_scripts": sorted(set(scripts_to_check))
+        })
+        return payload
+
+    def _download_package_to_server(
+        self,
+        server: Server,
+        package_url: str,
+        remote_package_path: str,
+        timeout: int
+    ) -> Dict[str, Any]:
+        package_dir = os.path.dirname(remote_package_path) or "/tmp"
+        command = "\n".join([
+            "set -e",
+            f"mkdir -p {self._quote(package_dir)}",
+            "if command -v curl >/dev/null 2>&1; then",
+            f"  curl -fL --retry 3 -o {self._quote(remote_package_path)} {self._quote(package_url)}",
+            "elif command -v wget >/dev/null 2>&1; then",
+            f"  wget -O {self._quote(remote_package_path)} {self._quote(package_url)}",
+            "else",
+            "  echo 'curl or wget is required to download package_url' >&2",
+            "  exit 127",
+            "fi",
+        ])
+        result = self.ssh_service.run_command(
+            host=server.host,
+            username=server.username,
+            password=server.password,
+            command="bash -lc " + self._quote(command),
+            port=server.port,
+            timeout=timeout
+        )
+        payload = self._ssh_result_to_dict(result)
+        payload.update({
+            "package_url": package_url,
+            "remote_package_path": remote_package_path
         })
         return payload
 

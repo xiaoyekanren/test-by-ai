@@ -24,6 +24,8 @@ const props = defineProps<{
   autoSave: boolean
   canUndo: boolean
   canRedo: boolean
+  canRun: boolean
+  runBlockedReason: string
 }>()
 
 const emit = defineEmits<{
@@ -148,14 +150,22 @@ const pageTitle = computed(() => {
       >
         Save
       </ElButton>
-      <ElButton
+      <ElTooltip
         v-if="workflowId"
-        type="success"
-        :icon="Refresh"
-        @click="handleRun"
+        :content="runBlockedReason || 'Run workflow'"
+        placement="bottom"
       >
-        Run
-      </ElButton>
+        <span>
+          <ElButton
+            type="success"
+            :icon="Refresh"
+            :disabled="!canRun"
+            @click="handleRun"
+          >
+            Run
+          </ElButton>
+        </span>
+      </ElTooltip>
     </div>
   </div>
 </template>

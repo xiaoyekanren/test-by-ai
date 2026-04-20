@@ -165,7 +165,7 @@ class GraphMixin:
     def _snapshot_edge_status(self, from_status: str, to_status: str) -> str:
         if from_status == "failed":
             return "failed"
-        if from_status in {"success", "completed"} and to_status != "not-run":
+        if from_status == "success" and to_status != "not-run":
             return "passed"
         if to_status == "running":
             return "running"

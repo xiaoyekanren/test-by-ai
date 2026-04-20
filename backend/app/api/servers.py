@@ -1,9 +1,9 @@
 # backend/app/api/servers.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Set
+from typing import Any, Dict, List, Set
 from ..dependencies import get_db
-from ..models.database import Server, Execution, NodeExecution
+from ..models.database import Server, Execution, NodeExecution, Workflow
 from ..schemas.server import ServerCreate, ServerUpdate, ServerResponse
 from ..services.ssh_service import SSHService
 
@@ -55,6 +55,47 @@ def _build_server_response(server: Server, is_busy: bool) -> ServerResponse:
         "updated_at": server.updated_at
     }
     return ServerResponse.model_validate(server_dict)
+
+
+def _matches_server_id(value: Any, server_id: int) -> bool:
+    if value in (None, ""):
+        return False
+    try:
+        return int(value) == server_id
+    except (TypeError, ValueError):
+        return False
+
+
+def _node_config_references_server(config: Dict[str, Any], server_id: int) -> bool:
+    if _matches_server_id(config.get("server_id"), server_id):
+        return True
+
+    for field in ("config_nodes", "data_nodes"):
+        nodes = config.get(field)
+        if not isinstance(nodes, list):
+            continue
+        for item in nodes:
+            if (
+                isinstance(item, dict)
+                and _matches_server_id(item.get("server_id"), server_id)
+            ):
+                return True
+
+    return False
+
+
+def _workflows_referencing_server(db: Session, server_id: int) -> List[Workflow]:
+    workflows = db.query(Workflow).all()
+    referenced: List[Workflow] = []
+    for workflow in workflows:
+        for node in workflow.nodes or []:
+            if not isinstance(node, dict):
+                continue
+            config = node.get("config") or {}
+            if isinstance(config, dict) and _node_config_references_server(config, server_id):
+                referenced.append(workflow)
+                break
+    return referenced
 
 
 @router.get("", response_model=List[ServerResponse])
@@ -158,6 +199,19 @@ def delete_server(server_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Server with id {server_id} not found"
+        )
+
+    referencing_workflows = _workflows_referencing_server(db, server_id)
+    if referencing_workflows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Server is used by existing workflows",
+                "workflows": [
+                    {"id": workflow.id, "name": workflow.name}
+                    for workflow in referencing_workflows
+                ]
+            }
         )
 
     db.delete(server)

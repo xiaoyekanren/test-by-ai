@@ -27,6 +27,7 @@ import { useServersStore } from '@/stores/servers'
 import { useMonitoringStore } from '@/stores/monitoring'
 import type { ProcessInfo, Server, ServerCreate, ServerUpdate } from '@/types'
 import { REGION_OPTIONS } from '@/types'
+import { getApiErrorMessage } from '@/utils/api'
 
 const serversStore = useServersStore()
 const monitoringStore = useMonitoringStore()
@@ -360,7 +361,7 @@ async function deleteServer(server: Server) {
     ElMessage.success('Server deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to delete server')
+      ElMessage.error(getApiErrorMessage(error, 'Failed to delete server'))
     }
   }
 }

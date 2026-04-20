@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, 'backend')
 import pytest
-from app.models.database import NodeExecution
+from app.models.database import Execution, NodeExecution
 
 @pytest.fixture(autouse=True)
 def setup_workflow(client):
@@ -29,10 +29,14 @@ def test_list_executions(client):
     assert response.status_code == 200
     assert len(response.json()) >= 1
 
-def test_stop_execution(client):
-    client.post("/api/executions", json={"workflow_id": 1})
-    response = client.post("/api/executions/1/stop")
+def test_stop_execution(client, db_session):
+    execution = Execution(workflow_id=1, status="pending")
+    db_session.add(execution)
+    db_session.commit()
+
+    response = client.post(f"/api/executions/{execution.id}/stop")
     assert response.status_code == 200
+    assert response.json()["status"] == "stopped"
 
 def test_delete_execution(client, db_session):
     create_response = client.post("/api/executions", json={"workflow_id": 1})

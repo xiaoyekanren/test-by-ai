@@ -20,6 +20,7 @@ import {
 } from '@element-plus/icons-vue'
 import { executionsApi } from '@/api'
 import type { Execution, ExecutionStatus, NodeExecution } from '@/types'
+import { isNodeSuccess, isNodeFinished } from '@/utils/execution'
 
 const props = defineProps<{
   workflowId: number | null
@@ -65,26 +66,25 @@ const canStop = computed(() =>
 // Progress calculation
 const progressPercent = computed(() => {
   if (!nodeExecutions.value.length) return 0
-  const completed = nodeExecutions.value.filter(
-    ne => ne.status === 'completed' || ne.status === 'failed' || ne.status === 'skipped'
-  ).length
+  const completed = nodeExecutions.value.filter(ne => isNodeFinished(ne.status)).length
   return Math.round((completed / nodeExecutions.value.length) * 100)
 })
 
 // Status color and icon mapping
-const statusConfig: Record<ExecutionStatus | string, { color: string; bgColor: string; icon: typeof VideoPlay; label: string }> = {
+const statusConfig: Record<ExecutionStatus, { color: string; bgColor: string; icon: typeof VideoPlay; label: string }> = {
   pending: { color: '#909399', bgColor: '#f4f4f5', icon: Clock, label: 'Pending' },
   running: { color: '#409EFF', bgColor: '#ecf5ff', icon: Loading, label: 'Running' },
   paused: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: 'Paused' },
   completed: { color: '#67C23A', bgColor: '#f0f9eb', icon: CircleCheck, label: 'Completed' },
-  failed: { color: '#F56C6C', bgColor: '#fef0f0', icon: CircleClose, label: 'Failed' }
+  failed: { color: '#F56C6C', bgColor: '#fef0f0', icon: CircleClose, label: 'Failed' },
+  stopped: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: 'Stopped' }
 }
 
 // Node status config
 const nodeStatusConfig: Record<string, { color: string; icon: typeof Clock; label: string }> = {
   pending: { color: '#909399', icon: Clock, label: 'Pending' },
   running: { color: '#409EFF', icon: Loading, label: 'Running' },
-  completed: { color: '#67C23A', icon: CircleCheck, label: 'Success' },
+  success: { color: '#67C23A', icon: CircleCheck, label: 'Success' },
   failed: { color: '#F56C6C', icon: CircleClose, label: 'Failed' },
   skipped: { color: '#909399', icon: VideoPause, label: 'Skipped' }
 }
@@ -100,7 +100,7 @@ const formatDuration = (seconds: number | null): string => {
 
 // Get status info
 const getStatusInfo = (status: string) => {
-  return statusConfig[status] || statusConfig.pending
+  return statusConfig[status as ExecutionStatus] || statusConfig.pending
 }
 
 const getNodeStatusInfo = (status: string) => {
@@ -182,6 +182,9 @@ const handleStop = async () => {
   isStopping.value = true
   try {
     currentExecution.value = await executionsApi.stop(currentExecution.value.id)
+    nodeExecutions.value = await executionsApi.getNodes(currentExecution.value.id)
+    emit('nodeExecutionsUpdated', nodeExecutions.value)
+    emit('executionCompleted', currentExecution.value)
     stopPolling()
   } catch (error) {
     console.error('Failed to stop execution:', error)
@@ -201,7 +204,7 @@ const startPolling = (executionId: number) => {
       emit('nodeExecutionsUpdated', nodeExecutions.value)
 
       // Check if execution is finished
-      if (execution.status === 'completed' || execution.status === 'failed') {
+      if (execution.status === 'completed' || execution.status === 'failed' || execution.status === 'stopped') {
         stopPolling()
         emit('executionCompleted', execution)
       }
@@ -340,7 +343,7 @@ onUnmounted(() => {
         </div>
         <ElProgress
           :percentage="progressPercent"
-          :status="displayExecutionStatus === 'failed' ? 'exception' : displayExecutionStatus === 'completed' ? 'success' : undefined"
+          :status="displayExecutionStatus === 'failed' ? 'exception' : displayExecutionStatus === 'completed' ? 'success' : displayExecutionStatus === 'stopped' ? 'warning' : undefined"
           :stroke-width="8"
         />
       </div>
@@ -375,7 +378,7 @@ onUnmounted(() => {
               <span class="duration">{{ formatDuration(nodeExec.duration) }}</span>
               <ElTag
                 size="small"
-                :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'"
+                :type="isNodeSuccess(nodeExec.status) ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'"
               >
                 {{ getNodeStatusInfo(nodeExec.status).label }}
               </ElTag>
@@ -407,7 +410,7 @@ onUnmounted(() => {
       <template #header>
         <div class="logs-header-compact">
           <span class="logs-title-text">{{ logDialogTitle }}</span>
-          <ElTag v-if="logDialogNodeExecutions[0]" size="small" :type="logDialogNodeExecutions[0].status === 'completed' ? 'success' : logDialogNodeExecutions[0].status === 'failed' ? 'danger' : 'info'">
+          <ElTag v-if="logDialogNodeExecutions[0]" size="small" :type="isNodeSuccess(logDialogNodeExecutions[0].status) ? 'success' : logDialogNodeExecutions[0].status === 'failed' ? 'danger' : 'info'">
             {{ logDialogNodeExecutions[0].status }}
           </ElTag>
         </div>
