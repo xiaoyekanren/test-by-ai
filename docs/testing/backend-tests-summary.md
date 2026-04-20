@@ -6,14 +6,14 @@
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/ -v
+python3.13 -m pytest tests/ -v
 ```
 
 只收集测试数量：
 
 ```bash
 cd backend
-.venv/bin/python -m pytest --collect-only -q
+python3.13 -m pytest --collect-only -q
 ```
 
 最后收集结果：113 tests。

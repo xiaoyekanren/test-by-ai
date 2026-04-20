@@ -35,7 +35,7 @@
 │   │   ├── api/           # API 路由 (servers, workflows, executions, monitoring, settings, iotdb)
 │   │   ├── models/        # 数据库模型
 │   │   ├── schemas/       # Pydantic 数据模型
-│   │   ├── services/      # 业务逻辑 (execution_engine, monitoring, ssh)
+│   │   ├── services/      # 业务逻辑 (execution facade, execution package, monitoring, ssh)
 │   │   ├── config.py      # 配置
 │   │   └── main.py        # FastAPI 应用入口
 │   ├── tests/             # pytest 测试
@@ -184,7 +184,7 @@ manage.bat status
 | iotdb_start | 启动服务 | server_id, wait_port, timeout |
 | iotdb_stop | 停止服务 | server_id, graceful |
 | iotdb_cli | 执行 CLI 命令 | commands, server_id, timeout |
-| iotdb_config | 应用配置模板 | template_name, server_id |
+| iotdb_config | 应用 IoTDB 配置项 | iotdb_home, node_role, rpc_port, file_path, config_items, server_id/region |
 
 ### 集群节点
 
@@ -245,7 +245,7 @@ manage.bat status
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/ -v
+python3.13 -m pytest tests/ -v
 ```
 
 测试覆盖详情见 [testing/backend-tests-summary.md](testing/backend-tests-summary.md)。
