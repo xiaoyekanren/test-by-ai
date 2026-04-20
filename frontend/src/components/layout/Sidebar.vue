@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Document, Monitor, Setting, HomeFilled, DataAnalysis, Platform } from '@element-plus/icons-vue'
+import { Document, Setting, HomeFilled, DataAnalysis, Platform } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -75,12 +75,12 @@ onMounted(() => {
     <div class="sidebar-header">
       <div class="logo" @click="goToHome">
         <div class="logo-icon">
-          <el-icon :size="14"><Monitor /></el-icon>
+          <img src="@/assets/logo.png" alt="TestFlow" />
         </div>
         <transition name="fade">
           <div v-show="!isCollapse" class="logo-text">
             <span class="logo-title">TestFlow</span>
-            <span class="logo-subtitle">运维管理平台</span>
+            <span class="logo-subtitle">测试自动化平台</span>
           </div>
         </transition>
       </div>
@@ -192,10 +192,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
   border-radius: 6px;
-  color: white;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo-text {
