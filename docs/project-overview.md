@@ -56,7 +56,7 @@
 ├── docs/                  # 项目文档中心
 ├── manage.sh              # Mac/Linux 启动脚本
 ├── manage.bat             # Windows 启动脚本
-├── release.py             # 发布包构建脚本
+├── manage.py              # 服务管理和发布包构建脚本
 └── README.md              # 项目入口
 ```
 
@@ -262,13 +262,19 @@ npm run build
 如果你希望基于当前代码生成一个可交付目录，可以执行：
 
 ```bash
-python3.12 release.py
+./manage.sh release
+```
+
+Windows 可执行：
+
+```bat
+manage.bat release
 ```
 
 命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。版本默认取最近的 Git tag；如需手动指定，可执行：
 
 ```bash
-python3.12 release.py --version 0.1.0
+./manage.sh release --version 0.1.0
 ```
 
 发布包默认包含：
