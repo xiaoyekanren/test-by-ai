@@ -85,7 +85,7 @@ cd frontend && npm run typecheck
 cd frontend && npm run build
 
 # 发布打包
-python3.12 release.py
+./manage.sh release
 ```
 
 ## 测试执行偏好
