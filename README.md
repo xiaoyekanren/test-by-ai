@@ -48,7 +48,7 @@ manage.bat status
 
 Windows 可执行 `manage.bat release`。
 
-命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。版本默认取最近的 Git tag，也可以通过 `--version` 指定。
+命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。默认版本为 `snapshot-YYYY-MM-DD`，例如 `test-by-ai-snapshot-2026-04-20`；正式版本可通过 `--version` 指定。
 
 ## 文档入口
 

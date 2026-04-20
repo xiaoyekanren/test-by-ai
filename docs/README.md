@@ -66,7 +66,7 @@ Windows 可执行：
 manage.bat release
 ```
 
-发布命令会先构建前端，再把运行所需文件收集到 `release/仓库-版本/`，并生成带同名顶层目录的 `release/仓库-版本.zip`。版本默认取最近的 Git tag；如需手动指定，可执行 `./manage.sh release --version 0.1.0`。
+发布命令会先构建前端，再把运行所需文件收集到 `release/仓库-版本/`，并生成带同名顶层目录的 `release/仓库-版本.zip`。默认版本为 `snapshot-YYYY-MM-DD`，例如 `test-by-ai-snapshot-2026-04-20`；如需生成正式版本，可执行 `./manage.sh release --version 0.1.0`。
 
 发布包默认包含：
 
