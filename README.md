@@ -1,8 +1,6 @@
-# IoTDB Test Automation Platform
+# TestFlow
 
-IoTDB 测试自动化平台，提供服务器管理、可视化工作流编排、远程执行、实时监控和 IoTDB 可视化能力。
-
-浏览器页面标题统一使用 `OpsCenter`。
+IoTDB 测试自动化平台，通过可视化拖拽工作流的方式测试 IoTDB，支持服务器管理、工作流编排、远程执行、实时监控和测试用例管理。
 
 ## 功能概览
 
@@ -48,7 +46,7 @@ manage.bat status
 
 Windows 可执行 `manage.bat release`。
 
-命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。默认版本基于最近 Git tag 生成，例如最近版本为 `0.2` 时生成 `test-by-ai-0.2-snapshot-20260420`；正式版本可通过 `--version` 指定。
+命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。默认版本基于最近 Git tag 生成，例如最近版本为 `0.2` 时生成 `testflow-0.2-snapshot-20260420`；正式版本可通过 `--version` 指定。
 
 ## 文档入口
 

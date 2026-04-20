@@ -79,7 +79,7 @@ onMounted(() => {
         </div>
         <transition name="fade">
           <div v-show="!isCollapse" class="logo-text">
-            <span class="logo-title">OpsCenter</span>
+            <span class="logo-title">TestFlow</span>
             <span class="logo-subtitle">运维管理平台</span>
           </div>
         </transition>

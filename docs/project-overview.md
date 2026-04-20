@@ -1,4 +1,4 @@
-# IoTDB Test Automation Platform 详细说明
+# TestFlow 详细说明
 
 本文档包含项目的完整技术说明，从根目录 `README.md` 迁移。根目录 README 保留入口级信息，详细运行、API、节点和发布说明集中维护在这里。
 

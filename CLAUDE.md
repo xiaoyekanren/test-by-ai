@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-IoTDB Test Automation Platform 是一个面向 IoTDB 测试自动化的 OpsCenter，核心能力包括服务器管理、可视化工作流编排、远程 SSH 执行、监控、IoTDB 可视化和发布包交付。
+TestFlow 是一个面向 IoTDB 测试自动化的平台，核心能力包括服务器管理、可视化工作流编排、远程 SSH 执行、监控、IoTDB 可视化和发布包交付。
 
 ## 文档更新规定
 
