@@ -41,7 +41,15 @@ backend/app/
 │   └── settings.py  # 设置相关 schema
 └── services/        # 业务逻辑层
     ├── ssh_service.py      # SSH 连接、命令执行、文件传输
-    ├── execution_engine.py # 工作流执行引擎
+    ├── execution_engine.py # 向后兼容 facade，导出 ExecutionEngine
+    ├── execution/          # 工作流执行引擎实现（engine + mixins + handlers）
+    │   ├── engine.py       # 核心编排、CRUD、execute_workflow
+    │   ├── graph.py        # DAG 构建、拓扑排序、执行快照
+    │   ├── node_dispatch.py # 节点分发、worker session
+    │   ├── server_resolution.py # 区域调度、空闲服务器解析
+    │   ├── context.py      # 上下文合并与传播
+    │   ├── utils.py        # SSH 结果、路径和属性替换等工具
+    │   └── handlers/       # 按节点域拆分的执行器
     └── monitoring_service.py # 系统监控服务
 ```
 
@@ -171,4 +179,4 @@ Server     ──── 独立实体（被节点配置引用）
 
 ---
 
-最后更新: 2026-04-13
+最后更新: 2026-04-20
