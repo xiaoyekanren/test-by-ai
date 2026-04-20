@@ -19,6 +19,7 @@ from .handlers import (
     IoTDBHandlersMixin,
     ClusterHandlersMixin,
     BenchmarkHandlersMixin,
+    ControlHandlersMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class ExecutionEngine(
     IoTDBHandlersMixin,
     ClusterHandlersMixin,
     BenchmarkHandlersMixin,
+    ControlHandlersMixin,
 ):
     """Service for managing workflow executions."""
 
@@ -68,6 +70,11 @@ class ExecutionEngine(
             "iotdb_cluster_stop": self._execute_iotdb_cluster_stop_node,
             "iot_benchmark_start": self._execute_iot_benchmark_start_node,
             "iot_benchmark_wait": self._execute_iot_benchmark_wait_node,
+            "condition": self._execute_condition_node,
+            "loop": self._execute_loop_node,
+            "wait": self._execute_wait_node,
+            "parallel": self._execute_parallel_node,
+            "assert": self._execute_assert_node,
         }
 
     def create_execution(
@@ -154,13 +161,17 @@ class ExecutionEngine(
         passed_count = 0
         failed_count = 0
         skipped_count = 0
+        blocking_skipped_count = 0
 
         try:
-            node_order, nodes_by_id, parents, children = self._build_execution_graph(nodes, edges)
+            node_order, nodes_by_id, parents, children, edge_labels = self._build_execution_graph(nodes, edges)
             pending: Set[str] = set(node_order)
             running: Dict[Future, str] = {}
             statuses: Dict[str, str] = {}
             context_updates: Dict[str, Dict[str, Any]] = {}
+            node_output_data: Dict[str, Dict[str, Any]] = {}
+            loop_state: Dict[str, Dict[str, Any]] = {}
+            control_flow_skipped: Set[str] = set()
 
             max_workers = max(1, min(8, len(node_order) or 1))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -170,13 +181,27 @@ class ExecutionEngine(
                         if node_id in pending and any(statuses.get(parent_id) in {"failed", "skipped"} for parent_id in parents[node_id])
                     ]
                     for node_id in blocked:
+                        blocking_parents = [
+                            parent_id for parent_id in parents[node_id]
+                            if statuses.get(parent_id) in {"failed", "skipped"}
+                        ]
+                        is_control_flow_skip = bool(blocking_parents) and all(
+                            statuses.get(parent_id) == "skipped" and parent_id in control_flow_skipped
+                            for parent_id in blocking_parents
+                        )
                         pending.remove(node_id)
                         statuses[node_id] = "skipped"
                         skipped_count += 1
+                        if is_control_flow_skip:
+                            control_flow_skipped.add(node_id)
+                            reason = "Skipped because an upstream condition branch was not selected"
+                        else:
+                            blocking_skipped_count += 1
+                            reason = "Skipped because an upstream node did not complete successfully"
                         self._create_skipped_node_execution(
                             execution_id,
                             nodes_by_id[node_id],
-                            "Skipped because an upstream node did not complete successfully"
+                            reason
                         )
 
                     ready = [
@@ -200,6 +225,7 @@ class ExecutionEngine(
                                 pending.remove(node_id)
                                 statuses[node_id] = "skipped"
                                 skipped_count += 1
+                                blocking_skipped_count += 1
                                 self._create_skipped_node_execution(
                                     execution_id,
                                     nodes_by_id[node_id],
@@ -225,8 +251,41 @@ class ExecutionEngine(
                         if status_value == "success":
                             passed_count += 1
                             context_updates[node_id] = dict(node_result.get("context") or {})
+                            output_data = node_result.get("output_data") or {}
+                            node_output_data[node_id] = output_data
+                            node_type = nodes_by_id[node_id].get("type")
+
+                            if node_type == "condition":
+                                branch = str(output_data.get("branch", "true")).lower()
+                                for child_id in children[node_id]:
+                                    label = edge_labels.get((node_id, child_id), "").lower()
+                                    if label and label != branch and child_id in pending:
+                                        pending.remove(child_id)
+                                        statuses[child_id] = "skipped"
+                                        skipped_count += 1
+                                        control_flow_skipped.add(child_id)
+                                        self._create_skipped_node_execution(
+                                            execution_id,
+                                            nodes_by_id[child_id],
+                                            f"Skipped: condition took '{branch}' branch"
+                                        )
+
+                            if node_type == "loop":
+                                loop_cfg = nodes_by_id[node_id].get("config") or {}
+                                total = max(1, int(loop_cfg.get("iterations", 1)))
+                                body = self._get_loop_body(node_id, children)
+                                loop_state[node_id] = {
+                                    "current": 0,
+                                    "total": total,
+                                    "body": body,
+                                }
                         else:
                             failed_count += 1
+
+                    self._check_loop_iterations(
+                        loop_state, statuses, pending, context_updates,
+                        execution_id, nodes_by_id, children
+                    )
 
             execution.finished_at = utc_now()
             execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
@@ -238,7 +297,7 @@ class ExecutionEngine(
                 "workflow_state": self._build_workflow_state_snapshot(execution_id, nodes, edges, statuses),
             }
 
-            if failed_count == 0 and skipped_count == 0:
+            if failed_count == 0 and blocking_skipped_count == 0:
                 execution.status = "completed"
                 execution.result = "passed"
             else:

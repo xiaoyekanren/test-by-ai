@@ -115,6 +115,7 @@ class NodeDispatchMixin:
             "status": node_execution.status,
             "context": context_update,
             "error": node_execution.error_message,
+            "output_data": result if node_execution.status == "success" else {},
         }
 
     def _execute_node(self, node_type: str, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
