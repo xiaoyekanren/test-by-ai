@@ -175,7 +175,7 @@ class GraphMixin:
         self,
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]]
-    ) -> tuple[List[str], Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
+    ) -> tuple[List[str], Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]], Dict[tuple, str]]:
         node_order: List[str] = []
         nodes_by_id: Dict[str, Dict[str, Any]] = {}
 
@@ -189,6 +189,7 @@ class GraphMixin:
 
         parents: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
         children: Dict[str, List[str]] = {node_id: [] for node_id in node_order}
+        edge_labels: Dict[tuple, str] = {}
 
         valid_edge_count = 0
         for edge in edges:
@@ -200,6 +201,9 @@ class GraphMixin:
                 parents[to_id].append(from_id)
             if to_id not in children[from_id]:
                 children[from_id].append(to_id)
+            label = edge.get("label") or ""
+            if label:
+                edge_labels[(from_id, to_id)] = label
             valid_edge_count += 1
 
         if valid_edge_count == 0:
@@ -207,7 +211,7 @@ class GraphMixin:
                 parents[to_id].append(from_id)
                 children[from_id].append(to_id)
 
-        return node_order, nodes_by_id, parents, children
+        return node_order, nodes_by_id, parents, children, edge_labels
 
     def _merge_parent_contexts(
         self,
@@ -240,3 +244,53 @@ class GraphMixin:
         )
         self.db.add(node_execution)
         self.db.commit()
+
+    def _get_loop_body(
+        self,
+        loop_node_id: str,
+        children: Dict[str, List[str]]
+    ) -> Set[str]:
+        body: Set[str] = set()
+        stack = list(children.get(loop_node_id, []))
+        while stack:
+            nid = stack.pop()
+            if nid not in body:
+                body.add(nid)
+                stack.extend(children.get(nid, []))
+        return body
+
+    def _check_loop_iterations(
+        self,
+        loop_state: Dict[str, Dict[str, Any]],
+        statuses: Dict[str, str],
+        pending: Set[str],
+        context_updates: Dict[str, Dict[str, Any]],
+        execution_id: int,
+        nodes_by_id: Dict[str, Dict[str, Any]],
+        children: Dict[str, List[str]]
+    ) -> None:
+        for loop_id in list(loop_state.keys()):
+            state = loop_state[loop_id]
+            body = state["body"]
+            if not body:
+                del loop_state[loop_id]
+                continue
+
+            all_done = all(nid in statuses for nid in body)
+            if not all_done:
+                continue
+
+            all_success = all(statuses.get(nid) == "success" for nid in body)
+            state["current"] += 1
+
+            if all_success and state["current"] < state["total"]:
+                for nid in body:
+                    statuses.pop(nid, None)
+                    pending.add(nid)
+                context_updates[loop_id] = {
+                    **context_updates.get(loop_id, {}),
+                    "_loop_iteration": state["current"],
+                    "_loop_total": state["total"],
+                }
+            else:
+                del loop_state[loop_id]

@@ -34,6 +34,7 @@ class ExecutionEngine:
 - `handlers/iotdb.py`: deploy/start/cli/stop + SQL
 - `handlers/cluster.py`: 集群 deploy/start/check/stop
 - `handlers/benchmark.py`: benchmark start/wait/collect
+- `handlers/control.py`: condition/loop/wait/parallel/assert
 
 `backend/app/services/execution_engine.py` 仅保留为向后兼容导出层，现有 import 路径无需修改。
 
@@ -114,6 +115,11 @@ class ExecutionEngine:
 | iotdb_stop | 停止 IoTDB | SSH 执行停止脚本 |
 | iotdb_cli | IoTDB CLI 操作 | SSH 执行 CLI 命令 |
 | iotdb_config | 配置 IoTDB | SSH + 配置文件写入 |
+| condition | 条件分支 (if/else) | 执行 shell 表达式，exit 0 → True 分支，非零 → False 分支 |
+| loop | 循环执行 | for 循环 N 次迭代，自动重复执行子节点 |
+| wait | 等待条件满足 | 轮询执行 shell 命令直到 exit 0 或超时 |
+| parallel | 并行网关 | 透传节点，引擎已原生并行调度 |
+| assert | 断言检查 | SSH 检查日志/文件/进程/端口/自定义命令 |
 
 ### _execute_node 实现
 
@@ -167,6 +173,11 @@ def create_execution(execution_data, background_tasks, db):
 ### DAG 调度策略
 
 **决策**: 节点按 `edges` 构建依赖图，所有上游成功后才可执行；上游失败或跳过时，下游标记为 `skipped`。
+
+**控制流扩展**:
+- **条件分支**: condition 节点完成后根据 `branch` 结果（true/false），匹配边标签（True/False），未命中的分支及其后代自动跳过
+- **循环迭代**: loop 节点完成后，引擎追踪循环体（所有后代节点）。每次迭代完成后，若仍有剩余次数，清除循环体状态并重新入队
+- **边标签**: `_build_execution_graph` 同时返回 `edge_labels` 字典，格式为 `{(from_id, to_id): label}`
 
 **原因**:
 - 运行时行为与编辑器连线一致
