@@ -1,6 +1,6 @@
 # IoTDB Test Automation Platform 详细说明
 
-本文档包含项目的完整技术说明，从根目录 `README.md` 迁移。
+本文档包含项目的完整技术说明，从根目录 `README.md` 迁移。根目录 README 保留入口级信息，详细运行、API、节点和发布说明集中维护在这里。
 
 ## 技术栈
 
@@ -56,8 +56,54 @@
 ├── docs/                  # 项目文档中心
 ├── manage.sh              # Mac/Linux 启动脚本
 ├── manage.bat             # Windows 启动脚本
+├── release.py             # 发布包构建脚本
 └── README.md              # 项目入口
 ```
+
+## 运行管理
+
+### 环境要求
+
+- Python 3.10+
+- Node.js 18+（包含 npm）
+
+### 启动服务
+
+Mac/Linux:
+
+```bash
+./manage.sh install
+./manage.sh start
+./manage.sh status
+```
+
+Windows:
+
+```bat
+manage.bat install
+manage.bat start
+manage.bat status
+```
+
+首次部署建议先执行 `install` 检查 Python / Node.js 环境并安装依赖。之后执行 `start` 启动服务；`start` 和 `restart` 会自动补齐缺失的后端和前端依赖。
+
+### 管理命令
+
+| 命令 | 描述 |
+|------|------|
+| `start` | 启动所有服务 |
+| `stop` | 停止所有服务 |
+| `restart` | 重启所有服务 |
+| `status` | 查看服务状态 |
+| `install` | 安装后端、前端依赖 |
+| `check` | 检查环境、项目文件、依赖状态和端口占用 |
+
+### 访问应用
+
+启动成功后访问：
+
+- 前端: `http://localhost:5173`
+- API 文档: `http://localhost:8000/docs`
 
 ## 页面入口
 
@@ -185,8 +231,61 @@
 | [pages/servers/region-scheduling.md](design/pages/servers/region-scheduling.md) | Region 字段、区域调度 |
 | [pages/workflows/editor.md](design/pages/workflows/editor.md) | Vue Flow 编辑器、节点类型 |
 | [pages/workflows/execution-engine.md](design/pages/workflows/execution-engine.md) | ExecutionEngine、状态管理 |
+| [pages/workflows/iot-benchmark-async-node.md](design/pages/workflows/iot-benchmark-async-node.md) | IoT Benchmark 异步节点 |
+| [pages/iotdb/visualization.md](design/pages/iotdb/visualization.md) | IoTDB CLI、日志和配置 |
+| [pages/monitoring/service.md](design/pages/monitoring/service.md) | 本地/远程监控服务 |
 | [shared/backend-architecture.md](design/shared/backend-architecture.md) | FastAPI 架构 |
 | [shared/frontend-architecture.md](design/shared/frontend-architecture.md) | Vue 3 架构 |
+| [shared/ssh-service.md](design/shared/ssh-service.md) | SSH 连接、执行和文件传输 |
+| [shared/release-runtime.md](design/shared/release-runtime.md) | 发布包结构和跨平台运行脚本 |
+
+## 开发与测试
+
+### 后端测试
+
+```bash
+cd backend
+.venv/bin/python -m pytest tests/ -v
+```
+
+测试覆盖详情见 [testing/backend-tests-summary.md](testing/backend-tests-summary.md)。
+
+### 前端构建
+
+```bash
+cd frontend
+npm run build
+```
+
+## 发布打包
+
+如果你希望基于当前代码生成一个可交付目录，可以执行：
+
+```bash
+python3.12 release.py
+```
+
+命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。版本默认取最近的 Git tag；如需手动指定，可执行：
+
+```bash
+python3.12 release.py --version 0.1.0
+```
+
+发布包默认包含：
+
+- `backend/app/` 与 `backend/requirements.txt`
+- 构建后的前端产物 `backend/app/frontend_dist/`
+- 发布包专用的 `manage.py`、`manage.sh`、`manage.bat`
+- `README.md`
+- `RELEASE_INFO.txt`
+- `data/app.db`
+
+发布包默认不包含：
+
+- `venv/`
+- `frontend/src/` 和前端配置文件
+- `frontend/node_modules/`
+- `data/logs/` 里的运行日志
 
 ---
 

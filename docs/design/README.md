@@ -1,6 +1,6 @@
 # 设计文档索引
 
-本目录按“页面入口优先、共享能力补充”的方式组织设计文档。
+本目录按“页面入口优先、共享能力补充、调研对照归档”的方式组织设计文档。页面文档描述具体交互和状态，共享文档描述跨页面架构、服务和运行机制。
 
 ## 页面设计
 
@@ -21,6 +21,17 @@
 | [shared/frontend-architecture.md](shared/frontend-architecture.md) | Vue 3 + Pinia 架构、Store 设计、组件结构 | 2026-04-13 |
 | [shared/backend-architecture.md](shared/backend-architecture.md) | FastAPI + SQLAlchemy 架构、API 路由、数据模型 | 2026-04-13 |
 | [shared/ssh-service.md](shared/ssh-service.md) | SSHService 实现、连接管理、文件传输 | 2026-04-13 |
+| [shared/release-runtime.md](shared/release-runtime.md) | 最终发布包结构、跨平台运行脚本和 Windows batch 变量展开约束 | 2026-04-17 |
+
+## 设计覆盖矩阵
+
+| 能力域 | 页面文档 | 共享文档 |
+|--------|----------|----------|
+| 应用壳和导航 | [pages/app-shell/ui-layout.md](pages/app-shell/ui-layout.md) | [shared/frontend-architecture.md](shared/frontend-architecture.md) |
+| 服务器管理和调度 | [pages/servers/region-scheduling.md](pages/servers/region-scheduling.md) | [shared/ssh-service.md](shared/ssh-service.md)、[shared/backend-architecture.md](shared/backend-architecture.md) |
+| 工作流编辑和执行 | [pages/workflows/editor.md](pages/workflows/editor.md)、[pages/workflows/execution-engine.md](pages/workflows/execution-engine.md) | [shared/backend-architecture.md](shared/backend-architecture.md)、[shared/frontend-architecture.md](shared/frontend-architecture.md) |
+| IoTDB 和 Benchmark | [pages/iotdb/visualization.md](pages/iotdb/visualization.md)、[pages/workflows/iot-benchmark-async-node.md](pages/workflows/iot-benchmark-async-node.md) | [shared/ssh-service.md](shared/ssh-service.md) |
+| 发布交付 | - | [shared/release-runtime.md](shared/release-runtime.md) |
 
 ## 调研与对照
 
@@ -34,7 +45,9 @@
 - 跨页面通用架构、服务和工具能力放入 `docs/design/shared/`。
 - 竞品分析、外部系统对照和路线调研放入 `docs/design/research/`。
 - 新增或移动设计文档后同步更新本索引。
+- 不再使用历史 AI 计划目录存放计划或规格；需要保留的长期信息应整理为设计文档、测试说明或待办文档。
+- 仅当工具脚本仍受版本控制且有维护价值时，才为其新增设计说明；当前仓库没有受版本控制的 `tools/` 目录。
 
 ---
 
-此目录自 2026-04-10 创建，于 2026-04-15 按页面入口重新归档。
+此目录自 2026-04-10 创建，于 2026-04-20 补充覆盖矩阵和归档规则。
