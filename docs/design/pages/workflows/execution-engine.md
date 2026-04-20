@@ -2,11 +2,11 @@
 
 ## 概述
 
-工作流执行引擎负责按顺序执行工作流中的节点，记录执行状态和结果，支持手动、API 和定时触发。
+工作流执行引擎负责按 DAG 依赖关系调度工作流中的节点，记录执行状态和结果，支持手动、API 和定时触发。
 
 ## 技术架构
 
-### ExecutionEngine 类
+### ExecutionEngine 结构
 
 ```python
 class ExecutionEngine:
@@ -21,6 +21,21 @@ class ExecutionEngine:
     # 核心执行逻辑
     def execute_workflow(execution_id) -> None
 ```
+
+当前实现已拆分为 `backend/app/services/execution/` 包：
+
+- `engine.py`: 执行生命周期、CRUD、线程池调度
+- `graph.py`: DAG 构建、拓扑辅助、workflow_state 快照
+- `node_dispatch.py`: 节点注册表分发、独立 session worker
+- `server_resolution.py`: `server_id` / `region` 解析与空闲服务器选择
+- `context.py`: 父节点上下文合并、成功结果向下游传播
+- `utils.py`: SSH 结果转换、路径与配置工具
+- `handlers/basic.py`: shell/upload/download/config/log_view
+- `handlers/iotdb.py`: deploy/start/cli/stop + SQL
+- `handlers/cluster.py`: 集群 deploy/start/check/stop
+- `handlers/benchmark.py`: benchmark start/wait/collect
+
+`backend/app/services/execution_engine.py` 仅保留为向后兼容导出层，现有 import 路径无需修改。
 
 ### 执行状态流转
 
@@ -38,10 +53,6 @@ class ExecutionEngine:
       │
       ├──────────────▶ failed (节点失败或手动停止)
       │
-      ▼
-┌─────────────┐
-│   paused    │  (暂未实现)
-└─────────────┘
 ```
 
 ## 数据流
@@ -52,41 +63,40 @@ class ExecutionEngine:
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ 加载Workflow│────▶│ 更新状态    │────▶│ 初始化context│
-│ 和节点列表   │     │ 为running   │     │ passed/failed│
-└─────────────┘     └─────────────┘     └─────────────┘
-                           │
-                           ▼
-      ┌────────────────────────────────────────────┐
-      │          遍历节点顺序执行                    │
-      └────────────────────────────────────────────┘
-                           │
-      ┌────────────────────┼────────────────────┐
-      │                    │                    │
-      ▼                    ▼                    ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ 创建NodeExec │────▶│ _execute_node│────▶│ 更新NodeExec │
-│ 记录         │     │ 执行节点     │     │ 状态和结果   │
-└─────────────┘     └─────────────┘     └─────────────┘
-                           │
-                           ▼
-                  ┌─────────────┐
-                  │ success?    │
-                  └─────────────┘
-                      │       │
-                 Yes  │       │ No
-                      ▼       ▼
-              ┌───────────┐  ┌───────────┐
-              │ passed+=1 │  │ failed+=1 │
-              │ continue  │  │ break     │
-              └───────────┘  └───────────┘
-                           │
-                           ▼
-                  ┌─────────────┐
-                  │ 更新Execution│
-                  │ 最终状态     │
-                  └─────────────┘
+┌─────────────┐     ┌─────────────┐     ┌────────────────┐
+│ 加载Workflow│────▶│ 更新状态    │────▶│ 构建 DAG 图     │
+│ 和节点列表   │     │ 为 running  │     │ parents/children│
+└─────────────┘     └─────────────┘     └────────────────┘
+                                                  │
+                                                  ▼
+                           ┌────────────────────────────────────┐
+                           │ 计算 ready / blocked / pending 节点 │
+                           └────────────────────────────────────┘
+                                                  │
+                         ┌────────────────────────┴────────────────────────┐
+                         ▼                                                 ▼
+               ┌────────────────┐                               ┌────────────────┐
+               │ ready 节点提交到│                               │ blocked 节点写入│
+               │ ThreadPoolExecutor│                             │ skipped 记录    │
+               └────────────────┘                               └────────────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │ worker 创建独立 DB 会话│
+              │ 并按注册表分发处理器   │
+              └──────────────────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │ success -> 累积 context│
+              │ failed  -> 下游跳过    │
+              └──────────────────────┘
+                         │
+                         ▼
+                 ┌─────────────┐
+                 │ 更新Execution│
+                 │ summary/result│
+                 └─────────────┘
 ```
 
 ## 节点类型执行
@@ -98,29 +108,29 @@ class ExecutionEngine:
 | shell | 执行 shell 命令 | SSH 远程执行 |
 | upload | 上传文件 | SFTP |
 | download | 下载文件 | SFTP |
+| config | 通用配置文件替换 | SSH + 配置文件写入 |
 | iotdb_deploy | 部署 IoTDB | SSH + 配置生成 |
 | iotdb_start | 启动 IoTDB | SSH 执行启动脚本 |
 | iotdb_stop | 停止 IoTDB | SSH 执行停止脚本 |
 | iotdb_cli | IoTDB CLI 操作 | SSH 执行 CLI 命令 |
 | iotdb_config | 配置 IoTDB | SSH + 配置文件写入 |
-| condition | 条件判断 | 评估表达式 |
-| wait | 等待 | sleep |
-| parallel | 并行执行 | (暂未实现) |
 
 ### _execute_node 实现
 
-根据节点类型调用对应执行逻辑：
+当前通过节点类型注册表分发执行逻辑，而不是 if/elif 长链：
 
 ```python
-def _execute_node(node_type, config, context):
-    if node_type == 'shell':
-        return _execute_shell(config, context)
-    elif node_type == 'iotdb_deploy':
-        return _execute_iotdb_deploy(config, context)
-    elif node_type == 'wait':
-        return _execute_wait(config, context)
-    # ...
+self._node_handlers = {
+    "shell": self._execute_shell_node,
+    "upload": self._execute_upload_node,
+    "download": self._execute_download_node,
+    "config": self._execute_config_node,
+    "iotdb_config": self._execute_iotdb_config_node,
+    ...
+}
 ```
+
+未知节点当前仍会返回默认成功结果，不产生副作用。
 
 ### 执行结果结构
 
@@ -154,20 +164,20 @@ def create_execution(execution_data, background_tasks, db):
 - 执行状态通过数据库持久化
 - 前端通过轮询获取进度
 
-### 顺序执行策略
+### DAG 调度策略
 
-**决策**: 节点按添加顺序执行，失败时立即停止。
+**决策**: 节点按 `edges` 构建依赖图，所有上游成功后才可执行；上游失败或跳过时，下游标记为 `skipped`。
 
 **原因**:
-- 简单可靠，易于理解
-- 适合测试验证场景
-- 后续可扩展为 DAG 拓扑执行
+- 运行时行为与编辑器连线一致
+- 允许独立分支并发执行
+- 能显式表示失败传播和不可达节点
 
 ### 执行上下文传递
 
-**决策**: 使用 context 字典在节点间传递数据。
+**决策**: 使用 context 字典在父子节点间传递运行时结果。
 
-**实现**: 成功节点的输出更新 context，后续节点可读取。
+**实现**: 仅成功节点更新 context；下游节点合并所有父节点 context 后执行。显式 `region` 可阻止继承 `server_id` / `host`，避免跨区域复用旧服务器。
 
 **示例**:
 ```python
@@ -200,7 +210,7 @@ iotdb_home = context.get('iotdb_home')
 | execution_id | 关联的执行 |
 | node_id | 节点 ID |
 | node_type | 节点类型 |
-| status | pending/running/success/failed/skipped |
+| status | running/success/failed/skipped |
 | input_data | 输入配置 |
 | output_data | 输出结果 |
 | error_message | 错误信息 |
@@ -208,4 +218,4 @@ iotdb_home = context.get('iotdb_home')
 
 ---
 
-最后更新: 2026-04-13
+最后更新: 2026-04-20
