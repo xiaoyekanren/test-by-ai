@@ -49,6 +49,8 @@
 │   │   ├── views/         # 页面视图
 │   │   ├── router/        # 路由配置
 │   │   ├── types/         # TypeScript 类型定义
+│   │   ├── utils/         # 共享工具函数 (execution, api)
+│   │   ├── composables/   # Vue 组合式函数 (useServerValidation)
 │   │   └── main.ts        # 应用入口
 │   ├── package.json
 │   └── vite.config.ts

@@ -117,26 +117,43 @@ class ExecutionEngine(
             return None
 
         if execution.status in ["pending", "running"]:
-            execution.status = "failed"
-            execution.finished_at = utc_now()
+            stopped_at = utc_now()
+            execution.status = "stopped"
+            execution.finished_at = stopped_at
             if execution.started_at:
                 execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
             workflow = self.db.query(Workflow).filter(Workflow.id == execution.workflow_id).first()
+            summary = {
+                **(execution.summary or {}),
+                "stopped_at": stopped_at.isoformat(),
+            }
             if workflow:
-                execution.summary = {
-                    **(execution.summary or {}),
+                summary.update({
                     "workflow_state": self._build_workflow_state_snapshot(
                         execution_id,
                         workflow.nodes or [],
                         workflow.edges or [],
                         {}
                     ),
-                }
+                })
+            execution.summary = summary
             self.db.commit()
             self.db.refresh(execution)
             logger.info("Stopped execution %s", execution_id)
 
         return execution
+
+    def _is_stop_requested(self, execution_id: int) -> bool:
+        status = self.db.query(Execution.status).filter(
+            Execution.id == execution_id
+        ).scalar()
+        return status == "stopped"
+
+    def _current_execution_summary(self, execution_id: int) -> Dict[str, Any]:
+        summary = self.db.query(Execution.summary).filter(
+            Execution.id == execution_id
+        ).scalar()
+        return dict(summary or {})
 
     def execute_workflow(self, execution_id: int) -> None:
         execution = self.get_execution(execution_id)
@@ -150,6 +167,10 @@ class ExecutionEngine(
             execution.status = "failed"
             execution.finished_at = utc_now()
             self.db.commit()
+            return
+
+        if self._is_stop_requested(execution_id):
+            logger.info("Execution %s was stopped before worker start", execution_id)
             return
 
         execution.status = "running"
@@ -172,10 +193,37 @@ class ExecutionEngine(
             node_output_data: Dict[str, Dict[str, Any]] = {}
             loop_state: Dict[str, Dict[str, Any]] = {}
             control_flow_skipped: Set[str] = set()
+            stop_requested = False
 
             max_workers = max(1, min(8, len(node_order) or 1))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 while pending or running:
+                    if self._is_stop_requested(execution_id):
+                        stop_requested = True
+                        for future, node_id in list(running.items()):
+                            if future.cancel():
+                                running.pop(future, None)
+                                statuses[node_id] = "skipped"
+                                skipped_count += 1
+                                blocking_skipped_count += 1
+                                self._create_skipped_node_execution(
+                                    execution_id,
+                                    nodes_by_id[node_id],
+                                    "Skipped because execution was stopped"
+                                )
+                        for node_id in list(pending):
+                            pending.remove(node_id)
+                            statuses[node_id] = "skipped"
+                            skipped_count += 1
+                            blocking_skipped_count += 1
+                            self._create_skipped_node_execution(
+                                execution_id,
+                                nodes_by_id[node_id],
+                                "Skipped because execution was stopped"
+                            )
+                        if not running:
+                            break
+
                     blocked = [
                         node_id for node_id in node_order
                         if node_id in pending and any(statuses.get(parent_id) in {"failed", "skipped"} for parent_id in parents[node_id])
@@ -290,6 +338,7 @@ class ExecutionEngine(
             execution.finished_at = utc_now()
             execution.duration = int((execution.finished_at - execution.started_at).total_seconds())
             execution.summary = {
+                **self._current_execution_summary(execution_id),
                 "total": len(nodes),
                 "passed": passed_count,
                 "failed": failed_count,
@@ -297,7 +346,10 @@ class ExecutionEngine(
                 "workflow_state": self._build_workflow_state_snapshot(execution_id, nodes, edges, statuses),
             }
 
-            if failed_count == 0 and blocking_skipped_count == 0:
+            if stop_requested:
+                execution.status = "stopped"
+                execution.result = "partial" if passed_count else "failed"
+            elif failed_count == 0 and blocking_skipped_count == 0:
                 execution.status = "completed"
                 execution.result = "passed"
             else:

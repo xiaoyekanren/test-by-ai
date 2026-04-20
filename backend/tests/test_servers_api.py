@@ -87,6 +87,26 @@ def test_delete_server_not_found(client):
     response = client.delete("/api/servers/999")
     assert response.status_code == 404
 
+def test_delete_server_rejects_workflow_reference(client):
+    server_response = client.post("/api/servers", json={"name": "test", "host": "192.168.1.1"})
+    server_id = server_response.json()["id"]
+    client.post("/api/workflows", json={
+        "name": "uses-server",
+        "nodes": [
+            {
+                "id": "shell-1",
+                "type": "shell",
+                "config": {"server_id": server_id}
+            }
+        ],
+        "edges": []
+    })
+
+    response = client.delete(f"/api/servers/{server_id}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["workflows"][0]["name"] == "uses-server"
+
 def test_list_servers(client):
     client.post("/api/servers", json={"name": "server1", "host": "192.168.1.1"})
     client.post("/api/servers", json={"name": "server2", "host": "192.168.1.2"})
