@@ -102,8 +102,8 @@ manage.bat release
 - 根目录 `README.md` 只保留项目介绍、快速启动、发布命令和文档入口。
 - 新增页面相关设计文档放入 `docs/design/pages/{page}/`，跨页面架构、服务和运行机制放入 `docs/design/shared/`，调研对照放入 `docs/design/research/`，并同步更新 [design/README.md](design/README.md)。
 - 新增测试说明放入 `docs/testing/`。
-- 新增待办记录放入 `docs/todos/`。
-- 不再新增历史 AI 计划目录；阶段性计划若确需保留，优先整理为 `docs/todos/` 或对应设计文档。
+- 待办记录统一维护在根目录 `todos.md`。
+- 不再新增历史 AI 计划目录；阶段性计划若确需保留，优先整理到 `todos.md` 或对应设计文档。
 - 除仓库根目录 `README.md` 作为项目入口、`CLAUDE.md` 作为 Claude Code 调用入口外，新增 Markdown 文档默认放在 `docs/` 下。
 
 ---
