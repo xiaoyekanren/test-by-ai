@@ -1,29 +1,22 @@
 # 项目开发规范
 
-本文档记录项目的开发规范和工作流程要求。
+本文件为 Claude Code 调用入口，定义开发规范和工作流程。
 
 ## 文档更新规定
 
 **每次更新代码时，必须同步更新相关文档：**
 
-1. **说明文档** - 更新功能说明、使用方法等
-2. **设计文档** - 更新架构设计、技术决策等（如果没有则需创建）
+1. **说明文档** - 功能说明、使用方法等，放在 `docs/` 目录
+2. **设计文档** - 架构设计、技术决策等，放在 `docs/design/` 目录
 
 ### 文档位置
 
-- 说明文档: 优先放在 `docs/` 目录；根目录 `README.md` 仅作为项目入口，`CLAUDE.md` 作为 Claude Code 调用入口保留在根目录
-- 设计文档: `docs/design/` 目录
-
-### 文档命名规范
-
-设计文档统一放在 `docs/design/` 目录下，命名格式：
-
-- `docs/design/{模块名}.md` - 模块设计文档
-- `docs/design/{功能名}.md` - 功能设计文档
-
-例如：
-- `docs/design/workflow-engine.md` - 工作流引擎设计文档
-- `docs/design/ssh-executor.md` - SSH 执行器设计文档
+| 文档类型 | 位置 | 说明 |
+|----------|------|------|
+| 项目入口 | `README.md` | 项目介绍、快速开始、打包命令 |
+| 项目详情 | `docs/project-overview.md` | 技术栈、API、节点类型等详细说明 |
+| 设计文档 | `docs/design/` | 按页面组织的设计索引 |
+| 开发规范 | `CLAUDE.md` | 本文件，Claude Code 调用入口 |
 
 ### 更新检查清单
 
@@ -32,12 +25,54 @@
 - [ ] 代码修改是否涉及新功能？
 - [ ] 说明文档是否需要更新？
 - [ ] 设计文档是否需要更新？
-- [ ] 是否需要创建新的设计文档？
 
 ## 测试执行偏好
 
-本仓库后续无论是计划、设计还是快速代码调整，都无需默认执行全量测试。优先做有针对性的局部验证；只有用户明确要求、改动风险很高或发布前需要确认时，才运行全量测试。
+不做默认全量测试。优先针对性局部验证；仅用户明确要求、改动风险高或发布前确认时运行全量测试。
+
+## 项目结构要点
+
+```
+backend/
+  app/api/      # API 路由
+  app/models/   # SQLAlchemy 模型
+  app/schemas/  # Pydantic 数据模型
+  app/services/ # 业务逻辑
+  tests/        # pytest 测试
+
+frontend/
+  src/views/    # 页面视图
+  src/components/workflow/  # 工作流编辑器组件
+  src/stores/   # Pinia 状态管理
+  src/types/    # TypeScript 类型定义
+```
+
+## 关键设计文档
+
+| 功能 | 文档 |
+|------|------|
+| 区域调度 | `docs/design/pages/servers/region-scheduling.md` |
+| 工作流编辑器 | `docs/design/pages/workflows/editor.md` |
+| 执行引擎 | `docs/design/pages/workflows/execution-engine.md` |
+| 后端架构 | `docs/design/shared/backend-architecture.md` |
+| 前端架构 | `docs/design/shared/frontend-architecture.md` |
+
+## 常用命令
+
+```bash
+# 后端测试
+cd backend && pytest tests/ -v
+
+# 前端类型检查
+cd frontend && npm run typecheck
+
+# 前端构建
+cd frontend && npm run build
+
+# 发布打包
+python3.12 release.py
+```
 
 ---
 
-此规范自 2026-04-10 起生效。
+此规范自 2026-04-10 起生效，于 2026-04-20 更新。
