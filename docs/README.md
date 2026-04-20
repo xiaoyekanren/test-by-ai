@@ -11,6 +11,7 @@
 | 设计文档 | [design/README.md](design/README.md) | 页面、共享能力和调研文档索引 |
 | 运行发布 | [design/shared/release-runtime.md](design/shared/release-runtime.md) | 发布包结构、跨平台运行脚本和 Windows venv 创建注意事项 |
 | 测试文档 | [testing/backend-tests-summary.md](testing/backend-tests-summary.md) | 后端测试文件、覆盖范围和运行方式 |
+| 测试文档 | [testing/disk-usage-test-workflow-analysis.md](testing/disk-usage-test-workflow-analysis.md) | 磁盘空间占用统计测试用例转工作流分析 |
 | 待办事项 | [todos/workflow-editor.md](todos/workflow-editor.md) | 工作流编辑器交互、逻辑和可靠性待办 |
 | 待办事项 | [todos/iotdb-cli.md](todos/iotdb-cli.md) | IoTDB CLI、终端体验和日志分屏待办 |
 | 待办事项 | [todos/frontend-build.md](todos/frontend-build.md) | 前端构建 chunk size 警告和优化建议 |
@@ -32,7 +33,8 @@ docs/
 │   ├── research/                  # 调研文档
 │   └── shared/                    # 共享架构、服务和发布设计
 ├── testing/
-│   └── backend-tests-summary.md
+│   ├── backend-tests-summary.md
+│   └── disk-usage-test-workflow-analysis.md
 └── todos/
     ├── frontend-build.md
     ├── iotdb-cli.md

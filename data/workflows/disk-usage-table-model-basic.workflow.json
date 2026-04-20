@@ -1,0 +1,145 @@
+{
+  "format": "test-by-ai.workflow",
+  "version": 1,
+  "exported_at": "2026-04-21T00:00:00.000Z",
+  "workflow": {
+    "name": "磁盘空间统计-表模型基础功能",
+    "description": "IoTDB v2.0.9.1 磁盘空间占用统计功能测试 — 表模型基础查询（用例 1-6）。覆盖 table_disk_usage 系统表的基本查询、WHERE 过滤、GROUP BY 聚合、空结果集、空数据库、视图查询。",
+    "nodes": [
+      {
+        "id": "deploy",
+        "type": "iotdb_deploy",
+        "config": {
+          "region": "私有云",
+          "install_dir": "/opt/iotdb",
+          "overwrite": true,
+          "rpc_port": 6667,
+          "timeout": 600
+        },
+        "position": { "x": 100, "y": 300 }
+      },
+      {
+        "id": "start",
+        "type": "iotdb_start",
+        "config": {
+          "node_role": "standalone",
+          "rpc_port": 6667,
+          "timeout_seconds": 120,
+          "wait_strategy": "cli"
+        },
+        "position": { "x": 350, "y": 300 }
+      },
+      {
+        "id": "setup_data",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "CREATE DATABASE IF NOT EXISTS db_g_0",
+            "CREATE DATABASE IF NOT EXISTS test1",
+            "CREATE DATABASE IF NOT EXISTS empty_db",
+            "CREATE DATABASE IF NOT EXISTS viewdb",
+            "USE db_g_0",
+            "CREATE TABLE IF NOT EXISTS t1 (d_0 TAG TEXT, s_0 INT32, s_1 INT64, s_2 FLOAT, s_3 DOUBLE, s_4 TEXT)",
+            "INSERT INTO t1 (time, d_0, s_0, s_1, s_2, s_3, s_4) VALUES (1, 'dev_0', 100, 1000, 1.1, 2.2, 'hello')",
+            "INSERT INTO t1 (time, d_0, s_0, s_1, s_2, s_3, s_4) VALUES (2, 'dev_1', 200, 2000, 3.3, 4.4, 'world')",
+            "INSERT INTO t1 (time, d_0, s_0, s_1, s_2, s_3, s_4) VALUES (3, 'dev_0', 300, 3000, 5.5, 6.6, 'test')",
+            "USE test1",
+            "CREATE TABLE IF NOT EXISTS t1 (d_0 TAG TEXT, s_0 INT32)",
+            "CREATE TABLE IF NOT EXISTS t2 (d_0 TAG TEXT, s_0 INT32)",
+            "INSERT INTO t1 (time, d_0, s_0) VALUES (1, 'a', 1)",
+            "INSERT INTO t2 (time, d_0, s_0) VALUES (1, 'b', 2)",
+            "FLUSH"
+          ],
+          "timeout_seconds": 120
+        },
+        "position": { "x": 600, "y": 300 }
+      },
+      {
+        "id": "case1_basic_query",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT * FROM information_schema.table_disk_usage"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 100 }
+      },
+      {
+        "id": "case2_where_filter",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT * FROM information_schema.table_disk_usage WHERE database = 'test1'",
+            "SELECT * FROM information_schema.table_disk_usage WHERE table_name = 't1'",
+            "SELECT * FROM information_schema.table_disk_usage WHERE database = 'test1' AND table_name = 't1'"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 200 }
+      },
+      {
+        "id": "case3_group_by",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT database, table_name, SUM(size_in_bytes) AS total_size_in_bytes FROM information_schema.table_disk_usage GROUP BY database, table_name"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 300 }
+      },
+      {
+        "id": "case4_nonexistent_table",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT * FROM information_schema.table_disk_usage WHERE table_name = 'non_existent_table'"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 400 }
+      },
+      {
+        "id": "case5_empty_db",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT * FROM information_schema.table_disk_usage WHERE database = 'empty_db'"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 500 }
+      },
+      {
+        "id": "case6_view_query",
+        "type": "iotdb_cli",
+        "config": {
+          "sql_dialect": "table",
+          "sqls": [
+            "SELECT * FROM information_schema.table_disk_usage WHERE table_name = 't1' AND database = 'viewdb'"
+          ],
+          "timeout_seconds": 60
+        },
+        "position": { "x": 900, "y": 600 }
+      }
+    ],
+    "edges": [
+      { "from": "deploy", "to": "start" },
+      { "from": "start", "to": "setup_data" },
+      { "from": "setup_data", "to": "case1_basic_query" },
+      { "from": "setup_data", "to": "case2_where_filter" },
+      { "from": "setup_data", "to": "case3_group_by" },
+      { "from": "setup_data", "to": "case4_nonexistent_table" },
+      { "from": "setup_data", "to": "case5_empty_db" },
+      { "from": "setup_data", "to": "case6_view_query" }
+    ],
+    "variables": {}
+  }
+}
