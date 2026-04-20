@@ -11,7 +11,18 @@ export default defineConfig({
     }
   },
   build: {
-    chunkSizeWarningLimit: 1200
+    chunkSizeWarningLimit: 500,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/') || id.includes('node_modules/pinia/')) return 'vendor-core'
+          if (id.includes('node_modules/element-plus/')) return 'vendor-ui'
+          if (id.includes('node_modules/@vue-flow/')) return 'vendor-flow'
+          if (id.includes('node_modules/@xterm/')) return 'vendor-terminal'
+          if (id.includes('node_modules/axios/')) return 'vendor-http'
+        }
+      }
+    }
   },
   server: {
     port: 5173,
