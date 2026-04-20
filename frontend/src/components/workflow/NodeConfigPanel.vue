@@ -14,6 +14,7 @@ import {
 import { Edit, Plus, Delete } from '@element-plus/icons-vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
+import { useServerValidation } from '@/composables/useServerValidation'
 import { REGION_OPTIONS } from '@/types'
 import type { NodeType } from '@/types'
 
@@ -39,8 +40,16 @@ interface FieldSection {
   fields: FieldDefinition[]
 }
 
+interface ServerOption {
+  value: number
+  label: string
+  region: string
+  disabled?: boolean
+}
+
 const workflowsStore = useWorkflowsStore()
 const serversStore = useServersStore()
+const { serverIds, isMissingServerId, missingServerOption } = useServerValidation()
 
 // Local edit state for node label
 const editingLabel = ref('')
@@ -80,11 +89,15 @@ const nodeHelpText = computed(() => {
     return 'Wait for the benchmark_run produced by Start IoT Benchmark, then return the tail of its output log.'
   }
 
+  if (selectedNode.value.data.nodeType === 'iotdb_deploy') {
+    return 'Use either Artifact Local Path or Package URL as the package source. The selected package will be staged at Remote Package Path before deployment.'
+  }
+
   return ''
 })
 
 // Server options for dropdown
-const serverOptions = computed(() => {
+const serverOptions = computed<ServerOption[]>(() => {
   return serversStore.servers.map(server => ({
     value: server.id,
     label: `${server.name} (${server.host})`,
@@ -101,6 +114,15 @@ const filteredServerOptions = computed(() => {
   if (!selectedRegion.value) return serverOptions.value
   return serverOptions.value.filter(option => option.region === selectedRegion.value)
 })
+
+const getServerSelectOptions = (field: string) => {
+  const options = [...filteredServerOptions.value]
+  const selectedServerId = getConfigValue(field)
+  if (isMissingServerId(selectedServerId)) {
+    options.unshift(missingServerOption(selectedServerId))
+  }
+  return options
+}
 
 // Fetch servers on mount
 onMounted(async () => {
@@ -158,7 +180,28 @@ const cancelEditLabel = () => {
 // Update config field
 const updateConfig = (field: string, value: unknown) => {
   if (!selectedNode.value) return
-  workflowsStore.updateNodeConfig(selectedNode.value.id, { [field]: value })
+  const nextConfig: Record<string, unknown> = { [field]: value }
+  const isIotdbDeploy = selectedNode.value.data.nodeType === 'iotdb_deploy'
+  const hasPackageSource = typeof value === 'string' ? value.trim() !== '' : Boolean(value)
+
+  if (isIotdbDeploy && field === 'package_source') {
+    if (value === 'local') {
+      nextConfig.package_url = ''
+    }
+    if (value === 'url') {
+      nextConfig.artifact_local_path = ''
+    }
+  }
+  if (isIotdbDeploy && hasPackageSource && field === 'artifact_local_path') {
+    nextConfig.package_source = 'local'
+    nextConfig.package_url = ''
+  }
+  if (isIotdbDeploy && hasPackageSource && field === 'package_url') {
+    nextConfig.package_source = 'url'
+    nextConfig.artifact_local_path = ''
+  }
+
+  workflowsStore.updateNodeConfig(selectedNode.value.id, nextConfig)
 }
 
 const updateServerConfig = (value: number | string | null | undefined) => {
@@ -182,6 +225,10 @@ const updateRegionConfig = (value: string | null | undefined) => {
 // Get config value
 const getConfigValue = (field: string): unknown => {
   if (!selectedNode.value) return null
+  if (selectedNode.value.data.nodeType === 'iotdb_deploy' && field === 'package_source') {
+    const explicitSource = selectedNode.value.data.config.package_source
+    return explicitSource === 'url' ? 'url' : 'local'
+  }
   return selectedNode.value.data.config[field]
 }
 
@@ -211,18 +258,24 @@ const getClusterSelectedRegion = () => {
     ...getClusterNodeServerIds('config_nodes'),
     ...getClusterNodeServerIds('data_nodes')
   ]
-  const firstId = selectedIds.find(id => serversStore.servers.some(server => server.id === id))
+  const firstId = selectedIds.find(id => serverIds.value.has(id))
   return firstId === undefined ? null : getServerRegion(firstId)
 }
 
 const getClusterServerOptions = (field: string) => {
   const selectedRegion = getClusterSelectedRegion()
   const selectedIds = new Set(getClusterNodeServerIds(field))
-
-  return serverOptions.value.filter(option => {
+  const options = serverOptions.value.filter(option => {
     if (!selectedRegion) return true
     return option.region === selectedRegion || selectedIds.has(Number(option.value))
   })
+
+  for (const serverId of selectedIds) {
+    if (isMissingServerId(serverId)) {
+      options.unshift(missingServerOption(serverId))
+    }
+  }
+  return options
 }
 
 const buildClusterNode = (
@@ -268,8 +321,8 @@ const getFieldLayoutClass = (field: FieldDefinition) => {
   if (field.type === 'clusterNodes') return 'field-full'
   if (field.type === 'number') return 'field-compact field-inline'
   if (field.type === 'checkbox') return 'field-compact field-inline'
-  if (['host', 'username', 'password', 'node_role', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type', 'region'].includes(field.field)) return 'field-medium field-inline'
-  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'remote_package_path'].includes(field.field)) return 'field-wide field-inline'
+  if (['host', 'username', 'password', 'node_role', 'package_source', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type', 'region'].includes(field.field)) return 'field-medium field-inline'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'package_url', 'remote_package_path'].includes(field.field)) return 'field-wide field-inline'
   if (field.type === 'server' || field.type === 'region') return 'field-wide field-inline'
   return 'field-wide field-inline'
 }
@@ -317,7 +370,12 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
     iotdb_deploy: [
       { field: 'server_id', label: 'Server', type: 'server' },
       { field: 'region', label: 'Region', type: 'region' },
+      { field: 'package_source', label: 'Package Source', type: 'select', options: [
+        { value: 'local', label: 'Upload Local Artifact' },
+        { value: 'url', label: 'Download from URL' }
+      ]},
       { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: '/path/to/apache-iotdb-bin.zip' },
+      { field: 'package_url', label: 'Package URL', type: 'text', placeholder: 'https://archive.apache.org/dist/iotdb/.../apache-iotdb-bin.zip' },
       { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/apache-iotdb-bin.zip' },
       { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iotdb' },
       { field: 'package_type', label: 'Package Type', type: 'select', options: [
@@ -546,7 +604,7 @@ const fieldSectionTitles: Record<string, string> = {
 const getFieldSection = (field: FieldDefinition) => {
   if (['server_id', 'host', 'target_host', 'username', 'password', 'region'].includes(field.field)) return 'connection'
   if (['db_switch', 'dialect', 'db_name'].includes(field.field)) return 'connection'
-  if (['artifact_local_path', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
+  if (['package_source', 'artifact_local_path', 'package_url', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
   if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'benchmark_home'].includes(field.field)) return 'paths'
   if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
   if (['poll_interval_seconds', 'tail_lines', 'kill_on_timeout', 'loop'].includes(field.field)) return 'runtime'
@@ -563,6 +621,12 @@ const fieldSections = computed<FieldSection[]>(() => {
 
   const sections: FieldSection[] = []
   for (const field of getFieldDefinitions(selectedNode.value.data.nodeType as NodeType)) {
+    if (selectedNode.value.data.nodeType === 'iotdb_deploy') {
+      const packageSource = getConfigValue('package_source')
+      if (field.field === 'artifact_local_path' && packageSource === 'url') continue
+      if (field.field === 'package_url' && packageSource !== 'url') continue
+    }
+
     const key = getFieldSection(field)
     let section = sections.find(item => item.key === key)
     if (!section) {
@@ -750,12 +814,19 @@ const isListField = (field: string): boolean => {
                 @update:model-value="updateServerConfig($event)"
               >
                 <ElOption
-                  v-for="option in filteredServerOptions"
+                  v-for="option in getServerSelectOptions(field.field)"
                   :key="option.value"
                   :label="option.label"
                   :value="option.value"
+                  :disabled="option.disabled"
                 />
               </ElSelect>
+              <div
+                v-if="isMissingServerId(getConfigValue(field.field))"
+                class="field-warning"
+              >
+                This workflow references a deleted server. Select another server before running it.
+              </div>
             </template>
 
             <template v-else-if="field.type === 'region'">
@@ -864,6 +935,7 @@ const isListField = (field: string): boolean => {
                     :key="option.value"
                     :label="option.label"
                     :value="option.value"
+                    :disabled="option.disabled"
                   >
                     <div class="cluster-server-option">
                       <span>{{ option.label }}</span>
@@ -1139,6 +1211,13 @@ const isListField = (field: string): boolean => {
 
 .cluster-region-hint {
   color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.field-warning {
+  grid-column: 2;
+  color: #b45309;
   font-size: 12px;
   line-height: 1.45;
 }

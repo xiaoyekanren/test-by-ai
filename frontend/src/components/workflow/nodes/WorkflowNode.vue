@@ -32,6 +32,7 @@ const props = defineProps<{
   }
   selected?: boolean
   executionStatus?: 'running' | 'passed' | 'failed' | null
+  validationError?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -70,14 +71,17 @@ const iconComponent = computed(() => {
 })
 
 const executionStatusConfig = computed(() => {
+  if (props.validationError) {
+    return { icon: CircleClose, label: 'Invalid', title: props.validationError }
+  }
   if (props.executionStatus === 'running') {
-    return { icon: Loading, label: 'Running' }
+    return { icon: Loading, label: 'Running', title: 'Running' }
   }
   if (props.executionStatus === 'passed') {
-    return { icon: CircleCheck, label: 'Passed' }
+    return { icon: CircleCheck, label: 'Passed', title: 'Passed' }
   }
   if (props.executionStatus === 'failed') {
-    return { icon: CircleClose, label: 'Failed' }
+    return { icon: CircleClose, label: 'Failed', title: 'Failed' }
   }
   return null
 })
@@ -107,6 +111,10 @@ const handleDoubleClick = () => {
 }
 
 const handleExecutionStatusDoubleClick = () => {
+  if (props.validationError) {
+    emit('dblclick', props.id)
+    return
+  }
   emit('executionStatusDblclick', props.id)
 }
 </script>
@@ -116,6 +124,7 @@ const handleExecutionStatusDoubleClick = () => {
     class="workflow-node"
     :class="[
       { selected: selected },
+      validationError ? 'validation-error' : '',
       executionStatus ? `execution-${executionStatus}` : ''
     ]"
     :style="{ borderColor: nodeConfig.color }"
@@ -125,7 +134,8 @@ const handleExecutionStatusDoubleClick = () => {
     <div
       v-if="executionStatusConfig"
       class="execution-badge"
-      :class="`execution-badge-${executionStatus}`"
+      :class="validationError ? 'execution-badge-validation-error' : `execution-badge-${executionStatus}`"
+      :title="executionStatusConfig.title"
       @dblclick.stop="handleExecutionStatusDoubleClick"
     >
       <component
@@ -210,6 +220,11 @@ const handleExecutionStatusDoubleClick = () => {
   box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.2), 0 4px 12px rgba(245, 108, 108, 0.22);
 }
 
+.workflow-node.validation-error {
+  border-color: #f56c6c !important;
+  box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.24), 0 4px 12px rgba(245, 108, 108, 0.24);
+}
+
 .execution-badge {
   position: absolute;
   top: -10px;
@@ -238,6 +253,10 @@ const handleExecutionStatusDoubleClick = () => {
 }
 
 .execution-badge-failed {
+  background: #f56c6c;
+}
+
+.execution-badge-validation-error {
   background: #f56c6c;
 }
 

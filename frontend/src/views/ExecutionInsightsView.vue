@@ -181,7 +181,7 @@ const selectedNodeView = computed(() => {
 })
 
 const completedNodeCount = computed(() => {
-  return executionNodeViewModels.value.filter(node => ['success', 'completed', 'failed', 'skipped'].includes(node.status)).length
+  return executionNodeViewModels.value.filter(node => ['success', 'failed', 'skipped'].includes(node.status)).length
 })
 
 const progressPercent = computed(() => {
@@ -248,6 +248,7 @@ const displayExecutionStatus = computed(() => {
 
   if (execution.status === 'failed') return '失败'
   if (execution.status === 'completed') return '成功'
+  if (execution.status === 'stopped') return '已停止'
   if (execution.status === 'running') return '运行中'
   if (execution.status === 'pending') return '等待中'
   if (execution.status === 'paused') return '已暂停'
@@ -320,7 +321,7 @@ function formatDuration(seconds: number | null) {
 
 function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeViewModel) {
   if (from.status === 'failed') return 'failed'
-  if (['success', 'completed'].includes(from.status) && to.status !== 'not-run') return 'passed'
+  if (from.status === 'success' && to.status !== 'not-run') return 'passed'
   if (to.status === 'running') return 'running'
   return 'pending'
 }
@@ -348,7 +349,7 @@ function getFlowExecutionStatus(nodeId: string): 'running' | 'passed' | 'failed'
   const status = getNodeViewById(nodeId)?.status
   if (status === 'running') return 'running'
   if (status === 'failed') return 'failed'
-  if (status && ['success', 'completed'].includes(status)) return 'passed'
+  if (status === 'success') return 'passed'
   return null
 }
 
@@ -359,6 +360,7 @@ function getStatusTone(status: string) {
       return 'success'
     case 'failed':
       return 'danger'
+    case 'stopped':
     case 'running':
       return 'warning'
     case 'not-run':
@@ -540,6 +542,7 @@ onUnmounted(() => {
         <ElOption label="running" value="running" />
         <ElOption label="completed" value="completed" />
         <ElOption label="failed" value="failed" />
+        <ElOption label="stopped" value="stopped" />
       </ElSelect>
 
       <ElInput
@@ -1127,8 +1130,7 @@ onUnmounted(() => {
   background: #94a3b8;
 }
 
-.timeline-dot.success,
-.timeline-dot.completed {
+.timeline-dot.success {
   background: #10b981;
 }
 

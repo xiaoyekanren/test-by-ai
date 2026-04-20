@@ -22,12 +22,16 @@ import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
 import { useWorkflowsStore } from '@/stores/workflows'
+import { useServersStore } from '@/stores/servers'
+import { useServerValidation } from '@/composables/useServerValidation'
 import { NODE_CONFIGS } from '@/types'
-import type { Execution, NodeExecution, NodeType } from '@/types'
+import type { Execution, FlowNode, NodeExecution, NodeType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const workflowsStore = useWorkflowsStore()
+const serversStore = useServersStore()
+const { isMissingServerId } = useServerValidation()
 
 // Vue Flow instance
 const {
@@ -126,15 +130,62 @@ const nodeExecutionStatusById = computed(() => {
   editorNodeExecutions.value.forEach(nodeExecution => {
     if (nodeExecution.status === 'running') {
       statusById.set(nodeExecution.node_id, 'running')
-    } else if (['completed', 'success', 'passed'].includes(nodeExecution.status)) {
+    } else if (nodeExecution.status === 'success') {
       statusById.set(nodeExecution.node_id, 'passed')
-    } else if (['failed', 'error'].includes(nodeExecution.status)) {
+    } else if (nodeExecution.status === 'failed') {
       statusById.set(nodeExecution.node_id, 'failed')
     }
   })
 
   return statusById
 })
+
+const getNodeMissingServerIds = (node: FlowNode) => {
+  const config = node.data.config || {}
+  const ids = new Set<number>()
+
+  if (isMissingServerId(config.server_id)) {
+    ids.add(Number(config.server_id))
+  }
+
+  for (const field of ['config_nodes', 'data_nodes']) {
+    const nodes = config[field]
+    if (!Array.isArray(nodes)) continue
+    for (const item of nodes) {
+      if (
+        item &&
+        typeof item === 'object' &&
+        'server_id' in item &&
+        isMissingServerId(item.server_id)
+      ) {
+        ids.add(Number(item.server_id))
+      }
+    }
+  }
+
+  return [...ids]
+}
+
+const nodeValidationErrorsById = computed(() => {
+  const errors = new Map<string, string>()
+  for (const node of workflowsStore.editorNodes) {
+    const missingServerIds = getNodeMissingServerIds(node)
+    if (missingServerIds.length > 0) {
+      errors.set(node.id, `Missing server #${missingServerIds.join(', #')}`)
+    }
+  }
+  return errors
+})
+
+const workflowValidationErrors = computed(() => {
+  return [...nodeValidationErrorsById.value.entries()].map(([nodeId, message]) => {
+    const node = workflowsStore.editorNodes.find(item => item.id === nodeId)
+    return `${node?.data.label || nodeId}: ${message}`
+  })
+})
+
+const canRunWorkflow = computed(() => workflowValidationErrors.value.length === 0)
+const runBlockedReason = computed(() => workflowValidationErrors.value[0] || '')
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -177,6 +228,13 @@ const handleKeydown = (event: KeyboardEvent) => {
 // Load workflow on mount
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
+  if (serversStore.servers.length === 0) {
+    try {
+      await serversStore.fetchServers()
+    } catch {
+      ElMessage.error('Failed to load servers')
+    }
+  }
   if (workflowId.value) {
     try {
       const workflow = await workflowsStore.fetchWorkflow(workflowId.value)
@@ -399,6 +457,15 @@ const handleFitView = () => {
 // Handle run workflow
 const handleRun = async () => {
   if (workflowId.value) {
+    if (workflowValidationErrors.value.length > 0) {
+      const firstInvalidNodeId = nodeValidationErrorsById.value.keys().next().value
+      if (firstInvalidNodeId) {
+        workflowsStore.selectNode(firstInvalidNodeId)
+      }
+      ElMessage.error(`Cannot run workflow: ${workflowValidationErrors.value[0]}`)
+      return
+    }
+
     // Check if workflow has unsaved changes
     if (workflowsStore.isDirty) {
       try {
@@ -466,6 +533,8 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       :auto-save="workflowsStore.autoSave"
       :can-undo="workflowsStore.canUndo"
       :can-redo="workflowsStore.canRedo"
+      :can-run="canRunWorkflow"
+      :run-blocked-reason="runBlockedReason"
       @save="handleSave"
       @auto-save-change="handleAutoSaveChange"
       @undo="handleUndo"
@@ -507,6 +576,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
               :data="nodeProps.data"
               :selected="nodeProps.selected"
               :execution-status="nodeExecutionStatusById.get(nodeProps.id) || null"
+              :validation-error="nodeValidationErrorsById.get(nodeProps.id) || null"
               @click="handleNodeClick(nodeProps.id)"
               @dblclick="handleNodeDoubleClick(nodeProps.id)"
               @execution-status-dblclick="handleExecutionStatusDblclick"

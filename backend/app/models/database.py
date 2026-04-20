@@ -49,7 +49,7 @@ class Execution(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False)
-    status = Column(String(20), default="pending")  # 'pending' | 'running' | 'paused' | 'completed' | 'failed'
+    status = Column(String(20), default="pending")  # pending | running | paused | completed | failed | stopped
     trigger_type = Column(String(20), default="manual")  # 'manual' | 'scheduled' | 'api'
     triggered_by = Column(String(50))
     started_at = Column(UTCDateTime())

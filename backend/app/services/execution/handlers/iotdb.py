@@ -11,14 +11,15 @@ class IoTDBHandlersMixin:
         import os
         server = self._require_server(config, context)
         role = self._normalize_node_role(config.get("node_role"))
-        install_dir = self._required_str(config, "install_dir", "install_path")
-        remote_package_path = config.get("remote_package_path") or config.get("remote_path")
+        install_dir = self._required_str(config, "install_dir")
+        remote_package_path = config.get("remote_package_path")
         if not remote_package_path and config.get("artifact_local_path"):
             remote_package_path = f"/tmp/{os.path.basename(str(config['artifact_local_path']))}"
 
         deploy_result = self._deploy_package_to_server(
             server=server,
-            artifact_local_path=config.get("artifact_local_path") or config.get("local_path"),
+            artifact_local_path=config.get("artifact_local_path"),
+            package_url=config.get("package_url"),
             remote_package_path=str(remote_package_path or ""),
             install_dir=install_dir,
             package_type=str(config.get("package_type", "auto")),

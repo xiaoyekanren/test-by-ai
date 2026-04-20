@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
 # Status literals for execution
-EXECUTION_STATUS = Literal["pending", "running", "paused", "completed", "failed"]
+EXECUTION_STATUS = Literal["pending", "running", "paused", "completed", "failed", "stopped"]
 TRIGGER_TYPE = Literal["manual", "scheduled", "api"]
 EXECUTION_RESULT = Literal["passed", "failed", "partial"]
 
