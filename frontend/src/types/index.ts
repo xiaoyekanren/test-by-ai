@@ -86,7 +86,9 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     defaultConfig: {
       server_id: null,
       region: null,
+      package_source: 'local',
       artifact_local_path: '',
+      package_url: '',
       remote_package_path: '/tmp/apache-iotdb-bin.zip',
       install_dir: '/opt/iotdb',
       package_type: 'auto',
@@ -536,7 +538,7 @@ export interface WorkflowUpdate {
 
 // Execution related types
 
-export type ExecutionStatus = "pending" | "running" | "paused" | "completed" | "failed"
+export type ExecutionStatus = "pending" | "running" | "paused" | "completed" | "failed" | "stopped"
 export type TriggerType = "manual" | "scheduled" | "api"
 export type ExecutionResult = "passed" | "failed" | "partial"
 
@@ -560,12 +562,14 @@ export interface ExecutionCreate {
   triggered_by?: string | null
 }
 
+export type NodeExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
+
 export interface NodeExecution {
   id: number
   execution_id: number
   node_id: string
   node_type: string
-  status: string
+  status: NodeExecutionStatus
   started_at: string | null
   finished_at: string | null
   duration: number | null

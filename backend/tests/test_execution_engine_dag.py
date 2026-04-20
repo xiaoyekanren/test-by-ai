@@ -187,3 +187,50 @@ def test_workflow_without_edges_keeps_legacy_node_order(tmp_path, monkeypatch):
 
     assert executed_nodes == ["first", "second", "third"]
     session.close()
+
+
+def test_stop_request_prevents_downstream_scheduling(tmp_path, monkeypatch):
+    session_factory = make_engine(tmp_path)
+    session = session_factory()
+    execution = create_workflow(
+        session,
+        nodes=[
+            {"id": "start", "type": "report", "config": {}},
+            {"id": "after", "type": "report", "config": {}},
+        ],
+        edges=[
+            {"from": "start", "to": "after"},
+        ],
+    )
+
+    executed_nodes = []
+    lock = threading.Lock()
+
+    def fake_execute_node(self, execution_id, node, context):
+        node_id = node["id"]
+        with lock:
+            executed_nodes.append(node_id)
+        if node_id == "start":
+            stop_session = session_factory()
+            try:
+                ExecutionEngine(stop_session, session_factory=session_factory).stop_execution(execution_id)
+            finally:
+                stop_session.close()
+        return {"status": "success", "context": {}}
+
+    monkeypatch.setattr(ExecutionEngine, "_execute_workflow_node", fake_execute_node)
+
+    ExecutionEngine(session, session_factory=session_factory).execute_workflow(execution.id)
+
+    session.expire_all()
+    refreshed = session.query(Execution).filter(Execution.id == execution.id).first()
+    node_statuses = {
+        item.node_id: item.status
+        for item in session.query(NodeExecution).filter(NodeExecution.execution_id == execution.id).all()
+    }
+
+    assert refreshed.status == "stopped"
+    assert refreshed.summary["stopped_at"]
+    assert executed_nodes == ["start"]
+    assert node_statuses["after"] == "skipped"
+    session.close()

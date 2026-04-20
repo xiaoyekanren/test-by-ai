@@ -25,6 +25,8 @@ import {
   Edit,
   Delete,
   CopyDocument,
+  Download,
+  Upload,
   VideoPlay,
   VideoPause,
   CircleCheck,
@@ -35,7 +37,8 @@ import {
 } from '@element-plus/icons-vue'
 import { executionsApi } from '@/api'
 import { useWorkflowsStore } from '@/stores/workflows'
-import type { Execution, NodeExecution, Workflow } from '@/types'
+import { isNodeSuccess, isNodeFinished } from '@/utils/execution'
+import type { EdgeDefinition, Execution, NodeDefinition, NodeExecution, Workflow, WorkflowCreate } from '@/types'
 
 const router = useRouter()
 const workflowsStore = useWorkflowsStore()
@@ -54,6 +57,15 @@ const createFormRules = {
   ]
 }
 const isCreating = ref(false)
+const importInputRef = ref<HTMLInputElement | null>(null)
+const isImporting = ref(false)
+
+interface WorkflowExportFile {
+  format: 'test-by-ai.workflow'
+  version: 1
+  exported_at: string
+  workflow: WorkflowCreate
+}
 
 // Rename dialog state
 const renameDialogVisible = ref(false)
@@ -77,9 +89,7 @@ let executionPollTimer: ReturnType<typeof setInterval> | null = null
 const isEmpty = computed(() => workflowsStore.workflows.length === 0 && !workflowsStore.loading)
 const dialogExecutionProgress = computed(() => {
   if (dialogNodeExecutions.value.length === 0) return 0
-  const completed = dialogNodeExecutions.value.filter(
-    ne => ne.status === 'completed' || ne.status === 'failed' || ne.status === 'skipped'
-  ).length
+  const completed = dialogNodeExecutions.value.filter(ne => isNodeFinished(ne.status)).length
   return Math.round((completed / dialogNodeExecutions.value.length) * 100)
 })
 
@@ -138,6 +148,142 @@ const handleDuplicate = async (row: Workflow) => {
     router.push(`/workflows/${newWorkflow.id}/edit`)
   } catch (error) {
     ElMessage.error('Failed to duplicate workflow')
+  }
+}
+
+const buildExportFileName = (workflow: Workflow) => {
+  return `workflow-${workflow.id}.json`
+}
+
+const workflowNameExists = (name: string) => {
+  return workflowsStore.workflows.some(workflow => workflow.name === name)
+}
+
+const fitWorkflowName = (name: string, suffix = '') => {
+  const fallback = 'Imported Workflow'
+  const base = (name.trim() || fallback).slice(0, Math.max(1, 100 - suffix.length)).trim()
+  return `${base || fallback.slice(0, Math.max(1, 100 - suffix.length))}${suffix}`
+}
+
+const createImportTimestamp = () => {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds())
+  ].join('')
+}
+
+const getUniqueImportedWorkflowName = (name: string) => {
+  const fittedName = fitWorkflowName(name)
+  if (!workflowNameExists(fittedName)) {
+    return fittedName
+  }
+
+  const timestamp = createImportTimestamp()
+  const maxAttempts = 1000
+  for (let index = 0; index < maxAttempts; index += 1) {
+    const suffix = index === 0 ? `-${timestamp}` : `-${timestamp}-${index}`
+    const candidate = fitWorkflowName(name, suffix)
+    if (!workflowNameExists(candidate)) {
+      return candidate
+    }
+  }
+  return fitWorkflowName(name, `-${timestamp}-${Date.now()}`)
+}
+
+const handleExport = (row: Workflow) => {
+  const payload: WorkflowExportFile = {
+    format: 'test-by-ai.workflow',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    workflow: {
+      name: row.name,
+      description: row.description,
+      nodes: row.nodes || [],
+      edges: row.edges || [],
+      variables: row.variables || {}
+    }
+  }
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = buildExportFileName(row)
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  ElMessage.success('工作流已导出')
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const isValidNodeDefinition = (value: unknown): value is NodeDefinition => {
+  if (!isRecord(value)) return false
+  return typeof value.id === 'string' && typeof value.type === 'string'
+}
+
+const isValidEdgeDefinition = (value: unknown): value is EdgeDefinition => {
+  if (!isRecord(value)) return false
+  return typeof value.from === 'string' && typeof value.to === 'string'
+}
+
+const normalizeImportedWorkflow = (value: unknown): WorkflowCreate => {
+  const root = isRecord(value) && isRecord(value.workflow) ? value.workflow : value
+  if (!isRecord(root)) {
+    throw new Error('Invalid workflow file')
+  }
+
+  const name = typeof root.name === 'string' ? root.name.trim() : ''
+  if (!name) {
+    throw new Error('Workflow name is required')
+  }
+
+  const nodes = Array.isArray(root.nodes) ? root.nodes.filter(isValidNodeDefinition) : []
+  const edges = Array.isArray(root.edges) ? root.edges.filter(isValidEdgeDefinition) : []
+  const variables = isRecord(root.variables)
+    ? Object.fromEntries(Object.entries(root.variables).map(([key, item]) => [key, String(item)]))
+    : {}
+
+  return {
+    name,
+    description: typeof root.description === 'string' ? root.description : null,
+    nodes,
+    edges,
+    variables
+  }
+}
+
+const openImportPicker = () => {
+  importInputRef.value?.click()
+}
+
+const handleImport = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    isImporting.value = true
+    const workflow = normalizeImportedWorkflow(JSON.parse(await file.text()))
+    const importedName = getUniqueImportedWorkflowName(workflow.name)
+    workflow.name = importedName
+    const created = await workflowsStore.createWorkflow(workflow)
+    ElMessage.success(`工作流已导入：${created.name}`)
+    router.push(`/workflows/${created.id}/edit`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '导入工作流失败')
+  } finally {
+    isImporting.value = false
   }
 }
 
@@ -243,9 +389,11 @@ const startExecutionPolling = (executionId: number) => {
       dialogNodeExecutions.value = await executionsApi.getNodes(executionId)
 
       // Stop polling if execution is finished
-      if (execution.status === 'completed' || execution.status === 'failed') {
+      if (execution.status === 'completed' || execution.status === 'failed' || execution.status === 'stopped') {
         stopExecutionPolling()
-        if (execution.result === 'passed') {
+        if (execution.status === 'stopped') {
+          ElMessage.info('Execution stopped')
+        } else if (execution.result === 'passed') {
           ElMessage.success('Workflow execution completed successfully')
         } else {
           ElMessage.error('Workflow execution failed')
@@ -271,6 +419,7 @@ const handleStopExecution = async () => {
 
   try {
     currentDialogExecution.value = await executionsApi.stop(currentDialogExecution.value.id)
+    dialogNodeExecutions.value = await executionsApi.getNodes(currentDialogExecution.value.id)
     stopExecutionPolling()
     ElMessage.info('Execution stopped')
   } catch (error) {
@@ -320,7 +469,23 @@ onUnmounted(() => {
         <span class="refresh-info">{{ workflowsStore.loading ? '加载中' : '点击行编辑' }}</span>
       </div>
       <div class="toolbar-actions">
+        <input
+          ref="importInputRef"
+          class="import-input"
+          type="file"
+          accept="application/json,.json,.workflow.json"
+          @change="handleImport"
+        />
         <ElButton
+          :icon="Upload"
+          :loading="isImporting"
+          size="small"
+          @click="openImportPicker"
+        >
+          导入
+        </ElButton>
+        <ElButton
+          class="refresh-action"
           @click="fetchWorkflows"
           :icon="Refresh"
           :loading="workflowsStore.loading"
@@ -381,7 +546,7 @@ onUnmounted(() => {
             <span class="created-at">{{ formatDate(row.created_at) }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Actions" width="160" align="center">
+        <ElTableColumn label="Actions" width="190" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <ElTooltip content="Execute" placement="top">
@@ -408,6 +573,15 @@ onUnmounted(() => {
                   :icon="CopyDocument"
                   size="small"
                   @click="handleDuplicate(row)"
+                  link
+                />
+              </ElTooltip>
+              <ElTooltip content="导出" placement="top">
+                <ElButton
+                  type="info"
+                  :icon="Download"
+                  size="small"
+                  @click="handleExport(row)"
                   link
                 />
               </ElTooltip>
@@ -549,7 +723,7 @@ onUnmounted(() => {
           <div class="dialog-header-content">
             <div class="dialog-header-icon execution-icon">
               <ElIcon :size="20">
-                <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'running' ? Loading : Clock" />
+                <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'stopped' ? VideoPause : currentDialogExecution?.status === 'running' ? Loading : Clock" />
               </ElIcon>
             </div>
             <div class="dialog-header-text">
@@ -567,7 +741,7 @@ onUnmounted(() => {
         <div class="execution-status-header-enhanced">
           <div class="status-badge-enhanced" :class="currentDialogExecution?.status || 'pending'">
             <ElIcon :class="{ 'is-loading': currentDialogExecution?.status === 'running' }">
-              <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'running' ? Loading : Clock" />
+              <component :is="currentDialogExecution?.status === 'completed' ? CircleCheck : currentDialogExecution?.status === 'failed' ? CircleClose : currentDialogExecution?.status === 'stopped' ? VideoPause : currentDialogExecution?.status === 'running' ? Loading : Clock" />
             </ElIcon>
             <span class="status-text">{{ currentDialogExecution?.status || 'pending' }}</span>
           </div>
@@ -585,7 +759,7 @@ onUnmounted(() => {
           </div>
           <ElProgress
             :percentage="dialogExecutionProgress"
-            :status="currentDialogExecution?.status === 'failed' ? 'exception' : currentDialogExecution?.status === 'completed' ? 'success' : undefined"
+            :status="currentDialogExecution?.status === 'failed' ? 'exception' : currentDialogExecution?.status === 'completed' ? 'success' : currentDialogExecution?.status === 'stopped' ? 'warning' : undefined"
             :stroke-width="8"
           />
         </div>
@@ -605,7 +779,7 @@ onUnmounted(() => {
               <div class="node-exec-info-enhanced">
                 <div class="node-exec-icon" :class="nodeExec.status">
                   <ElIcon :class="{ 'is-loading': nodeExec.status === 'running' }">
-                    <component :is="nodeExec.status === 'completed' ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
+                    <component :is="isNodeSuccess(nodeExec.status) ? CircleCheck : nodeExec.status === 'failed' ? CircleClose : nodeExec.status === 'running' ? Loading : Clock" />
                   </ElIcon>
                 </div>
                 <div class="node-exec-details">
@@ -617,7 +791,7 @@ onUnmounted(() => {
                 <span class="duration-enhanced">{{ formatDuration(nodeExec.duration) }}</span>
                 <ElTag
                   size="small"
-                  :type="nodeExec.status === 'completed' ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'"
+                  :type="isNodeSuccess(nodeExec.status) ? 'success' : nodeExec.status === 'failed' ? 'danger' : 'info'"
                   effect="plain"
                 >
                   {{ nodeExec.status }}
@@ -703,6 +877,14 @@ onUnmounted(() => {
 .toolbar-actions {
   display: flex;
   gap: 6px;
+}
+
+.import-input {
+  display: none;
+}
+
+.refresh-action {
+  order: 3;
 }
 
 .workflows-card {
@@ -839,6 +1021,11 @@ onUnmounted(() => {
   color: #F56C6C;
 }
 
+.status-badge.stopped {
+  background: #fdf6ec;
+  color: #E6A23C;
+}
+
 .status-badge .is-loading {
   animation: spin 1s linear infinite;
 }
@@ -933,6 +1120,10 @@ onUnmounted(() => {
 
 .dialog-header-accent.failed {
   background: linear-gradient(180deg, #ef4444 0%, #f87171 100%);
+}
+
+.dialog-header-accent.stopped {
+  background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%);
 }
 
 .dialog-header-accent.running {
@@ -1079,6 +1270,11 @@ onUnmounted(() => {
   color: #dc2626;
 }
 
+.status-badge-enhanced.stopped {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
+}
+
 .execution-time-enhanced {
   display: flex;
   align-items: center;
@@ -1178,7 +1374,7 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
-.node-exec-icon.completed {
+.node-exec-icon.success {
   background: rgba(16, 185, 129, 0.1);
   color: #10b981;
 }

@@ -206,7 +206,7 @@ iotdb_home = context.get('iotdb_home')
 | 字段 | 描述 |
 |------|------|
 | workflow_id | 关联的工作流 |
-| status | pending/running/completed/failed |
+| status | pending/running/paused/completed/failed/stopped |
 | trigger_type | manual/scheduled/api |
 | started_at | 开始时间 |
 | finished_at | 结束时间 |
@@ -221,7 +221,7 @@ iotdb_home = context.get('iotdb_home')
 | execution_id | 关联的执行 |
 | node_id | 节点 ID |
 | node_type | 节点类型 |
-| status | running/success/failed/skipped |
+| status | pending/running/success/failed/skipped |
 | input_data | 输入配置 |
 | output_data | 输出结果 |
 | error_message | 错误信息 |
