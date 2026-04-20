@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="IoTDB Test Automation Platform",
+    title="TestFlow",
     description="Backend API for IoTDB test automation",
     version="1.0.0",
     lifespan=lifespan

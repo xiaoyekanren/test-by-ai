@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IoTDB Test Automation Platform - Service Management Script
+TestFlow - Service Management Script
 Usage: python manage.py {start|stop|restart|status|install|check|release}
 """
 
@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Configuration
-PROJECT_NAME = "test-by-ai"
+PROJECT_NAME = "testflow"
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_PORT = 8000
 FRONTEND_PORT = 5173
@@ -653,7 +653,7 @@ def start_frontend():
 
 def show_status():
     """Show service status."""
-    print_section("IoTDB Test Automation Platform Status")
+    print_section("TestFlow Status")
     print()
 
     backend_pid = get_pid_by_port(BACKEND_PORT)
@@ -692,7 +692,7 @@ def show_logs(service):
 
 RELEASE_RUNTIME_MANAGE = r'''#!/usr/bin/env python3
 """
-IoTDB Test Automation Platform - Release Runtime Script
+TestFlow - Release Runtime Script
 Usage: python manage.py {install|start|stop|restart|status|check}
 """
 
@@ -707,7 +707,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 8000
+BACKEND_PORT = 5173
 PID_DIR = Path("data/pids")
 LOG_DIR = Path("data/logs")
 DEP_STATE_DIR = Path("data/deps")
@@ -996,7 +996,7 @@ def show_check():
 
 
 def show_help():
-    print("IoTDB Test Automation Platform - Release Runtime")
+    print("TestFlow - Release Runtime")
     print()
     print("Usage: python manage.py {install|start|stop|restart|status|check}")
     print()
@@ -1292,7 +1292,7 @@ def write_release_runtime(release_path: Path) -> None:
 
 
 def write_release_readme(release_path: Path) -> None:
-    content = f"""# IoTDB Test Automation Platform Release
+    content = f"""# TestFlow Release
 
 This directory is a final release package generated from the source tree.
 
@@ -1408,7 +1408,7 @@ def create_release(version: str | None = None) -> tuple[Path, Path]:
 
 def show_help():
     """Show help message."""
-    print("IoTDB Test Automation Platform - Service Management")
+    print("TestFlow - Service Management")
     print()
     print("Usage: python manage.py {start|stop|restart|status|install|check|release}")
     print()
@@ -1454,7 +1454,7 @@ def main():
 
     if cmd == "start":
         print()
-        print_info("Starting IoTDB Test Automation Platform...")
+        print_info("Starting TestFlow...")
         backend_started = start_backend()
         frontend_started = start_frontend() if backend_started else False
         if backend_started and frontend_started:
@@ -1469,7 +1469,7 @@ def main():
 
     elif cmd == "stop":
         print()
-        print_info("Stopping IoTDB Test Automation Platform...")
+        print_info("Stopping TestFlow...")
         stop_process(FRONTEND_PORT, "Frontend")
         stop_process(BACKEND_PORT, "Backend")
         frontend_stopped = not is_running(FRONTEND_PORT)
@@ -1481,7 +1481,7 @@ def main():
 
     elif cmd == "restart":
         print()
-        print_info("Stopping IoTDB Test Automation Platform...")
+        print_info("Stopping TestFlow...")
         stop_process(FRONTEND_PORT, "Frontend")
         stop_process(BACKEND_PORT, "Backend")
         frontend_stopped = not is_running(FRONTEND_PORT)
@@ -1490,7 +1490,7 @@ def main():
         print_stop_summary(frontend_stopped, backend_stopped)
         print()
         time.sleep(2)
-        print_info("Starting IoTDB Test Automation Platform...")
+        print_info("Starting TestFlow...")
         backend_started = start_backend()
         frontend_started = start_frontend() if backend_started else False
         if backend_started and frontend_started:
