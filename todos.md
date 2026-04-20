@@ -1,6 +1,6 @@
 # 待办事项汇总
 
-> 最后更新: 2026-04-20
+> 最后更新: 2026-04-21
 >
 > 优先级：P1 紧急 / P2 重要 / P3 一般 / P4 低优
 
@@ -52,8 +52,28 @@
 
 ### P3 NodeConfigPanel 组件拆分
 
-- `NodeConfigPanel.vue`（1,202 行）将所有节点类型的配置混在一个组件内。
+- `NodeConfigPanel.vue`（1,281 行）将所有节点类型的配置混在一个组件内。
 - 目标：按节点类型拆分为独立配置面板。
+
+### P3 report / summary / notify 节点缺少 handler
+
+- 前端 `NodeType` 定义了 `report`、`summary`、`notify` 三种节点类型，但后端 `_node_handlers` 中没有注册对应 handler，执行时走默认空操作（无实际效果）。
+- 目标：决定这些节点的实际行为并实现 handler，或者从 `NodeType` 中移除未实现的类型。
+
+### P3 parallel 节点 max_concurrent 未实际生效
+
+- `parallel` 节点返回了 `max_concurrent` 参数，但执行引擎并未读取该值来限制后续并发数，实际并发由全局 `ThreadPoolExecutor(max_workers=8)` 控制。
+- 目标：引擎在执行 parallel 节点的下游分支时，使用其 `max_concurrent` 值做并发限制。
+
+### P2 工作流变量（variables）未被使用
+
+- `Workflow` 模型和 schema 中定义了 `variables` 字段，前端也有编辑入口，但执行引擎中完全没有读取和替换逻辑。节点 config 中无法通过 `${var}` 引用工作流变量。
+- 目标：实现变量替换机制，在节点执行前将 config 中的 `${variable_name}` 替换为实际值。
+
+### P3 节点失败重试机制
+
+- `NodeExecution` 模型中有 `retry_count` 字段，但引擎中没有任何重试逻辑，节点失败后直接标记 failed。
+- 目标：支持节点级 `retry` 配置，失败后按次数自动重试。
 
 ---
 
@@ -61,7 +81,7 @@
 
 ### P2 异常处理规范化
 
-- `apiotdb.py`、`ssh_service.py`、`monitoring_service.py` 中存在多处 `except Exception: pass`，静默吞掉错误。
+- `iotdb.py`、`ssh_service.py`、`monitoring_service.py` 中存在多处 `except Exception: pass`，静默吞掉错误。
 - 目标：替换为具体异常类型，并记录日志。
 
 ### P1 命令执行接口校验
@@ -84,6 +104,11 @@
 - `workflow_id`、`status`、`created_at` 等高频查询字段缺少索引。
 - 目标：在 SQLAlchemy 模型中添加 `index=True`。
 
+### P4 数据库迁移
+
+- 没有使用 Alembic 等迁移工具，schema 变更依赖手动重建。
+- 目标：接入 Alembic，生成迁移脚本，支持增量 schema 变更。
+
 ---
 
 ## 测试
@@ -91,11 +116,11 @@
 ### P3 后端测试覆盖补全
 
 - 缺少测试的模块：
-  - `services/execution/handlers/` — 各 handler 无单元测试
+  - `services/execution/handlers/` — 各 handler 无单元测试（仅有 control_nodes 和 iotdb_deploy 的 2-15 个用例）
   - `services/execution/server_resolution.py` — 无测试
   - `services/execution/context.py` — 无测试
   - `services/monitoring_service.py` — 仅有 API 层测试，缺少 service 层单测
-- `test_executions_api.py` 仅 2 个基础用例，缺少错误场景（404/400/500）覆盖。
+- `test_executions_api.py` 仅 6 个基础用例，缺少错误场景（404/400/500）、并发执行、超时等覆盖。
 
 ### P4 前端测试
 
@@ -123,3 +148,14 @@
 
 - 当前所有 API 无认证/鉴权，任何人可访问和修改资源。
 - 目标：按需引入 API Key 或 OAuth2 认证（视部署场景决定优先级）。
+
+---
+
+## 测试用例转工作流
+
+### 进行中：磁盘空间占用统计
+
+- 来源：`data/2026-04-08 v2091 统计数据的磁盘空间占用 测试用例.xlsx`（25 条用例）
+- 分析文档：`docs/testing/disk-usage-test-workflow-analysis.md`
+- 工作流 1（表模型基础，用例 1-6）已完成：`data/workflows/disk-usage-table-model-basic.workflow.json`
+- 工作流 2-5 待实施，工作流 6 用例不完整
