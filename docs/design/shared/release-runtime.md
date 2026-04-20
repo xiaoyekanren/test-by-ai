@@ -10,7 +10,7 @@
 
 源码根目录执行 `./manage.sh release` 或 `manage.bat release` 后，`manage.py` 会生成 `release/仓库-版本/`，并同步生成 `release/仓库-版本.zip`。zip 包内保留同名顶层文件夹，解压后不会把文件散落到当前目录。
 
-版本默认取最近的 Git tag；没有 tag 时回退为 `0.0.0`。需要手动指定版本时，可执行 `./manage.sh release --version 0.1.0`。
+版本默认使用 `snapshot-YYYY-MM-DD`，例如 `snapshot-2026-04-20`；需要生成正式版本时，可执行 `./manage.sh release --version 0.1.0`。
 
 核心内容如下：
 
