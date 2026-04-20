@@ -67,7 +67,10 @@ class TestConditionNode:
         ExecutionEngine(session, session_factory=session_factory).execute_workflow(execution.id)
 
         session.expire_all()
+        refreshed = session.query(Execution).filter(Execution.id == execution.id).first()
         statuses = get_node_statuses(session, execution.id)
+        assert refreshed.status == "completed"
+        assert refreshed.result == "passed"
         assert statuses["cond"] == "success"
         assert statuses["then-task"] == "success"
         assert statuses["else-task"] == "skipped"
@@ -131,7 +134,10 @@ class TestConditionNode:
         ExecutionEngine(session, session_factory=session_factory).execute_workflow(execution.id)
 
         session.expire_all()
+        refreshed = session.query(Execution).filter(Execution.id == execution.id).first()
         statuses = get_node_statuses(session, execution.id)
+        assert refreshed.status == "completed"
+        assert refreshed.result == "passed"
         assert statuses["then-a"] == "skipped"
         assert statuses["then-b"] == "skipped"
         assert statuses["else-a"] == "success"
