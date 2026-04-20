@@ -271,7 +271,7 @@ Windows 可执行：
 manage.bat release
 ```
 
-命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。默认版本为 `snapshot-YYYY-MM-DD`，例如 `test-by-ai-snapshot-2026-04-20`；如需生成正式版本，可执行：
+命令会先执行前端构建，再把运行所需文件收集到 `release/仓库-版本/` 下，并生成带同名顶层文件夹的 `release/仓库-版本.zip`。默认版本基于最近 Git tag 生成，例如最近版本为 `0.2` 时生成 `test-by-ai-0.2-snapshot-20260420`；如需生成正式版本，可执行：
 
 ```bash
 ./manage.sh release --version 0.1.0

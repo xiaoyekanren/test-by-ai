@@ -1201,8 +1201,9 @@ def get_release_version(version: str | None = None) -> str:
     if version:
         return safe_package_component(version, "version")
 
-    snapshot_date = datetime.now().strftime("%Y-%m-%d")
-    return f"snapshot-{snapshot_date}"
+    base_version = command_output(["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT_DIR) or "0.0.0"
+    snapshot_date = datetime.now().strftime("%Y%m%d")
+    return safe_package_component(f"{base_version}-snapshot-{snapshot_date}", "version")
 
 
 def create_release_zip(release_path: Path) -> Path:
@@ -1418,7 +1419,7 @@ def show_help():
     print("  status          Show service status")
     print("  install         Install backend and frontend dependencies")
     print("  check           Check runtimes, project files, dependencies, and ports")
-    print("  release         Build a final release package, defaulting to snapshot-YYYY-MM-DD")
+    print("  release         Build a final release package, defaulting to <latest-tag>-snapshot-YYYYMMDD")
     print("                  Optional: python manage.py release --version 0.1.0")
     print()
     print(f"Access URLs:")
