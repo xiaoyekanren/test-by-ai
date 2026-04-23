@@ -29,6 +29,16 @@ const router = createRouter({
       component: () => import('@/views/WorkflowEditorView.vue')
     },
     {
+      path: '/test-cases',
+      name: 'test-cases',
+      component: () => import('@/views/TestCasesView.vue')
+    },
+    {
+      path: '/test-modules',
+      name: 'test-modules',
+      component: () => import('@/views/TestModulesView.vue')
+    },
+    {
       path: '/monitor',
       name: 'monitor',
       redirect: '/servers'

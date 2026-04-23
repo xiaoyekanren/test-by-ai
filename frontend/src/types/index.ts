@@ -509,6 +509,9 @@ export interface EdgeDefinition {
   label?: string | null
 }
 
+export type Priority = 'P0' | 'P1' | 'P2'
+export type TestType = '功能' | '安全' | '性能'
+
 export interface Workflow {
   id: number
   name: string
@@ -516,6 +519,10 @@ export interface Workflow {
   nodes: NodeDefinition[]
   edges: EdgeDefinition[]
   variables: Record<string, string>
+  priority: Priority | null
+  test_type: TestType | null
+  labels: string | null
+  source: string | null
   created_at: string
   updated_at: string
 }
@@ -526,6 +533,10 @@ export interface WorkflowCreate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  priority?: Priority | null
+  test_type?: TestType | null
+  labels?: string | null
+  source?: string | null
 }
 
 export interface WorkflowUpdate {
@@ -534,6 +545,10 @@ export interface WorkflowUpdate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  priority?: Priority | null
+  test_type?: TestType | null
+  labels?: string | null
+  source?: string | null
 }
 
 // Execution related types
@@ -663,3 +678,63 @@ export interface IoTDBRestartResult {
   stdout: string
   stderr: string
 }
+
+// Test Suite types
+
+export type SuiteType = 'smoke' | 'regression' | 'feature' | 'performance'
+
+export interface TestSuiteCaseItem {
+  workflow_id: number
+  workflow_name: string
+  sort_order: number
+  priority: Priority | null
+  test_type: TestType | null
+}
+
+export interface TestSuite {
+  id: number
+  name: string
+  description: string | null
+  suite_type: SuiteType
+  artifact_version: string | null
+  case_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TestSuiteDetail extends TestSuite {
+  cases: TestSuiteCaseItem[]
+}
+
+export interface TestSuiteCreate {
+  name: string
+  description?: string | null
+  suite_type?: SuiteType
+  artifact_version?: string | null
+}
+
+export interface TestSuiteUpdate {
+  name?: string
+  description?: string | null
+  suite_type?: SuiteType
+  artifact_version?: string | null
+}
+
+export const SUITE_TYPE_OPTIONS: { value: SuiteType; label: string }[] = [
+  { value: 'feature', label: '功能测试' },
+  { value: 'regression', label: '回归测试' },
+  { value: 'smoke', label: '冒烟测试' },
+  { value: 'performance', label: '性能测试' },
+]
+
+export const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
+  { value: 'P0', label: 'P0', color: '#f56c6c' },
+  { value: 'P1', label: 'P1', color: '#e6a23c' },
+  { value: 'P2', label: 'P2', color: '#909399' },
+]
+
+export const TEST_TYPE_OPTIONS: { value: TestType; label: string }[] = [
+  { value: '功能', label: '功能' },
+  { value: '安全', label: '安全' },
+  { value: '性能', label: '性能' },
+]

@@ -1,7 +1,7 @@
 # backend/app/api/workflows.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from ..dependencies import get_db
 from ..models.database import Execution, NodeExecution, Workflow
@@ -11,10 +11,22 @@ router = APIRouter()
 
 
 @router.get("", response_model=List[WorkflowResponse])
-def list_workflows(db: Session = Depends(get_db)):
-    """List all workflows"""
-    workflows = db.query(Workflow).all()
-    return workflows
+def list_workflows(
+    is_test_case: Optional[bool] = None,
+    priority: Optional[str] = None,
+    test_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Workflow)
+    if is_test_case is True:
+        query = query.filter(Workflow.priority.isnot(None))
+    elif is_test_case is False:
+        query = query.filter(Workflow.priority.is_(None))
+    if priority:
+        query = query.filter(Workflow.priority == priority)
+    if test_type:
+        query = query.filter(Workflow.test_type == test_type)
+    return query.all()
 
 
 @router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
@@ -33,7 +45,11 @@ def create_workflow(workflow: WorkflowCreate, db: Session = Depends(get_db)):
         description=workflow.description,
         nodes=[node.model_dump(by_alias=True) for node in workflow.nodes],
         edges=[edge.model_dump(by_alias=True) for edge in workflow.edges],
-        variables=workflow.variables
+        variables=workflow.variables,
+        priority=workflow.priority,
+        test_type=workflow.test_type,
+        labels=workflow.labels,
+        source=workflow.source,
     )
     db.add(db_workflow)
     db.commit()

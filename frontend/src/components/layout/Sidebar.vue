@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Document, Setting, HomeFilled, DataAnalysis, Platform } from '@element-plus/icons-vue'
+import { Document, Setting, HomeFilled, DataAnalysis, Platform, List, FolderOpened } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +17,13 @@ const menuGroups = [
     title: '运维管理',
     items: [
       { index: '/servers', title: '服务器管理', icon: Setting }
+    ]
+  },
+  {
+    title: '测试管理',
+    items: [
+      { index: '/test-cases', title: '测试用例', icon: List },
+      { index: '/test-modules', title: '功能模块', icon: FolderOpened }
     ]
   },
   {
@@ -36,12 +43,10 @@ const menuGroups = [
 
 const activeMenu = computed(() => {
   const path = route.path
-  if (path.startsWith('/workflows')) {
-    return '/workflows'
-  }
-  if (path.startsWith('/executions')) {
-    return '/executions'
-  }
+  if (path.startsWith('/workflows')) return '/workflows'
+  if (path.startsWith('/executions')) return '/executions'
+  if (path.startsWith('/test-cases')) return '/test-cases'
+  if (path.startsWith('/test-modules')) return '/test-modules'
   return path
 })
 

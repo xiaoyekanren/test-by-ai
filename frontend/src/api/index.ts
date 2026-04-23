@@ -19,7 +19,11 @@ import type {
   IoTDBFileInfo,
   IoTDBLogContent,
   IoTDBConfigContent,
-  IoTDBRestartResult
+  IoTDBRestartResult,
+  TestSuite,
+  TestSuiteDetail,
+  TestSuiteCreate,
+  TestSuiteUpdate,
 } from '@/types'
 
 const apiClient = axios.create({
@@ -77,8 +81,8 @@ export const serversApi = {
 
 // Workflows API
 export const workflowsApi = {
-  list: (): Promise<Workflow[]> =>
-    apiClient.get('/workflows'),
+  list: (params?: { is_test_case?: boolean; priority?: string; test_type?: string }): Promise<Workflow[]> =>
+    apiClient.get('/workflows', { params }),
 
   get: (id: number): Promise<Workflow> =>
     apiClient.get(`/workflows/${id}`),
@@ -184,6 +188,33 @@ export const iotdbApi = {
 
   restart: (serverId: number, iotdbHome: string, restartScope = 'all'): Promise<IoTDBRestartResult> =>
     apiClient.post('/iotdb/restart', { server_id: serverId, iotdb_home: iotdbHome, restart_scope: restartScope })
+}
+
+// Test Suites API
+export const testSuitesApi = {
+  list: (params?: { suite_type?: string }): Promise<TestSuite[]> =>
+    apiClient.get('/test-suites', { params }),
+
+  get: (id: number): Promise<TestSuiteDetail> =>
+    apiClient.get(`/test-suites/${id}`),
+
+  create: (data: TestSuiteCreate): Promise<TestSuite> =>
+    apiClient.post('/test-suites', data),
+
+  update: (id: number, data: TestSuiteUpdate): Promise<TestSuite> =>
+    apiClient.put(`/test-suites/${id}`, data),
+
+  delete: (id: number): Promise<void> =>
+    apiClient.delete(`/test-suites/${id}`),
+
+  addCase: (suiteId: number, workflowId: number, sortOrder?: number): Promise<TestSuiteDetail> =>
+    apiClient.post(`/test-suites/${suiteId}/cases`, { workflow_id: workflowId, sort_order: sortOrder }),
+
+  removeCase: (suiteId: number, workflowId: number): Promise<TestSuiteDetail> =>
+    apiClient.delete(`/test-suites/${suiteId}/cases/${workflowId}`),
+
+  reorderCases: (suiteId: number, workflowIds: number[]): Promise<TestSuiteDetail> =>
+    apiClient.put(`/test-suites/${suiteId}/cases/reorder`, workflowIds),
 }
 
 export default apiClient

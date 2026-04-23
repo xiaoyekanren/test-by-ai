@@ -11,7 +11,10 @@ const pageTitle = computed(() => {
     '/': '首页',
     '/servers': '服务器管理 / 系统监控',
     '/workflows': '工作流管理',
-    '/settings': '系统设置'
+    '/settings': '系统设置',
+    '/test-cases': '测试用例管理',
+    '/test-modules': '功能模块管理',
+    '/executions': '运行分析',
   }
   if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
     return '工作流编辑'
@@ -25,7 +28,10 @@ const breadcrumbs = computed(() => {
     const routeMap: Record<string, string> = {
       '/servers': '服务器管理',
       '/workflows': '工作流管理',
-      '/settings': '系统设置'
+      '/settings': '系统设置',
+      '/test-cases': '测试用例',
+      '/test-modules': '功能模块',
+      '/executions': '运行分析',
     }
     if (route.path.includes('/workflows/') && route.path.includes('/edit')) {
       crumbs.push({ title: '工作流管理', path: '/workflows' })

@@ -11,11 +11,14 @@ NODE_TYPE = Literal[
     "condition", "loop", "wait", "parallel", "assert", "report", "summary", "notify"
 ]
 
+PRIORITY_TYPE = Literal["P0", "P1", "P2"]
+TEST_TYPE = Literal["功能", "安全", "性能"]
+
 class NodeDefinition(BaseModel):
     id: str
-    type: NODE_TYPE  # shell, upload, download, iotdb_deploy, condition, loop, etc.
+    type: NODE_TYPE
     config: Dict[str, Any] = {}
-    position: Optional[Dict[str, float]] = None  # {"x": 100, "y": 200}
+    position: Optional[Dict[str, float]] = None
 
 class EdgeDefinition(BaseModel):
     from_node: str = Field(..., alias="from")
@@ -30,6 +33,10 @@ class WorkflowBase(BaseModel):
     nodes: List[NodeDefinition] = []
     edges: List[EdgeDefinition] = []
     variables: Dict[str, str] = {}
+    priority: Optional[PRIORITY_TYPE] = None
+    test_type: Optional[TEST_TYPE] = None
+    labels: Optional[str] = None
+    source: Optional[str] = None
 
 class WorkflowCreate(WorkflowBase):
     pass
@@ -40,6 +47,10 @@ class WorkflowUpdate(BaseModel):
     nodes: Optional[List[NodeDefinition]] = None
     edges: Optional[List[EdgeDefinition]] = None
     variables: Optional[Dict[str, str]] = None
+    priority: Optional[PRIORITY_TYPE] = None
+    test_type: Optional[TEST_TYPE] = None
+    labels: Optional[str] = None
+    source: Optional[str] = None
 
 class WorkflowResponse(WorkflowBase):
     id: int

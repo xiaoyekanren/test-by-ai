@@ -36,13 +36,18 @@ class Workflow(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text)
-    nodes = Column(JSON, default=list)  # [{"id": "node1", "type": "shell", "config": {...}}]
-    edges = Column(JSON, default=list)  # [{"from": "node1", "to": "node2"}]
-    variables = Column(JSON, default=dict)  # {"var1": "value1"}
+    nodes = Column(JSON, default=list)
+    edges = Column(JSON, default=list)
+    variables = Column(JSON, default=dict)
+    priority = Column(String(10))  # P0 | P1 | P2 — 非空即为测试用例
+    test_type = Column(String(20))  # 功能 | 安全 | 性能
+    labels = Column(String(200))
+    source = Column(String(100))
     created_at = Column(UTCDateTime(), default=utc_now)
     updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
     executions = relationship("Execution", back_populates="workflow")
+    suite_cases = relationship("TestSuiteCase", back_populates="workflow")
 
 class Execution(Base):
     __tablename__ = "executions"
@@ -80,6 +85,32 @@ class NodeExecution(Base):
     retry_count = Column(Integer, default=0)
 
     execution = relationship("Execution", back_populates="node_executions")
+
+
+class TestSuite(Base):
+    __tablename__ = "test_suites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text)
+    suite_type = Column(String(20), default="feature")  # smoke | regression | feature | performance
+    artifact_version = Column(String(50))
+    created_at = Column(UTCDateTime(), default=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
+
+    cases = relationship("TestSuiteCase", back_populates="suite", cascade="all, delete-orphan")
+
+
+class TestSuiteCase(Base):
+    __tablename__ = "test_suite_cases"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    suite_id = Column(Integer, ForeignKey("test_suites.id"), nullable=False)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False)
+    sort_order = Column(Integer, default=0)
+
+    suite = relationship("TestSuite", back_populates="cases")
+    workflow = relationship("Workflow", back_populates="suite_cases")
 
 
 class SystemSetting(Base):
