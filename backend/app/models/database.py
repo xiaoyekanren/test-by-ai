@@ -1,5 +1,5 @@
 # backend/app/models/database.py
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship, DeclarativeBase
 
 from app.utils.time import UTCDateTime, utc_now
@@ -47,7 +47,7 @@ class Workflow(Base):
     updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
     executions = relationship("Execution", back_populates="workflow")
-    suite_cases = relationship("TestSuiteCase", back_populates="workflow")
+    suite_cases = relationship("TestSuiteCase", back_populates="workflow", cascade="all, delete-orphan")
 
 class Execution(Base):
     __tablename__ = "executions"
@@ -103,6 +103,7 @@ class TestSuite(Base):
 
 class TestSuiteCase(Base):
     __tablename__ = "test_suite_cases"
+    __table_args__ = (UniqueConstraint("suite_id", "workflow_id"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     suite_id = Column(Integer, ForeignKey("test_suites.id"), nullable=False)

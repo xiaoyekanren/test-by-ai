@@ -160,9 +160,12 @@ def reorder_cases(suite_id: int, workflow_ids: List[int], db: Session = Depends(
         raise HTTPException(status_code=404, detail="测试套件不存在")
 
     cases_map = {sc.workflow_id: sc for sc in suite.cases}
+    unknown = set(workflow_ids) - cases_map.keys()
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"以下工作流不在套件中: {sorted(unknown)}")
+
     for i, wid in enumerate(workflow_ids):
-        if wid in cases_map:
-            cases_map[wid].sort_order = i
+        cases_map[wid].sort_order = i
 
     db.commit()
     db.refresh(suite)

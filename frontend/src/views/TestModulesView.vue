@@ -8,6 +8,7 @@ import {
 import { Plus, Edit, Delete, Refresh, Setting } from '@element-plus/icons-vue'
 import { useTestSuitesStore } from '@/stores/testSuites'
 import { workflowsApi } from '@/api'
+import { getApiErrorMessage } from '@/utils/api'
 import type { TestSuite, TestSuiteCreate, Workflow } from '@/types'
 import { SUITE_TYPE_OPTIONS } from '@/types'
 
@@ -61,8 +62,7 @@ const handleCreate = async () => {
     createDialogVisible.value = false
     resetCreateForm()
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '创建失败'
-    ElMessage.error(msg)
+    ElMessage.error(getApiErrorMessage(e, '创建失败'))
   } finally {
     isCreating.value = false
   }
@@ -155,12 +155,10 @@ const handleTransferChange = async (newVal: TransferKey[]) => {
   const removed = oldVal.filter(id => !numVal.includes(id))
 
   try {
-    for (const wid of added) {
-      await store.addCase(suiteId, wid)
-    }
-    for (const wid of removed) {
-      await store.removeCase(suiteId, wid)
-    }
+    await Promise.all([
+      ...added.map(wid => store.addCase(suiteId, wid)),
+      ...removed.map(wid => store.removeCase(suiteId, wid)),
+    ])
   } catch {
     ElMessage.error('操作失败')
     await store.fetchSuite(suiteId)
@@ -315,59 +313,13 @@ onMounted(fetchAll)
 </template>
 
 <style scoped>
+@import '@/assets/list-view.css';
+
 .test-modules-view {
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toolbar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-}
-
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cell-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.name-text {
-  font-weight: 500;
-  color: #1e293b;
-  font-size: 13px;
-}
-
-.name-desc {
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.3;
-}
-
-.text-muted {
-  color: #94a3b8;
-  font-size: 12px;
 }
 
 .transfer-container {

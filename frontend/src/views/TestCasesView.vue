@@ -7,6 +7,7 @@ import {
 } from 'element-plus'
 import { Plus, Edit, Delete, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import { workflowsApi } from '@/api'
+import { getApiErrorMessage } from '@/utils/api'
 import type { Workflow, WorkflowCreate, Priority, TestType } from '@/types'
 import { PRIORITY_OPTIONS, TEST_TYPE_OPTIONS } from '@/types'
 
@@ -22,10 +23,10 @@ const isEmpty = computed(() => workflows.value.length === 0 && !loading.value)
 const fetchTestCases = async () => {
   loading.value = true
   try {
-    const params: Record<string, unknown> = { is_test_case: true }
+    const params: { is_test_case: boolean; priority?: string; test_type?: string } = { is_test_case: true }
     if (filterPriority.value) params.priority = filterPriority.value
     if (filterTestType.value) params.test_type = filterTestType.value
-    workflows.value = await workflowsApi.list(params as { is_test_case?: boolean; priority?: string; test_type?: string })
+    workflows.value = await workflowsApi.list(params)
   } catch {
     ElMessage.error('加载测试用例失败')
   } finally {
@@ -70,8 +71,7 @@ const handleCreate = async () => {
     resetCreateForm()
     router.push(`/workflows/${wf.id}/edit`)
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '创建失败'
-    ElMessage.error(msg)
+    ElMessage.error(getApiErrorMessage(e, '创建失败'))
   } finally {
     isCreating.value = false
   }
@@ -293,36 +293,13 @@ onMounted(fetchTestCases)
 </template>
 
 <style scoped>
+@import '@/assets/list-view.css';
+
 .test-cases-view {
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toolbar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-}
-
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .clickable-row {
@@ -331,33 +308,6 @@ onMounted(fetchTestCases)
 
 .clickable-row:hover {
   background-color: #f8fafc;
-}
-
-.cell-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.name-text {
-  font-weight: 500;
-  color: #1e293b;
-  font-size: 13px;
-}
-
-.name-desc {
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 300px;
-}
-
-.text-muted {
-  color: #94a3b8;
-  font-size: 12px;
 }
 
 .label-tag {
