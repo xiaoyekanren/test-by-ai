@@ -16,7 +16,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     try {
       executions.value = await executionsApi.list(params)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch executions'
+      error.value = e instanceof Error ? e.message : '获取执行记录失败'
       throw e
     } finally {
       loading.value = false
@@ -30,7 +30,7 @@ export const useExecutionsStore = defineStore('executions', () => {
       currentExecution.value = await executionsApi.get(id)
       return currentExecution.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch execution'
+      error.value = e instanceof Error ? e.message : '获取执行详情失败'
       throw e
     } finally {
       loading.value = false
@@ -46,7 +46,7 @@ export const useExecutionsStore = defineStore('executions', () => {
       currentExecution.value = execution
       return execution
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to create execution'
+      error.value = e instanceof Error ? e.message : '创建执行失败'
       throw e
     } finally {
       loading.value = false
@@ -67,7 +67,7 @@ export const useExecutionsStore = defineStore('executions', () => {
       }
       return updated
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to stop execution'
+      error.value = e instanceof Error ? e.message : '停止执行失败'
       throw e
     } finally {
       loading.value = false
@@ -84,7 +84,7 @@ export const useExecutionsStore = defineStore('executions', () => {
         clearCurrentExecution()
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to delete execution'
+      error.value = e instanceof Error ? e.message : '删除执行失败'
       throw e
     } finally {
       loading.value = false
@@ -98,7 +98,7 @@ export const useExecutionsStore = defineStore('executions', () => {
       nodeExecutions.value = await executionsApi.getNodes(executionId)
       return nodeExecutions.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch node executions'
+      error.value = e instanceof Error ? e.message : '获取节点执行记录失败'
       throw e
     } finally {
       loading.value = false

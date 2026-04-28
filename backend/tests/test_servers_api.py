@@ -45,7 +45,7 @@ def test_create_duplicate_server(client):
     client.post("/api/servers", json={"name": "duplicate-test", "host": "192.168.1.1"})
     response = client.post("/api/servers", json={"name": "duplicate-test", "host": "192.168.1.2"})
     assert response.status_code == 400
-    assert "already exists" in response.json()["detail"]
+    assert "已存在" in response.json()["detail"]
 
 def test_get_server(client):
     client.post("/api/servers", json={"name": "test", "host": "192.168.1.1"})

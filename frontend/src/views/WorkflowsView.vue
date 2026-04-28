@@ -52,8 +52,8 @@ const createForm = ref({
 })
 const createFormRules = {
   name: [
-    { required: true, message: 'Please enter workflow name', trigger: 'blur' },
-    { min: 1, max: 100, message: 'Name must be 1-100 characters', trigger: 'blur' }
+    { required: true, message: '请输入工作流名称', trigger: 'blur' },
+    { min: 1, max: 100, message: '名称长度须在 1-100 个字符之间', trigger: 'blur' }
   ]
 }
 const isCreating = ref(false)
@@ -98,7 +98,7 @@ const fetchWorkflows = async () => {
   try {
     await workflowsStore.fetchWorkflows()
   } catch (error) {
-    ElMessage.error('Failed to load workflows')
+    ElMessage.error('加载工作流列表失败')
   }
 }
 
@@ -118,19 +118,19 @@ const handleEdit = (row: Workflow) => {
 const handleDelete = async (row: Workflow) => {
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to delete workflow "${row.name}"?`,
-      'Delete Workflow',
+      `确定要删除工作流「${row.name}」吗？`,
+      '删除工作流',
       {
-        confirmButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
         type: 'warning'
       }
     )
     await workflowsStore.deleteWorkflow(row.id)
-    ElMessage.success('Workflow deleted successfully')
+    ElMessage.success('工作流已删除')
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to delete workflow')
+      ElMessage.error('删除工作流失败')
     }
   }
 }
@@ -138,16 +138,16 @@ const handleDelete = async (row: Workflow) => {
 const handleDuplicate = async (row: Workflow) => {
   try {
     const newWorkflow = await workflowsStore.createWorkflow({
-      name: `${row.name} (Copy)`,
+      name: `${row.name}（副本）`,
       description: row.description,
       nodes: row.nodes,
       edges: row.edges,
       variables: row.variables
     })
-    ElMessage.success('Workflow duplicated successfully')
+    ElMessage.success('工作流已复制')
     router.push(`/workflows/${newWorkflow.id}/edit`)
   } catch (error) {
-    ElMessage.error('Failed to duplicate workflow')
+    ElMessage.error('复制工作流失败')
   }
 }
 
@@ -160,7 +160,7 @@ const workflowNameExists = (name: string) => {
 }
 
 const fitWorkflowName = (name: string, suffix = '') => {
-  const fallback = 'Imported Workflow'
+  const fallback = '导入的工作流'
   const base = (name.trim() || fallback).slice(0, Math.max(1, 100 - suffix.length)).trim()
   return `${base || fallback.slice(0, Math.max(1, 100 - suffix.length))}${suffix}`
 }
@@ -239,12 +239,12 @@ const isValidEdgeDefinition = (value: unknown): value is EdgeDefinition => {
 const normalizeImportedWorkflow = (value: unknown): WorkflowCreate => {
   const root = isRecord(value) && isRecord(value.workflow) ? value.workflow : value
   if (!isRecord(root)) {
-    throw new Error('Invalid workflow file')
+    throw new Error('工作流文件格式无效')
   }
 
   const name = typeof root.name === 'string' ? root.name.trim() : ''
   if (!name) {
-    throw new Error('Workflow name is required')
+    throw new Error('工作流名称不能为空')
   }
 
   const nodes = Array.isArray(root.nodes) ? root.nodes.filter(isValidNodeDefinition) : []
@@ -303,12 +303,12 @@ const handleCreate = async () => {
       description: createForm.value.description || null
     })
     createDialogVisible.value = false
-    ElMessage.success('Workflow created successfully')
+    ElMessage.success('工作流创建成功')
     router.push(`/workflows/${workflow.id}/edit`)
   } catch (error) {
     // Form validation error or API error
     if (error !== 'Validation failed') {
-      ElMessage.error('Failed to create workflow')
+      ElMessage.error('创建工作流失败')
     }
   } finally {
     isCreating.value = false
@@ -326,10 +326,10 @@ const handleRename = async () => {
       description: renameForm.value.description || null
     })
     renameDialogVisible.value = false
-    ElMessage.success('Workflow renamed successfully')
+    ElMessage.success('工作流已重命名')
   } catch (error) {
     if (error !== 'Validation failed') {
-      ElMessage.error('Failed to rename workflow')
+      ElMessage.error('重命名工作流失败')
     }
   } finally {
     isRenaming.value = false
@@ -345,11 +345,11 @@ const formatDate = (dateString: string) => {
 const handleExecute = async (row: Workflow) => {
   try {
     await ElMessageBox.confirm(
-      `Start execution for workflow "${row.name}"?`,
-      'Execute Workflow',
+      `确定要执行工作流「${row.name}」吗？`,
+      '执行工作流',
       {
-        confirmButtonText: 'Execute',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: '执行',
+        cancelButtonText: '取消',
         type: 'info'
       }
     )
@@ -371,10 +371,10 @@ const handleExecute = async (row: Workflow) => {
     // Start polling for updates
     startExecutionPolling(execution.id)
 
-    ElMessage.success(`Execution #${execution.id} started`)
+    ElMessage.success(`执行 #${execution.id} 已启动`)
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to start execution')
+      ElMessage.error('启动执行失败')
     }
   }
 }
@@ -392,11 +392,11 @@ const startExecutionPolling = (executionId: number) => {
       if (execution.status === 'completed' || execution.status === 'failed' || execution.status === 'stopped') {
         stopExecutionPolling()
         if (execution.status === 'stopped') {
-          ElMessage.info('Execution stopped')
+          ElMessage.info('执行已停止')
         } else if (execution.result === 'passed') {
-          ElMessage.success('Workflow execution completed successfully')
+          ElMessage.success('工作流执行成功')
         } else {
-          ElMessage.error('Workflow execution failed')
+          ElMessage.error('工作流执行失败')
         }
       }
     } catch (error) {
@@ -421,9 +421,9 @@ const handleStopExecution = async () => {
     currentDialogExecution.value = await executionsApi.stop(currentDialogExecution.value.id)
     dialogNodeExecutions.value = await executionsApi.getNodes(currentDialogExecution.value.id)
     stopExecutionPolling()
-    ElMessage.info('Execution stopped')
+    ElMessage.info('执行已停止')
   } catch (error) {
-    ElMessage.error('Failed to stop execution')
+    ElMessage.error('停止执行失败')
   }
 }
 
@@ -521,35 +521,35 @@ onUnmounted(() => {
         :fit="false"
         highlight-current-row
       >
-        <ElTableColumn prop="name" label="Workflow" width="220" show-overflow-tooltip>
+        <ElTableColumn prop="name" label="工作流" width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="workflow-info">
-              <ElTag type="info" size="small" class="workflow-type-tag">FLOW</ElTag>
+              <ElTag type="info" size="small" class="workflow-type-tag">流程</ElTag>
               <span class="workflow-name">{{ row.name }}</span>
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="description" label="Description" width="220" show-overflow-tooltip>
+        <ElTableColumn prop="description" label="描述" width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="description">{{ row.description || '-' }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Nodes" width="90" align="center">
+        <ElTableColumn label="节点数" width="90" align="center">
           <template #default="{ row }">
             <span class="node-count">
               {{ row.nodes?.length || 0 }}
             </span>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="created_at" label="Created At" width="180">
+        <ElTableColumn prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
             <span class="created-at">{{ formatDate(row.created_at) }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Actions" width="190" align="center">
+        <ElTableColumn label="操作" width="190" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
-              <ElTooltip content="Execute" placement="top">
+              <ElTooltip content="执行" placement="top">
                 <ElButton
                   type="success"
                   :icon="VideoPlay"
@@ -558,7 +558,7 @@ onUnmounted(() => {
                   link
                 />
               </ElTooltip>
-              <ElTooltip content="Rename" placement="top">
+              <ElTooltip content="重命名" placement="top">
                 <ElButton
                   type="primary"
                   :icon="Edit"
@@ -567,7 +567,7 @@ onUnmounted(() => {
                   link
                 />
               </ElTooltip>
-              <ElTooltip content="Duplicate" placement="top">
+              <ElTooltip content="复制" placement="top">
                 <ElButton
                   type="info"
                   :icon="CopyDocument"
@@ -585,7 +585,7 @@ onUnmounted(() => {
                   link
                 />
               </ElTooltip>
-              <ElTooltip content="Delete" placement="top">
+              <ElTooltip content="删除" placement="top">
                 <ElButton
                   type="danger"
                   :icon="Delete"
@@ -667,7 +667,7 @@ onUnmounted(() => {
     <!-- Rename Workflow Dialog -->
     <ElDialog
       v-model="renameDialogVisible"
-      title="Rename Workflow"
+      title="重命名工作流"
       width="500px"
       :close-on-click-modal="false"
     >
@@ -678,33 +678,33 @@ onUnmounted(() => {
         label-position="top"
         @submit.prevent="handleRename"
       >
-        <ElFormItem label="Name" prop="name">
+        <ElFormItem label="名称" prop="name">
           <ElInput
             v-model="renameForm.name"
-            placeholder="Enter workflow name"
+            placeholder="请输入工作流名称"
             maxlength="100"
             show-word-limit
           />
         </ElFormItem>
-        <ElFormItem label="Description" prop="description">
+        <ElFormItem label="描述" prop="description">
           <ElInput
             v-model="renameForm.description"
             type="textarea"
             :rows="4"
-            placeholder="Enter workflow description (optional)"
+            placeholder="请输入工作流描述（可选）"
             maxlength="500"
             show-word-limit
           />
         </ElFormItem>
       </ElForm>
       <template #footer>
-        <ElButton @click="renameDialogVisible = false">Cancel</ElButton>
+        <ElButton @click="renameDialogVisible = false">取消</ElButton>
         <ElButton
           type="primary"
           @click="handleRename"
           :loading="isRenaming"
         >
-          Save
+          保存
         </ElButton>
       </template>
     </ElDialog>

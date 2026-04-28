@@ -74,15 +74,15 @@ const selectedNodeConfig = computed(() => {
   return nodeType ? NODE_CONFIGS[nodeType] : null
 })
 
-const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || 'Edit Node')
+const selectedNodeTitle = computed(() => selectedNodeConfig.value?.label || '编辑节点')
 const selectedNodeCategory = computed(() => selectedNodeConfig.value?.category || '')
 const selectedNodeDescription = computed(() => selectedNodeConfig.value?.description || '')
 const selectedNodeColor = computed(() => selectedNodeConfig.value?.color || '#409eff')
 const nodeCategoryLabels = {
-  basic: 'Basic Nodes',
-  iotdb: 'IoTDB Nodes',
-  control: 'Control Nodes',
-  result: 'Result Nodes'
+  basic: '基础节点',
+  iotdb: 'IoTDB 节点',
+  control: '控制节点',
+  result: '结果节点'
 } as const
 const nodeCategoryOrder = ['basic', 'iotdb', 'control', 'result'] as const
 
@@ -171,7 +171,7 @@ const nodeValidationErrorsById = computed(() => {
   for (const node of workflowsStore.editorNodes) {
     const missingServerIds = getNodeMissingServerIds(node)
     if (missingServerIds.length > 0) {
-      errors.set(node.id, `Missing server #${missingServerIds.join(', #')}`)
+      errors.set(node.id, `缺少服务器 #${missingServerIds.join(', #')}`)
     }
   }
   return errors
@@ -214,14 +214,14 @@ const handleKeydown = (event: KeyboardEvent) => {
   if (workflowsStore.selectedEdgeId) {
     event.preventDefault()
     workflowsStore.deleteEdge(workflowsStore.selectedEdgeId)
-    ElMessage.success('Connection deleted')
+    ElMessage.success('连线已删除')
     return
   }
 
   if (workflowsStore.selectedNodeId) {
     event.preventDefault()
     workflowsStore.deleteNode(workflowsStore.selectedNodeId)
-    ElMessage.success('Node deleted')
+    ElMessage.success('节点已删除')
   }
 }
 
@@ -232,7 +232,7 @@ onMounted(async () => {
     try {
       await serversStore.fetchServers()
     } catch {
-      ElMessage.error('Failed to load servers')
+      ElMessage.error('加载服务器列表失败')
     }
   }
   if (workflowId.value) {
@@ -244,12 +244,12 @@ onMounted(async () => {
         workflowsStore.initEditor(workflow)
       }
     } catch {
-      ElMessage.error('Failed to load workflow')
+      ElMessage.error('加载工作流失败')
       router.push('/workflows')
     }
   } else {
     // New workflow
-    workflowName.value = 'New Workflow'
+    workflowName.value = '新建工作流'
     workflowDescription.value = ''
     workflowsStore.initEditor(null)
   }
@@ -387,7 +387,7 @@ const handleDrop = (event: DragEvent) => {
   isDragging.value = false
   draggedType.value = null
 
-  ElMessage.success('Node added successfully')
+  ElMessage.success('节点已添加')
 }
 
 // Handle drag over (prevent default to allow drop)
@@ -415,11 +415,11 @@ const handleSave = async (silent = false) => {
     }
 
     if (!silent) {
-      ElMessage.success('Workflow saved successfully')
+      ElMessage.success('工作流已保存')
     }
     return true
   } catch {
-    ElMessage.error('Failed to save workflow')
+    ElMessage.error('保存工作流失败')
     return false
   }
 }
@@ -462,7 +462,7 @@ const handleRun = async () => {
       if (firstInvalidNodeId) {
         workflowsStore.selectNode(firstInvalidNodeId)
       }
-      ElMessage.error(`Cannot run workflow: ${workflowValidationErrors.value[0]}`)
+      ElMessage.error(`无法运行工作流：${workflowValidationErrors.value[0]}`)
       return
     }
 
@@ -470,11 +470,11 @@ const handleRun = async () => {
     if (workflowsStore.isDirty) {
       try {
         await ElMessageBox.confirm(
-          'The workflow has unsaved changes. Please save before running.',
-          'Unsaved Changes',
+          '工作流有未保存的修改，请先保存再运行。',
+          '未保存的修改',
           {
-            confirmButtonText: 'Save & Run',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: '保存并运行',
+            cancelButtonText: '取消',
             type: 'warning'
           }
         )
@@ -493,17 +493,17 @@ const handleRun = async () => {
 
 // Handle execution started
 const handleExecutionStarted = (execution: Execution) => {
-  ElMessage.success(`Execution #${execution.id} started`)
+  ElMessage.success(`执行 #${execution.id} 已启动`)
 }
 
 // Handle execution completed
 const handleExecutionCompleted = (execution: Execution) => {
   if (execution.result === 'passed') {
-    ElMessage.success('Workflow execution completed successfully')
+    ElMessage.success('工作流执行成功')
   } else if (execution.result === 'failed') {
-    ElMessage.error('Workflow execution failed')
+    ElMessage.error('工作流执行失败')
   } else {
-    ElMessage.info('Workflow execution completed with partial results')
+    ElMessage.info('工作流执行完成，部分结果异常')
   }
 }
 
@@ -587,7 +587,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
         <!-- Empty state -->
         <div v-if="workflowsStore.editorNodes.length === 0" class="empty-canvas">
           <div class="empty-message">
-            <p>Drag nodes from the palette to start building your workflow</p>
+            <p>从左侧面板拖拽节点到画布开始编排工作流</p>
           </div>
         </div>
       </div>
@@ -625,7 +625,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
             </div>
           </div>
           <div class="config-dialog-title-block-enhanced">
-            <div class="config-dialog-meta-enhanced">{{ selectedNodeCategory || 'Workflow Node' }}</div>
+            <div class="config-dialog-meta-enhanced">{{ selectedNodeCategory || '工作流节点' }}</div>
             <div class="config-dialog-title-enhanced">{{ selectedNodeTitle }}</div>
             <div v-if="selectedNodeDescription" class="config-dialog-description-enhanced">
               {{ selectedNodeDescription }}

@@ -23,7 +23,7 @@ def list_executions(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """List all executions with optional filters"""
+    """列出所有执行记录，支持可选过滤条件"""
     engine = ExecutionEngine(db)
     executions = engine.list_executions(workflow_id=workflow_id, status=status, limit=limit)
     return executions
@@ -35,12 +35,12 @@ def create_execution(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Create and start a new execution"""
+    """创建并启动新的执行"""
     # Check if workflow exists
     from app.models.database import Workflow
     workflow = db.query(Workflow).filter(Workflow.id == execution_data.workflow_id).first()
     if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+        raise HTTPException(status_code=404, detail="工作流不存在")
 
     engine = ExecutionEngine(db)
     execution = engine.create_execution(
@@ -57,30 +57,30 @@ def create_execution(
 
 @router.get("/{execution_id}", response_model=ExecutionResponse)
 def get_execution(execution_id: int, db: Session = Depends(get_db)):
-    """Get execution by ID"""
+    """根据 ID 获取执行记录"""
     engine = ExecutionEngine(db)
     execution = engine.get_execution(execution_id)
     if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
+        raise HTTPException(status_code=404, detail="执行记录不存在")
     return execution
 
 
 @router.post("/{execution_id}/stop", response_model=ExecutionResponse)
 def stop_execution(execution_id: int, db: Session = Depends(get_db)):
-    """Stop a running execution"""
+    """停止正在运行的执行"""
     engine = ExecutionEngine(db)
     execution = engine.stop_execution(execution_id)
     if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
+        raise HTTPException(status_code=404, detail="执行记录不存在")
     return execution
 
 
 @router.delete("/{execution_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_execution(execution_id: int, db: Session = Depends(get_db)):
-    """Delete an execution and its node records"""
+    """删除执行记录及其节点记录"""
     execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
+        raise HTTPException(status_code=404, detail="执行记录不存在")
 
     db.query(NodeExecution).filter(
         NodeExecution.execution_id == execution_id
@@ -92,10 +92,10 @@ def delete_execution(execution_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{execution_id}/nodes", response_model=List[NodeExecutionResponse])
 def get_node_executions(execution_id: int, db: Session = Depends(get_db)):
-    """Get all node executions for an execution"""
+    """获取某次执行的所有节点执行记录"""
     execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
+        raise HTTPException(status_code=404, detail="执行记录不存在")
 
     node_executions = db.query(NodeExecution).filter(
         NodeExecution.execution_id == execution_id

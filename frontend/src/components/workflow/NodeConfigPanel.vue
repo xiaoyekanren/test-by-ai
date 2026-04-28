@@ -66,31 +66,31 @@ const nodeHelpText = computed(() => {
   if (!selectedNode.value) return ''
 
   if (selectedNode.value.data.nodeType === 'iotdb_config') {
-    return 'Use this node to declare the config items that should be written during workflow execution. It does not read the remote file while you are editing the workflow.'
+    return '此节点用于声明工作流执行时需要写入的配置项。编辑工作流时不会读取远程文件。'
   }
 
   if (selectedNode.value.data.nodeType === 'iotdb_cluster_deploy') {
-    return 'Describe the cluster topology here. During execution, the workflow will upload the package, unpack it on each host, and write role-specific ConfigNode/DataNode settings.'
+    return '在此描述集群拓扑。执行时工作流会将安装包上传并解压到每台主机，并写入 ConfigNode/DataNode 角色配置。'
   }
 
   if (selectedNode.value.data.nodeType === 'iotdb_cluster_start') {
-    return 'This node starts the first ConfigNode, then the remaining ConfigNodes, and finally all DataNodes.'
+    return '此节点先启动第一个 ConfigNode，再启动其余 ConfigNode，最后启动所有 DataNode。'
   }
 
   if (selectedNode.value.data.nodeType === 'iotdb_cluster_check') {
-    return 'This node runs show cluster against the first DataNode and can execute extra validation SQL statements afterward.'
+    return '此节点对第一个 DataNode 执行 show cluster，随后可执行额外的验证 SQL 语句。'
   }
 
   if (selectedNode.value.data.nodeType === 'iot_benchmark_start') {
-    return 'Start one IoT Benchmark run in the background. Later nodes can continue while Wait IoT Benchmark polls the remote process.'
+    return '在后台启动一次 IoT Benchmark 运行。后续节点可继续执行，Wait IoT Benchmark 会轮询远程进程。'
   }
 
   if (selectedNode.value.data.nodeType === 'iot_benchmark_wait') {
-    return 'Wait for the benchmark_run produced by Start IoT Benchmark, then return the tail of its output log.'
+    return '等待 Start IoT Benchmark 产生的 benchmark_run 完成，然后返回其输出日志的末尾部分。'
   }
 
   if (selectedNode.value.data.nodeType === 'iotdb_deploy') {
-    return 'Use either Artifact Local Path or Package URL as the package source. The selected package will be staged at Remote Package Path before deployment.'
+    return '可使用本地制品路径或安装包 URL 作为安装包来源。所选安装包将暂存在远程安装包路径后再进行部署。'
   }
 
   return ''
@@ -384,7 +384,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
         { value: 'tar.gz', label: 'tar.gz' }
       ]},
       { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
-      { field: 'overwrite', label: 'Overwrite Install Dir', type: 'checkbox', placeholder: 'Delete existing install directory first' },
+      { field: 'overwrite', label: '覆盖安装目录', type: 'checkbox', placeholder: '先删除已有安装目录' },
       { field: 'rpc_port', label: 'RPC Port', type: 'number', min: 1, max: 65535 },
       { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
     ],
@@ -457,7 +457,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
         { value: 'tar.gz', label: 'tar.gz' }
       ]},
       { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
-      { field: 'overwrite', label: 'Overwrite Install Dir', type: 'checkbox', placeholder: 'Delete existing install directory first' },
+      { field: 'overwrite', label: '覆盖安装目录', type: 'checkbox', placeholder: '先删除已有安装目录' },
       { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'defaultCluster' },
       { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Select ConfigNode servers' },
       { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Select DataNode servers' },
@@ -589,16 +589,16 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
 }
 
 const fieldSectionTitles: Record<string, string> = {
-  connection: 'Connection',
-  package: 'Package',
-  paths: 'Paths',
-  runtime: 'Runtime',
-  configuration: 'Configuration',
-  command: 'Command',
-  checks: 'Checks',
-  notification: 'Notification',
-  output: 'Output',
-  general: 'General'
+  connection: '连接',
+  package: '安装包',
+  paths: '路径',
+  runtime: '运行时',
+  configuration: '配置',
+  command: '命令',
+  checks: '检查',
+  notification: '通知',
+  output: '输出',
+  general: '通用'
 }
 
 const getFieldSection = (field: FieldDefinition) => {
@@ -630,7 +630,7 @@ const fieldSections = computed<FieldSection[]>(() => {
     const key = getFieldSection(field)
     let section = sections.find(item => item.key === key)
     if (!section) {
-      section = { key, title: fieldSectionTitles[key] || 'General', fields: [] }
+      section = { key, title: fieldSectionTitles[key] || '通用', fields: [] }
       sections.push(section)
     }
     section.fields.push(field)
@@ -759,12 +759,12 @@ const isListField = (field: string): boolean => {
 <template>
   <div class="node-config-dialog-content">
     <div v-if="!selectedNode" class="no-selection">
-      <ElEmpty description="Select a node to configure" :image-size="80" />
+      <ElEmpty description="选择一个节点以配置" :image-size="80" />
     </div>
 
     <div v-else class="settings-page">
       <div class="node-name-section">
-        <div class="setting-label">Node Name</div>
+        <div class="setting-label">节点名称</div>
         <div v-if="!isEditingLabel" class="node-name-display">
           <span class="node-name">{{ selectedNode.data.label }}</span>
           <ElButton
@@ -778,12 +778,12 @@ const isListField = (field: string): boolean => {
           <ElInput
             v-model="editingLabel"
             size="small"
-            placeholder="Enter node name"
+            placeholder="输入节点名称"
             @keyup.enter="saveLabel"
             @keyup.escape="cancelEditLabel"
           />
-          <ElButton size="small" type="primary" @click="saveLabel">Save</ElButton>
-          <ElButton size="small" @click="cancelEditLabel">Cancel</ElButton>
+          <ElButton size="small" type="primary" @click="saveLabel">保存</ElButton>
+          <ElButton size="small" @click="cancelEditLabel">取消</ElButton>
         </div>
       </div>
 
@@ -807,7 +807,7 @@ const isListField = (field: string): boolean => {
             <template v-if="field.type === 'server'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as number | null | undefined)"
-                placeholder="Select server"
+                placeholder="选择服务器"
                 clearable
                 size="small"
                 style="width: 100%"
@@ -825,14 +825,14 @@ const isListField = (field: string): boolean => {
                 v-if="isMissingServerId(getConfigValue(field.field))"
                 class="field-warning"
               >
-                This workflow references a deleted server. Select another server before running it.
+                该工作流引用了已删除的服务器，请在运行前选择其他服务器。
               </div>
             </template>
 
             <template v-else-if="field.type === 'region'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as string | null | undefined)"
-                placeholder="Select region"
+                placeholder="选择区域"
                 clearable
                 size="small"
                 style="width: 100%"
@@ -850,7 +850,7 @@ const isListField = (field: string): boolean => {
             <template v-else-if="field.type === 'select'">
               <ElSelect
                 :model-value="(getConfigValue(field.field) as string | number | null | undefined)"
-                placeholder="Select option"
+                placeholder="选择选项"
                 size="small"
                 style="width: 100%"
                 @update:model-value="updateConfig(field.field, $event)"
@@ -871,7 +871,7 @@ const isListField = (field: string): boolean => {
                   size="small"
                   @update:model-value="updateConfig(field.field, $event)"
                 />
-                <span class="switch-label">{{ field.placeholder || 'Enabled' }}</span>
+                <span class="switch-label">{{ field.placeholder || '已启用' }}</span>
               </div>
             </template>
 
@@ -952,8 +952,8 @@ const isListField = (field: string): boolean => {
             <template v-else-if="field.type === 'keyValue'">
               <div class="key-value-editor">
                 <div class="key-value-heading">
-                  <span>Key</span>
-                  <span>Value</span>
+                  <span>键</span>
+                  <span>值</span>
                 </div>
                 <div
                   v-for="row in getKeyValueRows(field.field)"
@@ -987,7 +987,7 @@ const isListField = (field: string): boolean => {
                   :icon="Plus"
                   @click="addKeyValueRow(field.field)"
                 >
-                  Add Item
+                  添加项
                 </ElButton>
               </div>
             </template>
@@ -1005,7 +1005,7 @@ const isListField = (field: string): boolean => {
       </ElForm>
 
       <div class="node-id-section">
-        <span class="node-id-label">Node ID:</span>
+        <span class="node-id-label">节点 ID：</span>
         <span class="node-id-value">{{ selectedNode.id }}</span>
       </div>
     </div>

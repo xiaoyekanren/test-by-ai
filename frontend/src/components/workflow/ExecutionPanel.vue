@@ -72,21 +72,21 @@ const progressPercent = computed(() => {
 
 // Status color and icon mapping
 const statusConfig: Record<ExecutionStatus, { color: string; bgColor: string; icon: typeof VideoPlay; label: string }> = {
-  pending: { color: '#909399', bgColor: '#f4f4f5', icon: Clock, label: 'Pending' },
-  running: { color: '#409EFF', bgColor: '#ecf5ff', icon: Loading, label: 'Running' },
-  paused: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: 'Paused' },
-  completed: { color: '#67C23A', bgColor: '#f0f9eb', icon: CircleCheck, label: 'Completed' },
-  failed: { color: '#F56C6C', bgColor: '#fef0f0', icon: CircleClose, label: 'Failed' },
-  stopped: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: 'Stopped' }
+  pending: { color: '#909399', bgColor: '#f4f4f5', icon: Clock, label: '等待中' },
+  running: { color: '#409EFF', bgColor: '#ecf5ff', icon: Loading, label: '运行中' },
+  paused: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: '已暂停' },
+  completed: { color: '#67C23A', bgColor: '#f0f9eb', icon: CircleCheck, label: '已完成' },
+  failed: { color: '#F56C6C', bgColor: '#fef0f0', icon: CircleClose, label: '失败' },
+  stopped: { color: '#E6A23C', bgColor: '#fdf6ec', icon: VideoPause, label: '已停止' }
 }
 
 // Node status config
 const nodeStatusConfig: Record<string, { color: string; icon: typeof Clock; label: string }> = {
-  pending: { color: '#909399', icon: Clock, label: 'Pending' },
-  running: { color: '#409EFF', icon: Loading, label: 'Running' },
-  success: { color: '#67C23A', icon: CircleCheck, label: 'Success' },
-  failed: { color: '#F56C6C', icon: CircleClose, label: 'Failed' },
-  skipped: { color: '#909399', icon: VideoPause, label: 'Skipped' }
+  pending: { color: '#909399', icon: Clock, label: '等待中' },
+  running: { color: '#409EFF', icon: Loading, label: '运行中' },
+  success: { color: '#67C23A', icon: CircleCheck, label: '成功' },
+  failed: { color: '#F56C6C', icon: CircleClose, label: '失败' },
+  skipped: { color: '#909399', icon: VideoPause, label: '已跳过' }
 }
 
 // Format duration
@@ -126,10 +126,10 @@ const formatLogData = (value: unknown): string => {
       logSections.push(normalizeLogText(record.stdout))
     }
     if (typeof record.stderr === 'string' && record.stderr) {
-      logSections.push(`stderr:\n${normalizeLogText(record.stderr)}`)
+      logSections.push(`标准错误：\n${normalizeLogText(record.stderr)}`)
     }
     if (typeof record.error === 'string' && record.error) {
-      logSections.push(`error:\n${normalizeLogText(record.error)}`)
+      logSections.push(`错误：\n${normalizeLogText(record.error)}`)
     }
     if (logSections.length > 0) {
       return logSections.join('\n\n')
@@ -169,7 +169,7 @@ const handleRun = async () => {
 
     emit('executionStarted', execution)
   } catch (error) {
-    console.error('Failed to start execution:', error)
+    console.error('启动执行失败：', error)
   } finally {
     isStarting.value = false
   }
@@ -187,7 +187,7 @@ const handleStop = async () => {
     emit('executionCompleted', currentExecution.value)
     stopPolling()
   } catch (error) {
-    console.error('Failed to stop execution:', error)
+    console.error('停止执行失败：', error)
   } finally {
     isStopping.value = false
   }
@@ -209,7 +209,7 @@ const startPolling = (executionId: number) => {
         emit('executionCompleted', execution)
       }
     } catch (error) {
-      console.error('Polling error:', error)
+      console.error('轮询出错：', error)
       stopPolling()
     }
   }, 2000)
@@ -248,9 +248,9 @@ const logDialogNodeExecutions = computed(() => {
 })
 
 const logDialogTitle = computed(() => {
-  if (!selectedLogNodeId.value) return 'Execution Logs'
+  if (!selectedLogNodeId.value) return '执行日志'
   const nodeExecution = nodeExecutions.value.find(ne => ne.node_id === selectedLogNodeId.value)
-  return `Execution Logs - ${nodeExecution?.node_type || selectedLogNodeId.value}`
+  return `执行日志 - ${nodeExecution?.node_type || selectedLogNodeId.value}`
 })
 
 defineExpose({ openLogsForNode })
@@ -278,7 +278,7 @@ onUnmounted(() => {
   <div class="execution-panel">
     <!-- Header -->
     <div class="panel-header">
-      <h3>Execution Panel</h3>
+      <h3>执行面板</h3>
       <div class="header-actions">
         <ElButton
           v-if="currentExecution"
@@ -286,7 +286,7 @@ onUnmounted(() => {
           size="small"
           @click="handleClear"
         >
-          Clear
+          清除
         </ElButton>
       </div>
     </div>
@@ -299,19 +299,19 @@ onUnmounted(() => {
         :loading="isStopping"
         @click="handleStop"
       >
-        {{ isStopping ? 'Stopping...' : 'Stop' }}
+        {{ isStopping ? '停止中...' : '停止' }}
       </ElButton>
     </div>
 
     <!-- No Execution State -->
     <div v-if="!hasExecutionView" class="no-execution">
-      <ElEmpty description="No execution running">
+      <ElEmpty description="暂无执行">
         <template #image>
           <ElIcon :size="48" color="#c0c4cc">
             <VideoPlay />
           </ElIcon>
         </template>
-        <p class="hint">Use the toolbar Run button to start execution</p>
+        <p class="hint">使用工具栏的运行按钮启动执行</p>
       </ElEmpty>
     </div>
 
@@ -326,7 +326,7 @@ onUnmounted(() => {
           <ElIcon class="status-icon" :class="{ 'is-loading': displayExecutionStatus === 'running' }">
             <component :is="getStatusInfo(displayExecutionStatus || 'pending').icon" />
           </ElIcon>
-          <span>{{ isStarting && !currentExecution ? 'Starting' : getStatusInfo(displayExecutionStatus || 'pending').label }}</span>
+          <span>{{ isStarting && !currentExecution ? '启动中' : getStatusInfo(displayExecutionStatus || 'pending').label }}</span>
         </div>
 
         <div class="execution-time">
@@ -338,7 +338,7 @@ onUnmounted(() => {
       <!-- Progress Bar -->
       <div class="progress-section">
         <div class="progress-label">
-          <span>Progress</span>
+          <span>进度</span>
           <span>{{ progressPercent }}%</span>
         </div>
         <ElProgress
@@ -351,9 +351,9 @@ onUnmounted(() => {
       <!-- Node Execution List -->
       <div class="node-executions">
         <div class="section-header">
-          <h4>Node Executions</h4>
-          <span class="count">{{ nodeExecutions.length }} nodes</span>
-          <span class="section-hint">Double-click for logs</span>
+          <h4>节点执行</h4>
+          <span class="count">{{ nodeExecutions.length }} 个节点</span>
+          <span class="section-hint">双击查看日志</span>
         </div>
 
         <ElScrollbar class="node-list">
@@ -394,7 +394,7 @@ onUnmounted(() => {
             <component :is="currentExecution.result === 'passed' ? CircleCheck : CircleClose" />
           </ElIcon>
           <span class="result-text" :class="currentExecution.result">
-            {{ currentExecution.result === 'passed' ? 'All tests passed' : 'Some tests failed' }}
+            {{ currentExecution.result === 'passed' ? '全部测试通过' : '部分测试失败' }}
           </span>
         </div>
       </div>
@@ -424,15 +424,15 @@ onUnmounted(() => {
           <div v-else class="logs-content-full">
             <template v-for="nodeExec in logDialogNodeExecutions" :key="nodeExec.id">
               <div v-if="nodeExec.input_data" class="log-block">
-                <div class="log-block-label">INPUT</div>
+                <div class="log-block-label">输入</div>
                 <pre class="log-block-data">{{ formatLogData(nodeExec.input_data) }}</pre>
               </div>
               <div v-if="nodeExec.output_data" class="log-block">
-                <div class="log-block-label">OUTPUT</div>
+                <div class="log-block-label">输出</div>
                 <pre class="log-block-data">{{ formatLogData(nodeExec.output_data) }}</pre>
               </div>
               <div v-if="nodeExec.error_message" class="log-block log-block-error">
-                <div class="log-block-label">ERROR</div>
+                <div class="log-block-label">错误</div>
                 <pre class="log-block-data">{{ nodeExec.error_message }}</pre>
               </div>
             </template>

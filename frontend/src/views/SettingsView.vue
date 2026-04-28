@@ -81,10 +81,10 @@ async function handleSave() {
       grafanaEmbedEnabled: observabilityForm.value.grafanaEmbedEnabled
     })
 
-    ElMessage.success('Settings saved')
+    ElMessage.success('设置已保存')
   } catch (error) {
     console.error(error)
-    ElMessage.error('Failed to save settings')
+    ElMessage.error('保存设置失败')
   } finally {
     saving.value = false
   }
@@ -94,10 +94,10 @@ async function handleReset() {
   saving.value = true
   try {
     await settingsStore.resetSettings()
-    ElMessage.success('Settings reset to defaults')
+    ElMessage.success('设置已恢复默认值')
   } catch (error) {
     console.error(error)
-    ElMessage.error('Failed to reset settings')
+    ElMessage.error('重置设置失败')
   } finally {
     saving.value = false
   }
@@ -113,14 +113,14 @@ onMounted(async () => {
   <div class="settings-view">
     <div class="toolbar">
       <div class="toolbar-title">
-        <h2>System Settings</h2>
+        <h2>系统设置</h2>
       </div>
       <div class="toolbar-actions">
         <ElButton @click="handleReset" :icon="Refresh" :loading="saving">
-          Reset
+          重置
         </ElButton>
         <ElButton type="primary" @click="handleSave" :disabled="!hasChanges" :loading="saving">
-          Save
+          保存
         </ElButton>
       </div>
     </div>
@@ -128,13 +128,13 @@ onMounted(async () => {
     <ElCard shadow="hover" class="settings-card">
       <template #header>
         <div class="card-header">
-          <ElTag type="info" size="small">Monitor</ElTag>
-          <span>System monitor refresh settings</span>
+          <ElTag type="info" size="small">监控</ElTag>
+          <span>系统监控刷新设置</span>
         </div>
       </template>
 
       <ElForm label-width="180px" label-position="left">
-        <ElFormItem label="Refresh interval">
+        <ElFormItem label="刷新间隔">
           <ElInputNumber
             v-model="monitorForm.refreshInterval"
             :min="5"
@@ -142,18 +142,18 @@ onMounted(async () => {
             :step="5"
             style="width: 180px"
           />
-          <span class="unit">seconds</span>
+          <span class="unit">秒</span>
         </ElFormItem>
       </ElForm>
 
       <ElDivider />
 
       <ElDescriptions :column="1" border size="small">
-        <ElDescriptionsItem label="Current refresh interval">
-          {{ settingsStore.settings.monitor.refreshInterval }} seconds
+        <ElDescriptionsItem label="当前刷新间隔">
+          {{ settingsStore.settings.monitor.refreshInterval }} 秒
         </ElDescriptionsItem>
-        <ElDescriptionsItem label="Usage">
-          Controls how often the monitor dashboard refreshes local and remote server metrics.
+        <ElDescriptionsItem label="说明">
+          控制监控面板刷新本地和远程服务器指标的频率。
         </ElDescriptionsItem>
       </ElDescriptions>
     </ElCard>
@@ -161,13 +161,13 @@ onMounted(async () => {
     <ElCard shadow="hover" class="settings-card">
       <template #header>
         <div class="card-header">
-          <ElTag type="success" size="small">Observability</ElTag>
-          <span>External Prometheus and Grafana entry points</span>
+          <ElTag type="success" size="small">可观测性</ElTag>
+          <span>外部 Prometheus 和 Grafana 入口配置</span>
         </div>
       </template>
 
       <ElForm label-width="180px" label-position="left">
-        <ElFormItem label="Prometheus URL">
+        <ElFormItem label="Prometheus 地址">
           <ElInput
             v-model="observabilityForm.prometheusUrl"
             placeholder="http://prometheus.example.com:9090"
@@ -175,7 +175,7 @@ onMounted(async () => {
           />
         </ElFormItem>
 
-        <ElFormItem label="Grafana URL">
+        <ElFormItem label="Grafana 地址">
           <ElInput
             v-model="observabilityForm.grafanaUrl"
             placeholder="http://grafana.example.com:3000"
@@ -183,7 +183,7 @@ onMounted(async () => {
           />
         </ElFormItem>
 
-        <ElFormItem label="Grafana dashboard UID">
+        <ElFormItem label="Grafana 仪表盘 UID">
           <ElInput
             v-model="observabilityForm.grafanaDashboardUid"
             placeholder="iotdb-overview"
@@ -191,7 +191,7 @@ onMounted(async () => {
           />
         </ElFormItem>
 
-        <ElFormItem label="Grafana datasource">
+        <ElFormItem label="Grafana 数据源">
           <ElInput
             v-model="observabilityForm.grafanaDatasource"
             placeholder="Prometheus"
@@ -199,7 +199,7 @@ onMounted(async () => {
           />
         </ElFormItem>
 
-        <ElFormItem label="Grafana org ID">
+        <ElFormItem label="Grafana 组织 ID">
           <ElInput
             v-model="observabilityForm.grafanaOrgId"
             placeholder="1"
@@ -207,27 +207,27 @@ onMounted(async () => {
           />
         </ElFormItem>
 
-        <ElFormItem label="Default time range">
+        <ElFormItem label="默认时间范围">
           <ElInput
             v-model="observabilityForm.grafanaTimeRange"
             placeholder="now-6h"
           />
         </ElFormItem>
 
-        <ElFormItem label="Grafana embed mode">
+        <ElFormItem label="Grafana 嵌入模式">
           <ElSwitch v-model="observabilityForm.grafanaEmbedEnabled" />
-          <span class="hint">Adds kiosk mode to dashboard links for cleaner wallboard views.</span>
+          <span class="hint">为仪表盘链接添加 Kiosk 模式，获得更简洁的展示视图。</span>
         </ElFormItem>
       </ElForm>
 
       <ElDivider />
 
       <ElDescriptions :column="1" border size="small">
-        <ElDescriptionsItem label="Recommended setup">
-          Keep Prometheus and Grafana external to this app, and use these URLs as shared entry points.
+        <ElDescriptionsItem label="推荐配置">
+          建议将 Prometheus 和 Grafana 独立部署，通过此处配置的地址作为统一入口。
         </ElDescriptionsItem>
-        <ElDescriptionsItem label="Where it appears">
-          The monitor page will show quick links to the configured Prometheus and Grafana targets.
+        <ElDescriptionsItem label="生效位置">
+          监控页面将显示已配置的 Prometheus 和 Grafana 快捷链接。
         </ElDescriptionsItem>
       </ElDescriptions>
     </ElCard>

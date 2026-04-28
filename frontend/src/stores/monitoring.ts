@@ -18,7 +18,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
       localStatus.value = await monitoringApi.localStatus()
       return localStatus.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch local status'
+      error.value = e instanceof Error ? e.message : '获取本地状态失败'
       throw e
     } finally {
       loading.value = false
@@ -32,7 +32,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
       localProcesses.value = await monitoringApi.localProcesses(params)
       return localProcesses.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch local processes'
+      error.value = e instanceof Error ? e.message : '获取本地进程列表失败'
       throw e
     } finally {
       loading.value = false
@@ -46,7 +46,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
       remoteStatus.value = await monitoringApi.remoteStatus(serverId)
       return remoteStatus.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch remote status'
+      error.value = e instanceof Error ? e.message : '获取远程状态失败'
       throw e
     } finally {
       loading.value = false
@@ -60,7 +60,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
       remoteProcesses.value = await monitoringApi.remoteProcesses(serverId, params)
       return remoteProcesses.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch remote processes'
+      error.value = e instanceof Error ? e.message : '获取远程进程列表失败'
       throw e
     } finally {
       loading.value = false
@@ -78,7 +78,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
       }
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to kill process'
+      error.value = e instanceof Error ? e.message : '终止进程失败'
       throw e
     } finally {
       loading.value = false

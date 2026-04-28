@@ -15,7 +15,7 @@ FRONTEND_DIST_CANDIDATES = (
 
 
 def resolve_frontend_dist_dir() -> Path | None:
-    """Return the first available frontend dist directory."""
+    """返回第一个可用的前端构建目录。"""
     for candidate in FRONTEND_DIST_CANDIDATES:
         if (candidate / "index.html").exists():
             return candidate
@@ -27,7 +27,7 @@ FRONTEND_DIST_DIR = resolve_frontend_dist_dir()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler for startup and shutdown events."""
+    """应用生命周期处理器，用于启动和关闭事件。"""
     # Startup: Initialize database
     init_db()
     yield
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TestFlow",
-    description="Backend API for IoTDB test automation",
+    description="IoTDB 测试自动化后端 API",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -52,7 +52,7 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """健康检查接口"""
     return {"status": "ok"}
 
 # API routes
@@ -73,9 +73,9 @@ app.include_router(test_suites_router, prefix="/api/test-suites", tags=["test-su
 
 
 def serve_frontend_path(full_path: str = ""):
-    """Serve a built frontend file or fall back to the SPA entrypoint."""
+    """提供前端构建文件，或回退到 SPA 入口页面。"""
     if FRONTEND_DIST_DIR is None:
-        raise HTTPException(status_code=404, detail="Frontend bundle not found")
+        raise HTTPException(status_code=404, detail="前端构建产物未找到")
 
     dist_root = FRONTEND_DIST_DIR.resolve()
     requested_path = Path(full_path)
@@ -84,27 +84,27 @@ def serve_frontend_path(full_path: str = ""):
     try:
         candidate.relative_to(dist_root)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Invalid frontend path") from exc
+        raise HTTPException(status_code=404, detail="前端路径无效") from exc
 
     if full_path:
         if candidate.is_file():
             return FileResponse(candidate)
         if requested_path.suffix:
-            raise HTTPException(status_code=404, detail="Frontend asset not found")
+            raise HTTPException(status_code=404, detail="前端资源文件不存在")
 
     index_file = dist_root / "index.html"
     if not index_file.exists():
-        raise HTTPException(status_code=404, detail="Frontend entrypoint not found")
+        raise HTTPException(status_code=404, detail="前端入口文件不存在")
     return FileResponse(index_file)
 
 
 @app.get("/", include_in_schema=False)
 async def serve_frontend_root():
-    """Serve the frontend application root when a build is available."""
+    """当前端构建产物可用时，提供前端应用根页面。"""
     return serve_frontend_path("")
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend_catch_all(full_path: str):
-    """Serve built frontend routes after API routes have been checked."""
+    """在 API 路由匹配之后，提供前端构建的路由页面。"""
     return serve_frontend_path(full_path)
