@@ -169,7 +169,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     try {
       workflows.value = await workflowsApi.list()
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch workflows'
+      error.value = e instanceof Error ? e.message : '获取工作流列表失败'
       throw e
     } finally {
       loading.value = false
@@ -183,7 +183,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       currentWorkflow.value = await workflowsApi.get(id)
       return currentWorkflow.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch workflow'
+      error.value = e instanceof Error ? e.message : '获取工作流详情失败'
       throw e
     } finally {
       loading.value = false
@@ -198,7 +198,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       workflows.value.push(workflow)
       return workflow
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to create workflow'
+      error.value = e instanceof Error ? e.message : '创建工作流失败'
       throw e
     } finally {
       loading.value = false
@@ -219,7 +219,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       }
       return updated
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to update workflow'
+      error.value = e instanceof Error ? e.message : '更新工作流失败'
       throw e
     } finally {
       loading.value = false
@@ -236,7 +236,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
         currentWorkflow.value = null
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to delete workflow'
+      error.value = e instanceof Error ? e.message : '删除工作流失败'
       throw e
     } finally {
       loading.value = false

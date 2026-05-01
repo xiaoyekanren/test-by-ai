@@ -290,7 +290,7 @@ async function fetchProcessList() {
       processList.value = result?.processes || []
     }
   } catch (e) {
-    ElMessage.error('Failed to fetch process list')
+    ElMessage.error('获取进程列表失败')
     processList.value = []
   } finally {
     processLoading.value = false
@@ -310,22 +310,22 @@ async function handleProcessSortChange() {
 async function handleKillProcess(row: ProcessInfo) {
   try {
     await ElMessageBox.confirm(
-      `Kill process "${row.name}" (PID: ${row.pid})?`,
-      'Confirm Kill',
-      { confirmButtonText: 'Kill', cancelButtonText: 'Cancel', type: 'warning' }
+      `确定要终止进程「${row.name}」(PID: ${row.pid}) 吗？`,
+      '确认终止',
+      { confirmButtonText: '终止', cancelButtonText: '取消', type: 'warning' }
     )
 
     // Only local kill supported for now
     if (currentServerForProcess.value?.isLocal) {
       const result = await monitoringStore.killProcess(row.pid)
       if (result.success) {
-        ElMessage.success(`Process ${row.name} killed`)
+        ElMessage.success(`进程 ${row.name} 已终止`)
         await fetchProcessList()
       } else {
-        ElMessage.error(result.error || 'Failed to kill process')
+        ElMessage.error(result.error || '终止进程失败')
       }
     } else {
-      ElMessage.warning('Remote process kill not supported yet')
+      ElMessage.warning('暂不支持终止远程进程')
     }
   } catch {
     // User cancelled
@@ -593,7 +593,7 @@ watch(() => settingsStore.settings.monitor.refreshInterval, () => {
                 :disabled="row.pid < 2 || !currentServerForProcess?.isLocal"
                 link
               >
-                Kill
+                终止
               </ElButton>
             </template>
           </ElTableColumn>

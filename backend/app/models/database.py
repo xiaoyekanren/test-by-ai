@@ -36,9 +36,9 @@ class Workflow(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text)
-    nodes = Column(JSON, default=list)  # [{"id": "node1", "type": "shell", "config": {...}}]
-    edges = Column(JSON, default=list)  # [{"from": "node1", "to": "node2"}]
-    variables = Column(JSON, default=dict)  # {"var1": "value1"}
+    nodes = Column(JSON, default=list)
+    edges = Column(JSON, default=list)
+    variables = Column(JSON, default=dict)
     created_at = Column(UTCDateTime(), default=utc_now)
     updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 

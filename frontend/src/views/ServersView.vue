@@ -60,17 +60,17 @@ const formData = reactive<ServerCreate & { password?: string }>({
 
 const formRules: FormRules = {
   name: [
-    { required: true, message: 'Please input server name', trigger: 'blur' },
-    { min: 2, max: 50, message: 'Length should be 2 to 50 characters', trigger: 'blur' }
+    { required: true, message: '请输入服务器名称', trigger: 'blur' },
+    { min: 2, max: 50, message: '长度应为 2 到 50 个字符', trigger: 'blur' }
   ],
   host: [
-    { required: true, message: 'Please input host address', trigger: 'blur' }
+    { required: true, message: '请输入主机地址', trigger: 'blur' }
   ],
   port: [
-    { required: true, message: 'Please input port', trigger: 'blur' }
+    { required: true, message: '请输入端口', trigger: 'blur' }
   ],
   username: [
-    { required: true, message: 'Please input username', trigger: 'blur' }
+    { required: true, message: '请输入用户名', trigger: 'blur' }
   ]
 }
 
@@ -154,7 +154,7 @@ async function loadServers(checkStatuses = true) {
       refreshServerStatuses()
     }
   } catch (error) {
-    ElMessage.error('Failed to load servers')
+    ElMessage.error('加载服务器列表失败')
   }
 }
 
@@ -336,11 +336,11 @@ async function submitForm() {
           updateData.password = formData.password
         }
         await serversStore.updateServer(currentServerId.value, updateData)
-        ElMessage.success('Server updated successfully')
+        ElMessage.success('服务器更新成功')
       }
       dialogVisible.value = false
     } catch (error) {
-      ElMessage.error(dialogMode.value === 'create' ? 'Failed to create server' : 'Failed to update server')
+      ElMessage.error(dialogMode.value === 'create' ? '创建服务器失败' : '更新服务器失败')
     }
   })
 }
@@ -349,19 +349,19 @@ async function submitForm() {
 async function deleteServer(server: Server) {
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to delete server "${server.name}"?`,
-      'Confirm Delete',
+      `确定要删除服务器「${server.name}」吗？`,
+      '删除确认',
       {
-        confirmButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
         type: 'warning'
       }
     )
     await serversStore.deleteServer(server.id)
-    ElMessage.success('Server deleted successfully')
+    ElMessage.success('服务器已删除')
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, 'Failed to delete server'))
+      ElMessage.error(getApiErrorMessage(error, '删除服务器失败'))
     }
   }
 }
@@ -372,14 +372,14 @@ async function testConnection(server: Server) {
     const result = await serversStore.testConnection(server.id, { useGlobalLoading: false })
     if (result.success) {
       await fetchServerMetrics(server)
-      ElMessage.success(`Connection successful: ${result.message}`)
+      ElMessage.success(`连接成功：${result.message}`)
     } else {
       clearServerMetrics(server.id)
-      ElMessage.error(`Connection failed: ${result.message}`)
+      ElMessage.error(`连接失败：${result.message}`)
     }
   } catch (error) {
     clearServerMetrics(server.id)
-    ElMessage.error('Failed to test connection')
+    ElMessage.error('测试连接失败')
   }
 }
 
@@ -401,7 +401,7 @@ async function fetchProcessList() {
     )
     processList.value = result?.processes || []
   } catch {
-    ElMessage.error('Failed to fetch process list')
+    ElMessage.error('获取进程列表失败')
     processList.value = []
   } finally {
     processLoading.value = false
@@ -435,19 +435,19 @@ async function executeCommand() {
   try {
     const result = await serversStore.executeCommand(commandServerId.value, commandInput.value)
     if (result.error) {
-      commandResult.value = `Error: ${result.error}\n\nStderr:\n${result.stderr}`
+      commandResult.value = `错误：${result.error}\n\n标准错误：\n${result.stderr}`
     } else {
-      let output = `Exit Status: ${result.exit_status}\n\n`
+      let output = `退出状态：${result.exit_status}\n\n`
       if (result.stdout) {
-        output += `Stdout:\n${result.stdout}\n\n`
+        output += `标准输出：\n${result.stdout}\n\n`
       }
       if (result.stderr) {
-        output += `Stderr:\n${result.stderr}`
+        output += `标准错误：\n${result.stderr}`
       }
       commandResult.value = output
     }
   } catch (error) {
-    commandResult.value = `Error: ${error instanceof Error ? error.message : 'Failed to execute command'}`
+    commandResult.value = `错误：${error instanceof Error ? error.message : '执行命令失败'}`
   } finally {
     commandLoading.value = false
   }
@@ -485,7 +485,7 @@ async function executeCommand() {
           <template #title>
             <div class="group-header">
               <ElTag size="small" type="info">{{ group.region }}</ElTag>
-              <span class="group-count">{{ group.servers.length }} servers</span>
+              <span class="group-count">{{ group.servers.length }} 台</span>
             </div>
           </template>
           <ElTable
@@ -496,7 +496,7 @@ async function executeCommand() {
             class="server-table"
             :fit="false"
           >
-            <ElTableColumn prop="name" label="Name" width="220" show-overflow-tooltip>
+            <ElTableColumn prop="name" label="名称" width="220" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="server-info">
                   <ElTag type="info" size="small" class="server-type-tag">SSH</ElTag>
@@ -508,13 +508,13 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Host:Port" width="148" class-name="host-port-column" show-overflow-tooltip>
+            <ElTableColumn label="主机:端口" width="148" class-name="host-port-column" show-overflow-tooltip>
               <template #default="{ row }">
                 <code class="host-port">{{ row.host }}:{{ row.port }}</code>
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="status" label="Status" width="90" align="center">
+            <ElTableColumn prop="status" label="状态" width="90" align="center">
               <template #default="{ row }">
                 <span class="status-tag" :class="getServerStatus(row)">
                   <span v-if="getServerStatus(row) === 'loading'" class="status-icon spinning">◐</span>
@@ -524,7 +524,7 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn prop="is_busy" label="Busy" width="80" align="center">
+            <ElTableColumn prop="is_busy" label="忙闲" width="80" align="center">
               <template #default="{ row }">
                 <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
                   {{ row.is_busy ? '繁忙' : '空闲' }}
@@ -557,7 +557,7 @@ async function executeCommand() {
             </ElTableColumn>
 
             <ElTableColumn
-              label="Memory"
+              label="内存"
               width="240"
               align="center"
               class-name="metric-divider-column"
@@ -587,7 +587,7 @@ async function executeCommand() {
             </ElTableColumn>
 
             <ElTableColumn
-              label="Disk"
+              label="磁盘"
               width="240"
               align="center"
               class-name="metric-divider-column metric-divider-end-column"
@@ -616,10 +616,10 @@ async function executeCommand() {
               </template>
             </ElTableColumn>
 
-            <ElTableColumn label="Actions" width="220" align="center">
+            <ElTableColumn label="操作" width="220" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
-                  <ElTooltip content="Test Connection" placement="top">
+                  <ElTooltip content="测试连接" placement="top">
                     <ElButton
                       size="small"
                       :icon="Connection"
@@ -628,7 +628,7 @@ async function executeCommand() {
                       link
                     />
                   </ElTooltip>
-                  <ElTooltip content="Execute Command" placement="top">
+                  <ElTooltip content="执行命令" placement="top">
                     <ElButton
                       size="small"
                       :icon="Promotion"
@@ -636,7 +636,7 @@ async function executeCommand() {
                       link
                     />
                   </ElTooltip>
-                  <ElTooltip content="Process Monitor" placement="top">
+                  <ElTooltip content="进程监控" placement="top">
                     <ElButton
                       size="small"
                       :icon="Reading"
@@ -645,7 +645,7 @@ async function executeCommand() {
                       link
                     />
                   </ElTooltip>
-                  <ElTooltip content="Edit" placement="top">
+                  <ElTooltip content="编辑" placement="top">
                     <ElButton
                       size="small"
                       type="primary"
@@ -654,7 +654,7 @@ async function executeCommand() {
                       link
                     />
                   </ElTooltip>
-                  <ElTooltip content="Delete" placement="top">
+                  <ElTooltip content="删除" placement="top">
                     <ElButton
                       size="small"
                       type="danger"
@@ -670,7 +670,7 @@ async function executeCommand() {
         </ElCollapseItem>
       </ElCollapse>
       <div v-else class="empty-groups">
-        <span>No servers found</span>
+        <span>暂无服务器</span>
       </div>
     </div>
 
@@ -709,11 +709,11 @@ async function executeCommand() {
         </ElFormItem>
 
         <div class="form-row">
-          <ElFormItem label="Host" prop="host" class="form-row-item form-row-item-wide">
+          <ElFormItem label="主机" prop="host" class="form-row-item form-row-item-wide">
             <ElInput v-model="formData.host" placeholder="IP 地址或主机名" />
           </ElFormItem>
 
-          <ElFormItem label="Port" prop="port" class="form-row-item form-row-item-port">
+          <ElFormItem label="端口" prop="port" class="form-row-item form-row-item-port">
             <ElInputNumber v-model="formData.port" :min="1" :max="65535" style="width: 100%" />
           </ElFormItem>
         </div>
@@ -733,8 +733,8 @@ async function executeCommand() {
           </ElFormItem>
         </div>
 
-        <ElFormItem label="Region" prop="region">
-          <ElSelect v-model="formData.region" placeholder="Select region" style="width: 100%">
+        <ElFormItem label="区域" prop="region">
+          <ElSelect v-model="formData.region" placeholder="选择区域" style="width: 100%">
             <ElOption
               v-for="region in REGION_OPTIONS"
               :key="region"

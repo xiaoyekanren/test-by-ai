@@ -46,7 +46,7 @@ apiClient.interceptors.response.use(
     return response.data
   },
   (error) => {
-    console.error('API Error:', error)
+    console.error('接口错误:', error)
     return Promise.reject(error)
   }
 )

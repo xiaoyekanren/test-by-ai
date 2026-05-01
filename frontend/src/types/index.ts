@@ -25,7 +25,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'basic',
     icon: 'Monitor',
     color: '#409EFF',
-    description: 'Execute shell command',
+    description: '执行 Shell 命令',
     defaultConfig: { command: '', server_id: null, region: null, timeout: 300, retry: 0 },
     inputs: 1,
     outputs: 1
@@ -36,7 +36,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'basic',
     icon: 'Upload',
     color: '#67C23A',
-    description: 'Upload file via SFTP',
+    description: '通过 SFTP 上传文件',
     defaultConfig: { local_path: '', remote_path: '', server_id: null, region: null, timeout: 300 },
     inputs: 1,
     outputs: 1
@@ -47,7 +47,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'basic',
     icon: 'Download',
     color: '#E6A23C',
-    description: 'Download file via SFTP',
+    description: '通过 SFTP 下载文件',
     defaultConfig: { remote_path: '', local_path: '', server_id: null, region: null },
     inputs: 1,
     outputs: 1
@@ -58,7 +58,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'basic',
     icon: 'Setting',
     color: '#909399',
-    description: 'Modify configuration file',
+    description: '修改配置文件',
     defaultConfig: { file_path: '', config_items: {}, backup_before_write: true, server_id: null, region: null, timeout: 60 },
     inputs: 1,
     outputs: 1
@@ -69,7 +69,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'basic',
     icon: 'Document',
     color: '#909399',
-    description: 'View log content',
+    description: '查看日志内容',
     defaultConfig: { file_path: '', lines: 100, server_id: null, region: null },
     inputs: 1,
     outputs: 1
@@ -82,7 +82,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'Download',
     color: '#9B59B6',
-    description: 'Deploy IoTDB instance',
+    description: '部署 IoTDB 实例',
     defaultConfig: {
       server_id: null,
       region: null,
@@ -106,7 +106,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'VideoPlay',
     color: '#27AE60',
-    description: 'Start IoTDB service',
+    description: '启动 IoTDB 服务',
     defaultConfig: {
       server_id: null,
       region: null,
@@ -127,7 +127,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'VideoPause',
     color: '#E74C3C',
-    description: 'Stop IoTDB service',
+    description: '停止 IoTDB 服务',
     defaultConfig: { server_id: null, region: null, node_role: 'standalone', iotdb_home: '', graceful: true, timeout_seconds: 60 },
     inputs: 1,
     outputs: 1
@@ -138,7 +138,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'Tools',
     color: '#3498DB',
-    description: 'Execute IoTDB CLI commands',
+    description: '执行 IoTDB CLI 命令',
     defaultConfig: {
       server_id: null,
       region: null,
@@ -160,7 +160,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'Setting',
     color: '#8E44AD',
-    description: 'Declare config overrides for deployed IoTDB',
+    description: '声明已部署 IoTDB 的配置覆盖项',
     defaultConfig: {
       server_id: null,
       region: null,
@@ -180,7 +180,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'Grid',
     color: '#6c5ce7',
-    description: 'Deploy ConfigNode and DataNode hosts for a cluster',
+    description: '为集群部署 ConfigNode 和 DataNode 主机',
     defaultConfig: {
       artifact_local_path: '',
       remote_package_path: '/tmp/apache-iotdb-cluster-bin.zip',
@@ -203,7 +203,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'VideoPlay',
     color: '#16a085',
-    description: 'Start cluster nodes in ConfigNode then DataNode order',
+    description: '按 ConfigNode 优先、DataNode 在后的顺序启动集群节点',
     defaultConfig: {
       cluster_name: '',
       config_nodes: [],
@@ -220,7 +220,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'CircleCheck',
     color: '#0984e3',
-    description: 'Run show cluster and optional validation SQLs',
+    description: '执行 show cluster 及可选的校验 SQL',
     defaultConfig: {
       cluster_name: '',
       config_nodes: [],
@@ -240,7 +240,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'VideoPause',
     color: '#c0392b',
-    description: 'Stop DataNodes first and ConfigNodes last',
+    description: '先停 DataNode 再停 ConfigNode',
     defaultConfig: {
       cluster_name: '',
       config_nodes: [],
@@ -257,7 +257,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'DataAnalysis',
     color: '#D35400',
-    description: 'Start IoT Benchmark in background',
+    description: '后台启动 IoT Benchmark',
     defaultConfig: {
       server_id: null,
       region: null,
@@ -284,7 +284,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'iotdb',
     icon: 'Timer',
     color: '#BA4A00',
-    description: 'Wait for background IoT Benchmark',
+    description: '等待后台 IoT Benchmark 完成',
     defaultConfig: {
       timeout_seconds: 3600,
       poll_interval_seconds: 5,
@@ -302,7 +302,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'control',
     icon: 'Share',
     color: '#F39C12',
-    description: 'If/else branch',
+    description: 'If/Else 条件分支',
     defaultConfig: { expression: '' },
     inputs: 1,
     outputs: 2
@@ -313,7 +313,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'control',
     icon: 'Refresh',
     color: '#1ABC9C',
-    description: 'Loop execution',
+    description: '循环执行',
     defaultConfig: { loop_type: 'for', iterations: 1, condition: '' },
     inputs: 1,
     outputs: 1
@@ -324,7 +324,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'control',
     icon: 'Timer',
     color: '#F1C40F',
-    description: 'Wait for condition',
+    description: '等待条件满足',
     defaultConfig: { condition: '', timeout: 60, interval: 5 },
     inputs: 1,
     outputs: 1
@@ -335,7 +335,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'control',
     icon: 'Grid',
     color: '#2ECC71',
-    description: 'Parallel execution',
+    description: '并行执行',
     defaultConfig: { max_concurrent: 5 },
     inputs: 1,
     outputs: -1 // dynamic outputs
@@ -346,7 +346,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'control',
     icon: 'CircleCheck',
     color: '#E67E22',
-    description: 'Assertion check',
+    description: '断言检查',
     defaultConfig: { assert_type: 'log_contains', params: {}, expected: '' },
     inputs: 1,
     outputs: 1
@@ -359,7 +359,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'result',
     icon: 'Document',
     color: '#3498DB',
-    description: 'Generate test report',
+    description: '生成测试报告',
     defaultConfig: { format: 'html', include_logs: true },
     inputs: 1,
     outputs: 0
@@ -370,7 +370,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'result',
     icon: 'DataAnalysis',
     color: '#2980B9',
-    description: 'Summarize test results',
+    description: '汇总测试结果',
     defaultConfig: {},
     inputs: 1,
     outputs: 0
@@ -381,7 +381,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     category: 'result',
     icon: 'Bell',
     color: '#8E44AD',
-    description: 'Send notification',
+    description: '发送通知',
     defaultConfig: { type: 'email', recipient: '', template: '' },
     inputs: 1,
     outputs: 0

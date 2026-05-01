@@ -97,7 +97,7 @@ const serverNameMap = computed(() => {
 const executionList = computed(() => {
   return executionsStore.executions.map(execution => ({
     ...execution,
-    workflowName: workflowNameMap.value.get(execution.workflow_id) || `Workflow #${execution.workflow_id}`
+    workflowName: workflowNameMap.value.get(execution.workflow_id) || `工作流 #${execution.workflow_id}`
   }))
 })
 
@@ -256,7 +256,7 @@ const displayExecutionStatus = computed(() => {
 })
 
 function stringifyData(value: unknown) {
-  if (value === null || value === undefined) return 'N/A'
+  if (value === null || value === undefined) return '无'
   if (typeof value === 'string') return value
   try {
     return JSON.stringify(value, null, 2)
@@ -273,7 +273,7 @@ function normalizeLogText(value: string): string {
 }
 
 function formatRawOutput(value: unknown): string {
-  if (value === null || value === undefined) return 'N/A'
+  if (value === null || value === undefined) return '无'
   if (typeof value === 'string') return normalizeLogText(value)
 
   if (typeof value === 'object' && !Array.isArray(value)) {
@@ -284,10 +284,10 @@ function formatRawOutput(value: unknown): string {
       logSections.push(normalizeLogText(record.stdout))
     }
     if (typeof record.stderr === 'string' && record.stderr) {
-      logSections.push(`stderr:\n${normalizeLogText(record.stderr)}`)
+      logSections.push(`标准错误：\n${normalizeLogText(record.stderr)}`)
     }
     if (typeof record.error === 'string' && record.error) {
-      logSections.push(`error:\n${normalizeLogText(record.error)}`)
+      logSections.push(`错误：\n${normalizeLogText(record.error)}`)
     }
     if (logSections.length > 0) {
       return logSections.join('\n\n')
@@ -373,8 +373,8 @@ function getStatusTone(status: string) {
 
 function getServerLabel(serverId: unknown) {
   const numericServerId = Number(serverId)
-  if (!Number.isFinite(numericServerId)) return 'Unknown server'
-  return serverNameMap.value.get(numericServerId) || `Server #${numericServerId}`
+  if (!Number.isFinite(numericServerId)) return '未知服务器'
+  return serverNameMap.value.get(numericServerId) || `服务器 #${numericServerId}`
 }
 
 function goToWorkflowEditor() {
@@ -454,8 +454,8 @@ async function refreshPage() {
 async function deleteExecution(executionId: number) {
   const execution = executionsStore.executions.find(item => item.id === executionId)
   const workflowName = execution
-    ? workflowNameMap.value.get(execution.workflow_id) || `Workflow #${execution.workflow_id}`
-    : `Execution #${executionId}`
+    ? workflowNameMap.value.get(execution.workflow_id) || `工作流 #${execution.workflow_id}`
+    : `执行 #${executionId}`
 
   try {
     await ElMessageBox.confirm(
@@ -581,7 +581,7 @@ onUnmounted(() => {
             <div class="execution-row-top">
               <div>
                 <div class="execution-title">{{ execution.workflowName }}</div>
-                <div class="execution-subtitle">Execution #{{ execution.id }}</div>
+                <div class="execution-subtitle">执行 #{{ execution.id }}</div>
               </div>
               <div class="execution-row-actions">
                 <ElTag :type="getStatusTone(execution.status)" effect="dark">
@@ -602,7 +602,7 @@ onUnmounted(() => {
             </div>
             <div class="execution-row-meta">
               <span>{{ formatDate(execution.created_at) }}</span>
-              <span>{{ execution.result || 'n/a' }}</span>
+              <span>{{ execution.result || '无' }}</span>
               <span>{{ formatDuration(execution.duration) }}</span>
             </div>
           </div>
@@ -628,7 +628,7 @@ onUnmounted(() => {
           <div class="overview-grid">
             <div class="metric-card">
               <div class="metric-label">工作流</div>
-              <div class="metric-value">{{ workflowNameMap.get(currentExecution.workflow_id) || `Workflow #${currentExecution.workflow_id}` }}</div>
+              <div class="metric-value">{{ workflowNameMap.get(currentExecution.workflow_id) || `工作流 #${currentExecution.workflow_id}` }}</div>
             </div>
             <div class="metric-card">
               <div class="metric-label">触发方式</div>
@@ -807,17 +807,17 @@ onUnmounted(() => {
               </div>
 
               <div v-if="selectedNodeView.definition" class="raw-block">
-                <div class="raw-label">Workflow Config</div>
+                <div class="raw-label">工作流配置</div>
                 <pre class="raw-pre">{{ stringifyData(selectedNodeView.definition.config) }}</pre>
               </div>
 
               <div class="raw-block">
-                <div class="raw-label">Input</div>
+                <div class="raw-label">输入</div>
                 <pre class="raw-pre">{{ stringifyData(selectedNodeExecution?.input_data) }}</pre>
               </div>
 
               <div class="raw-block">
-                <div class="raw-label">Output</div>
+                <div class="raw-label">输出</div>
                 <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution?.output_data) }}</pre>
               </div>
             </template>

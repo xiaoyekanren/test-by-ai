@@ -993,20 +993,20 @@ async function connectPersistentCliSession() {
           return
         }
         if (message.type === 'error') {
-          writePersistentCliOutput(`\r\n${message.message || 'CLI session error'}\r\n`, node.id)
+          writePersistentCliOutput(`\r\n${message.message || 'CLI 会话错误'}\r\n`, node.id)
           persistentCliConnectedByNode.value[node.id] = false
           persistentCliConnectingByNode.value[node.id] = false
           if (!settled) {
             settled = true
-            reject(new Error(message.message || 'CLI session error'))
+            reject(new Error(message.message || 'CLI 会话错误'))
           } else {
-            ElMessage.error(message.message || 'CLI session error')
+            ElMessage.error(message.message || 'CLI 会话错误')
           }
           return
         }
         if (message.type === 'exit') {
           persistentCliConnectedByNode.value[node.id] = false
-          writePersistentCliOutput('\r\nCLI session exited.\r\n', node.id)
+          writePersistentCliOutput('\r\nCLI 会话已退出。\r\n', node.id)
         }
       } catch {
         writePersistentCliOutput(String(event.data), node.id)
@@ -1018,7 +1018,7 @@ async function connectPersistentCliSession() {
       persistentCliConnectingByNode.value[node.id] = false
       if (!settled) {
         settled = true
-        reject(new Error('CLI WebSocket connection failed'))
+        reject(new Error('CLI WebSocket 连接失败'))
       }
     }
 
@@ -1030,7 +1030,7 @@ async function connectPersistentCliSession() {
       persistentCliConnectingByNode.value[node.id] = false
       if (!settled) {
         settled = true
-        reject(new Error('CLI WebSocket closed'))
+        reject(new Error('CLI WebSocket 已关闭'))
       }
     }
   })
@@ -1070,7 +1070,7 @@ async function refreshLogFiles(node = activeNode.value) {
   try {
     logFilesByNode.value[node.id] = await iotdbApi.listLogs(node.serverId, node.iotdbHome)
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, 'Failed to list log files'))
+    ElMessage.error(getErrorMessage(error, '获取日志文件列表失败'))
   } finally {
     logsLoadingByNode.value[node.id] = false
   }
@@ -1086,7 +1086,7 @@ async function loadLogFile(path: string) {
     const result = await iotdbApi.readLog(activeNode.value.serverId, activeNode.value.iotdbHome, path, LOG_TAIL_LINES)
     logContentByNode.value[activeNode.value.id] = result.content
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, 'Failed to read log file'))
+    ElMessage.error(getErrorMessage(error, '读取日志文件失败'))
   } finally {
     logContentLoadingByNode.value[activeNode.value.id] = false
   }
@@ -1122,10 +1122,10 @@ async function startLogStream() {
     })
 
     if (!response.ok) {
-      throw new Error(await readFetchError(response, 'Failed to stream log file'))
+      throw new Error(await readFetchError(response, '流式读取日志失败'))
     }
     if (!response.body) {
-      throw new Error('Log stream is not available')
+      throw new Error('日志流不可用')
     }
 
     const reader = response.body.getReader()
@@ -1137,7 +1137,7 @@ async function startLogStream() {
     }
   } catch (error) {
     if (!controller.signal.aborted) {
-      ElMessage.error(getErrorMessage(error, 'Failed to stream log file'))
+      ElMessage.error(getErrorMessage(error, '流式读取日志失败'))
     }
   } finally {
     if (logStreamController === controller) {
@@ -1155,7 +1155,7 @@ async function refreshConfigFiles(node = activeNode.value) {
   try {
     configFilesByNode.value[node.id] = await iotdbApi.listConfigs(node.serverId, node.iotdbHome)
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, 'Failed to list config files'))
+    ElMessage.error(getErrorMessage(error, '获取配置文件列表失败'))
   } finally {
     configsLoadingByNode.value[node.id] = false
   }
@@ -1171,7 +1171,7 @@ async function loadConfigFile(path: string) {
     configContentByNode.value[activeNode.value.id] = result.content
     configEditorContent.value = result.content
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, 'Failed to read config file'))
+    ElMessage.error(getErrorMessage(error, '读取配置文件失败'))
   }
 }
 
@@ -1200,12 +1200,12 @@ async function saveConfig() {
       configEditorContent.value
     )
     if (result.success) {
-      ElMessage.success('Config saved successfully')
+      ElMessage.success('配置保存成功')
       configEditMode.value = false
       configContentByNode.value[activeNode.value.id] = configEditorContent.value
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, 'Failed to save config'))
+    ElMessage.error(getErrorMessage(error, '保存配置失败'))
   } finally {
     configSavingByNode.value[activeNode.value.id] = false
   }
@@ -1352,7 +1352,7 @@ function formatSize(size: number): string {
               </template>
             </div>
             <div class="cli-param">
-              <label>Model</label>
+              <label>模型</label>
               <ElSelect
                 v-model="cliSqlDialect"
                 :disabled="activePersistentCliConnected || activePersistentCliConnecting || activeCliDefaultsLoading"
@@ -1362,7 +1362,7 @@ function formatSize(size: number): string {
               </ElSelect>
             </div>
             <div class="cli-param">
-              <label>Host</label>
+              <label>主机</label>
               <ElInput
                 v-model="activeCliHost"
                 placeholder="127.0.0.1"
@@ -1370,7 +1370,7 @@ function formatSize(size: number): string {
               />
             </div>
             <div class="cli-param">
-              <label>Port</label>
+              <label>端口</label>
               <ElInput
                 v-model.number="activeCliPort"
                 placeholder="6667"
@@ -1378,7 +1378,7 @@ function formatSize(size: number): string {
               />
             </div>
             <div class="cli-param">
-              <label>User</label>
+              <label>用户</label>
               <ElInput
                 v-model="cliUsername"
                 placeholder="用户名"
@@ -1386,7 +1386,7 @@ function formatSize(size: number): string {
               />
             </div>
             <div class="cli-param">
-              <label>Password</label>
+              <label>密码</label>
               <ElInput
                 v-model="cliPassword"
                 type="password"
