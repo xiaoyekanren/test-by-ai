@@ -13,9 +13,9 @@ NODE_TYPE = Literal[
 
 class NodeDefinition(BaseModel):
     id: str
-    type: NODE_TYPE  # shell, upload, download, iotdb_deploy, condition, loop, etc.
+    type: NODE_TYPE
     config: Dict[str, Any] = {}
-    position: Optional[Dict[str, float]] = None  # {"x": 100, "y": 200}
+    position: Optional[Dict[str, float]] = None
 
 class EdgeDefinition(BaseModel):
     from_node: str = Field(..., alias="from")

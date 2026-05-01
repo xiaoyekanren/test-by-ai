@@ -59,7 +59,7 @@ function loadLocalSettings(): Settings {
       return mergeSettings(JSON.parse(stored))
     }
   } catch (error) {
-    console.error('Failed to load settings from local cache:', error)
+    console.error('从本地缓存加载设置失败:', error)
   }
 
   return mergeSettings()
@@ -76,7 +76,7 @@ export const useSettingsStore = defineStore('settings', () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(newValue))
       } catch (error) {
-        console.error('Failed to save settings to local cache:', error)
+        console.error('保存设置到本地缓存失败:', error)
       }
     },
     { deep: true }
@@ -99,7 +99,7 @@ export const useSettingsStore = defineStore('settings', () => {
       loaded.value = true
       return settings.value
     } catch (error) {
-      console.error('Failed to fetch settings from backend:', error)
+      console.error('从后端获取设置失败:', error)
       loaded.value = true
       return settings.value
     } finally {

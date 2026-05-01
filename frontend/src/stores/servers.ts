@@ -39,7 +39,7 @@ export const useServersStore = defineStore('servers', () => {
     try {
       servers.value = await serversApi.list()
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch servers'
+      error.value = e instanceof Error ? e.message : '获取服务器列表失败'
       throw e
     } finally {
       loading.value = false
@@ -54,7 +54,7 @@ export const useServersStore = defineStore('servers', () => {
       servers.value.push(server)
       return server
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to create server'
+      error.value = e instanceof Error ? e.message : '创建服务器失败'
       throw e
     } finally {
       loading.value = false
@@ -72,7 +72,7 @@ export const useServersStore = defineStore('servers', () => {
       }
       return updated
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to update server'
+      error.value = e instanceof Error ? e.message : '更新服务器失败'
       throw e
     } finally {
       loading.value = false
@@ -86,7 +86,7 @@ export const useServersStore = defineStore('servers', () => {
       await serversApi.delete(id)
       servers.value = servers.value.filter(s => s.id !== id)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to delete server'
+      error.value = e instanceof Error ? e.message : '删除服务器失败'
       throw e
     } finally {
       loading.value = false
@@ -106,7 +106,7 @@ export const useServersStore = defineStore('servers', () => {
       return result
     } catch (e) {
       updateServerStatus(id, 'offline')
-      error.value = e instanceof Error ? e.message : 'Failed to test connection'
+      error.value = e instanceof Error ? e.message : '测试连接失败'
       throw e
     } finally {
       setServerTesting(id, false)
@@ -122,7 +122,7 @@ export const useServersStore = defineStore('servers', () => {
     try {
       return await serversApi.execute(id, command, timeout)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to execute command'
+      error.value = e instanceof Error ? e.message : '执行命令失败'
       throw e
     } finally {
       loading.value = false

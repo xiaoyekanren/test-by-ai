@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SSHResult:
-    """Result of an SSH command execution."""
+    """SSH 命令执行结果。"""
     exit_status: int
     stdout: str
     stderr: str
@@ -20,7 +20,7 @@ class SSHResult:
 
 
 class SSHService:
-    """SSH service for running commands and file transfer"""
+    """SSH 服务，用于远程命令执行和文件传输"""
 
     def _connect_client(
         self,
@@ -60,18 +60,18 @@ class SSHService:
         port: int = 22,
         timeout: int = 30
     ) -> SSHResult:
-        """Execute command on remote server via SSH
+        """通过 SSH 在远程服务器上执行命令
 
         Args:
-            host: The hostname or IP address of the remote server
-            username: SSH username (optional)
-            password: SSH password (optional)
-            command: The command to execute
-            port: SSH port (default 22, will also try this as alternate)
-            timeout: Connection timeout in seconds
+            host: 远程服务器的主机名或 IP 地址
+            username: SSH 用户名（可选）
+            password: SSH 密码（可选）
+            command: 要执行的命令
+            port: SSH 端口（默认 22，同时会尝试此端口作为备选）
+            timeout: 连接超时时间（秒）
 
         Returns:
-            SSHResult with exit_status, stdout, stderr, and optional error
+            SSHResult，包含 exit_status、stdout、stderr 和可选的 error
         """
         client, ssh_port, error = self._connect_client(host, username, password, port, timeout)
         if client is None:
@@ -98,19 +98,19 @@ class SSHService:
         port: int = 22,
         timeout: int = 30
     ) -> dict:
-        """Upload file to remote server via SFTP
+        """通过 SFTP 上传文件到远程服务器
 
         Args:
-            host: The hostname or IP address of the remote server
-            username: SSH username (optional)
-            password: SSH password (optional)
-            local_path: Path to the local file to upload
-            remote_path: Destination path on the remote server
-            port: SSH port (default 22, will also try this as alternate)
-            timeout: Connection timeout in seconds
+            host: 远程服务器的主机名或 IP 地址
+            username: SSH 用户名（可选）
+            password: SSH 密码（可选）
+            local_path: 本地文件路径
+            remote_path: 远程服务器上的目标路径
+            port: SSH 端口（默认 22，同时会尝试此端口作为备选）
+            timeout: 连接超时时间（秒）
 
         Returns:
-            dict with 'status' key ('success' or 'error') and optional 'message'
+            包含 'status' 键（'success' 或 'error'）和可选 'message' 的字典
         """
         client, ssh_port, error = self._connect_client(host, username, password, port, timeout)
         if client is None:

@@ -1,7 +1,7 @@
 # backend/app/models/setup.py
 """
-Database initialization module.
-Provides functions to initialize the database and create all tables.
+数据库初始化模块。
+提供数据库初始化和创建所有表的函数。
 """
 import sqlite3
 from sqlalchemy import Engine
@@ -10,13 +10,13 @@ from .database import Base
 
 def migrate_servers_table_columns(engine: Engine) -> None:
     """
-    Add missing columns to existing servers table.
+    为已有的 servers 表添加缺失的列。
 
-    This migration handles older local databases where the servers table
-    already exists but does not yet match the current SQLAlchemy model.
+    此迁移处理本地旧数据库中 servers 表已存在但尚未匹配当前
+    SQLAlchemy 模型的情况。
 
     Args:
-        engine: SQLAlchemy engine to use for the migration
+        engine: 用于迁移的 SQLAlchemy 引擎
     """
     db_path = str(engine.url).replace("sqlite:///", "")
     if not db_path:
@@ -45,14 +45,14 @@ def migrate_servers_table_columns(engine: Engine) -> None:
 
 def init_db(engine: Engine = None) -> None:
     """
-    Initialize the database by creating all tables.
+    初始化数据库，创建所有表。
 
-    This function creates all tables defined in the SQLAlchemy metadata
-    if they don't already exist. It's safe to call multiple times.
+    此函数创建 SQLAlchemy 元数据中定义的所有表（如果尚不存在）。
+    可以安全地多次调用。
 
     Args:
-        engine: SQLAlchemy engine to use. If None, uses the default engine
-                from app.dependencies.
+        engine: 要使用的 SQLAlchemy 引擎。如果为 None，则使用
+                app.dependencies 中的默认引擎。
     """
     if engine is None:
         # Import here to avoid circular imports

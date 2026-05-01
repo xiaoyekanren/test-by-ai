@@ -12,20 +12,20 @@ router = APIRouter()
 
 @router.get("", response_model=List[WorkflowResponse])
 def list_workflows(db: Session = Depends(get_db)):
-    """List all workflows"""
+    """列出所有工作流"""
     workflows = db.query(Workflow).all()
     return workflows
 
 
 @router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
 def create_workflow(workflow: WorkflowCreate, db: Session = Depends(get_db)):
-    """Create a new workflow"""
+    """创建新工作流"""
     # Check if workflow with same name already exists
     existing = db.query(Workflow).filter(Workflow.name == workflow.name).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Workflow with name '{workflow.name}' already exists"
+            detail=f"工作流名称 '{workflow.name}' 已存在"
         )
 
     db_workflow = Workflow(
@@ -33,7 +33,7 @@ def create_workflow(workflow: WorkflowCreate, db: Session = Depends(get_db)):
         description=workflow.description,
         nodes=[node.model_dump(by_alias=True) for node in workflow.nodes],
         edges=[edge.model_dump(by_alias=True) for edge in workflow.edges],
-        variables=workflow.variables
+        variables=workflow.variables,
     )
     db.add(db_workflow)
     db.commit()
@@ -43,24 +43,24 @@ def create_workflow(workflow: WorkflowCreate, db: Session = Depends(get_db)):
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
-    """Get a workflow by ID"""
+    """根据 ID 获取工作流"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not workflow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow with id {workflow_id} not found"
+            detail=f"工作流 ID {workflow_id} 不存在"
         )
     return workflow
 
 
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
 def update_workflow(workflow_id: int, workflow_update: WorkflowUpdate, db: Session = Depends(get_db)):
-    """Update a workflow"""
+    """更新工作流"""
     db_workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not db_workflow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow with id {workflow_id} not found"
+            detail=f"工作流 ID {workflow_id} 不存在"
         )
 
     update_data = workflow_update.model_dump(exclude_unset=True, by_alias=True)
@@ -75,12 +75,12 @@ def update_workflow(workflow_id: int, workflow_update: WorkflowUpdate, db: Sessi
 
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
-    """Delete a workflow"""
+    """删除工作流"""
     db_workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not db_workflow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow with id {workflow_id} not found"
+            detail=f"工作流 ID {workflow_id} 不存在"
         )
 
     execution_ids = [

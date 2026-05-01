@@ -28,7 +28,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       logFiles.value = await iotdbApi.listLogs(serverId, iotdbHome)
       return logFiles.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to list log files'
+      error.value = e instanceof Error ? e.message : '获取日志文件列表失败'
       throw e
     } finally {
       logsLoading.value = false
@@ -45,7 +45,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       currentLogFile.value = path
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to read log file'
+      error.value = e instanceof Error ? e.message : '读取日志文件失败'
       throw e
     } finally {
       logsLoading.value = false
@@ -60,7 +60,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       configFiles.value = await iotdbApi.listConfigs(serverId, iotdbHome)
       return configFiles.value
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to list config files'
+      error.value = e instanceof Error ? e.message : '获取配置文件列表失败'
       throw e
     } finally {
       configsLoading.value = false
@@ -77,7 +77,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       currentConfigFile.value = path
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to read config file'
+      error.value = e instanceof Error ? e.message : '读取配置文件失败'
       throw e
     } finally {
       configsLoading.value = false
@@ -95,7 +95,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       }
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to write config file'
+      error.value = e instanceof Error ? e.message : '写入配置文件失败'
       throw e
     } finally {
       configSaving.value = false
@@ -110,7 +110,7 @@ export const useIoTDBStore = defineStore('iotdb', () => {
       const result = await iotdbApi.restart(serverId, iotdbHome, restartScope)
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to restart IoTDB'
+      error.value = e instanceof Error ? e.message : '重启 IoTDB 失败'
       throw e
     } finally {
       loading.value = false

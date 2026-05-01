@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 def _compute_busy_servers(db: Session) -> Set[int]:
-    """Compute set of server_ids that are currently busy"""
+    """计算当前正在使用中的服务器 ID 集合"""
     # Find all running executions
     running_executions = db.query(Execution.id).filter(
         Execution.status == "running"
@@ -39,7 +39,7 @@ def _compute_busy_servers(db: Session) -> Set[int]:
 
 
 def _build_server_response(server: Server, is_busy: bool) -> ServerResponse:
-    """Build ServerResponse from Server model with is_busy computed field"""
+    """根据 Server 模型和 is_busy 计算字段构建 ServerResponse"""
     server_dict = {
         "id": server.id,
         "name": server.name,
@@ -100,7 +100,7 @@ def _workflows_referencing_server(db: Session, server_id: int) -> List[Workflow]
 
 @router.get("", response_model=List[ServerResponse])
 def list_servers(db: Session = Depends(get_db)):
-    """List all servers with is_busy computed field"""
+    """列出所有服务器，包含 is_busy 计算字段"""
     servers = db.query(Server).all()
     busy_server_ids = _compute_busy_servers(db)
 
@@ -114,13 +114,13 @@ def list_servers(db: Session = Depends(get_db)):
 
 @router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
 def create_server(server: ServerCreate, db: Session = Depends(get_db)):
-    """Create a new server"""
+    """创建新服务器"""
     # Check if server with same name already exists
     existing = db.query(Server).filter(Server.name == server.name).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Server with name '{server.name}' already exists"
+            detail=f"服务器名称 '{server.name}' 已存在"
         )
 
     # Create server instance
@@ -145,12 +145,12 @@ def create_server(server: ServerCreate, db: Session = Depends(get_db)):
 
 @router.get("/{server_id}", response_model=ServerResponse)
 def get_server(server_id: int, db: Session = Depends(get_db)):
-    """Get a server by ID"""
+    """根据 ID 获取服务器"""
     server = db.query(Server).filter(Server.id == server_id).first()
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"服务器 ID {server_id} 不存在"
         )
     busy_server_ids = _compute_busy_servers(db)
     return _build_server_response(server, server.id in busy_server_ids)
@@ -158,12 +158,12 @@ def get_server(server_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{server_id}", response_model=ServerResponse)
 def update_server(server_id: int, server_update: ServerUpdate, db: Session = Depends(get_db)):
-    """Update a server"""
+    """更新服务器"""
     server = db.query(Server).filter(Server.id == server_id).first()
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"服务器 ID {server_id} 不存在"
         )
 
     # Check for name uniqueness if name is being updated
@@ -172,7 +172,7 @@ def update_server(server_id: int, server_update: ServerUpdate, db: Session = Dep
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Server with name '{server_update.name}' already exists"
+                detail=f"服务器名称 '{server_update.name}' 已存在"
             )
 
     # Update fields
@@ -193,12 +193,12 @@ def update_server(server_id: int, server_update: ServerUpdate, db: Session = Dep
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_server(server_id: int, db: Session = Depends(get_db)):
-    """Delete a server"""
+    """删除服务器"""
     server = db.query(Server).filter(Server.id == server_id).first()
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"服务器 ID {server_id} 不存在"
         )
 
     referencing_workflows = _workflows_referencing_server(db, server_id)
@@ -206,7 +206,7 @@ def delete_server(server_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "message": "Server is used by existing workflows",
+                "message": "该服务器正被现有工作流使用",
                 "workflows": [
                     {"id": workflow.id, "name": workflow.name}
                     for workflow in referencing_workflows
@@ -222,12 +222,12 @@ def delete_server(server_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{server_id}/test")
 def test_connection(server_id: int, db: Session = Depends(get_db)):
-    """Test SSH connection to a server"""
+    """测试服务器的 SSH 连接"""
     server = db.query(Server).filter(Server.id == server_id).first()
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"服务器 ID {server_id} 不存在"
         )
 
     ssh_service = SSHService()
@@ -245,7 +245,7 @@ def test_connection(server_id: int, db: Session = Depends(get_db)):
         db.commit()
         return {
             "success": False,
-            "message": f"Connection failed: {result.error}",
+            "message": f"连接失败: {result.error}",
             "server_id": server_id,
             "server_name": server.name
         }
@@ -256,7 +256,7 @@ def test_connection(server_id: int, db: Session = Depends(get_db)):
 
     return {
         "success": True,
-        "message": "Connection successful",
+        "message": "连接成功",
         "server_id": server_id,
         "server_name": server.name,
         "ssh_port": result.ssh_port
@@ -265,19 +265,19 @@ def test_connection(server_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{server_id}/execute")
 def execute_command(server_id: int, command_data: dict, db: Session = Depends(get_db)):
-    """Execute a command on a server via SSH"""
+    """通过 SSH 在服务器上执行命令"""
     server = db.query(Server).filter(Server.id == server_id).first()
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with id {server_id} not found"
+            detail=f"服务器 ID {server_id} 不存在"
         )
 
     command = command_data.get("command")
     if not command:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Command is required"
+            detail="命令不能为空"
         )
 
     timeout = command_data.get("timeout", 30)
