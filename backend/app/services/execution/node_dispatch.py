@@ -40,8 +40,13 @@ class NodeDispatchMixin:
         config = dict(node.get("config", {}) or {})
         config["_execution_id"] = execution_id
         config["_node_id"] = node_id
+        config["_node_type"] = node_type
         config["_schedule_mode"] = context.get("_schedule_mode")
         config["_schedule_region"] = context.get("_schedule_region")
+        config["schedule_role"] = self._schedule_role(config)
+        if node_type.startswith("iot_benchmark_") and config.get("target_host") in (None, ""):
+            if context.get("host") not in (None, ""):
+                config["target_host"] = context["host"]
 
         with self.reservation_lock:
             if self._node_uses_top_level_server(node_type):

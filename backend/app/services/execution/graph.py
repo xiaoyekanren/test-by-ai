@@ -220,7 +220,17 @@ class GraphMixin:
     ) -> Dict[str, Any]:
         context: Dict[str, Any] = {}
         for parent_id in parent_ids:
-            context.update(context_updates.get(parent_id, {}))
+            parent_context = context_updates.get(parent_id, {})
+            if "_scheduled_servers" in parent_context and isinstance(parent_context["_scheduled_servers"], dict):
+                context["_scheduled_servers"] = {
+                    **context.get("_scheduled_servers", {}),
+                    **parent_context["_scheduled_servers"],
+                }
+            context.update({
+                key: value
+                for key, value in parent_context.items()
+                if key != "_scheduled_servers"
+            })
         return context
 
     def _create_skipped_node_execution(

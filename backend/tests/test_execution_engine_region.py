@@ -53,6 +53,45 @@ class TestResolveServerWithSchedule:
         assert result is not None
         assert result.id == 2
 
+    def test_random_benchmark_uses_benchmark_schedule_role(self, engine, db_session):
+        mock_server = Server(id=8, name="benchmark-server", host="192.168.1.8", region="私有云")
+        db_session.query.return_value.filter.return_value.first.return_value = mock_server
+
+        result = engine._resolve_server_for_schedule(
+            {"_node_type": "iot_benchmark_start", "_schedule_mode": "random", "_schedule_region": "私有云"},
+            {
+                "_schedule_mode": "random",
+                "_schedule_region": "私有云",
+                "server_id": 2,
+                "_scheduled_servers": {
+                    "default": {"server_id": 2},
+                    "benchmark": {"server_id": 8},
+                },
+            }
+        )
+
+        assert result is not None
+        assert result.id == 8
+
+    def test_random_benchmark_ignores_default_role_when_no_benchmark_server(self, engine):
+        benchmark_server = Server(id=9, name="benchmark-new", host="192.168.1.9", region="私有云")
+        engine._resolve_idle_server_by_region = MagicMock(return_value=benchmark_server)
+
+        result = engine._resolve_server_for_schedule(
+            {"_node_type": "iot_benchmark_deploy", "_schedule_mode": "random", "_schedule_region": "私有云"},
+            {
+                "_schedule_mode": "random",
+                "_schedule_region": "私有云",
+                "server_id": 2,
+                "_scheduled_servers": {
+                    "default": {"server_id": 2},
+                },
+            }
+        )
+
+        assert result is benchmark_server
+        engine._resolve_idle_server_by_region.assert_called_once_with("私有云")
+
     def test_random_mode_selects_idle_schedulable_server_from_workflow_region(self, engine, db_session):
         mock_servers = [
             Server(id=3, name="region-server-1", host="192.168.1.3", region="公司-上层", schedulable=True),
@@ -274,6 +313,20 @@ class TestBuildContextUpdates:
 
         assert "region" in updates
         assert updates["region"] == "公司"
+
+
+    def test_build_context_updates_tracks_benchmark_schedule_role(self, engine, db_session):
+        mock_server = Server(id=5, name="bench", host="192.168.1.5", region="私有云")
+        db_session.query.return_value.filter.return_value.first.return_value = mock_server
+
+        updates = engine._build_context_updates(
+            "iot_benchmark_start",
+            {"server_id": 5, "_node_type": "iot_benchmark_start"},
+            {}
+        )
+
+        assert updates["_scheduled_servers"]["benchmark"]["server_id"] == 5
+        assert updates["_scheduled_servers"]["benchmark"]["host"] == "192.168.1.5"
 
 
 class TestRequireServer:

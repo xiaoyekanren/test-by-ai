@@ -30,7 +30,8 @@ class ServerResolutionMixin:
             return self.db.query(Server).filter(Server.id == int(server_id)).first()
 
         if mode == "random":
-            server_id = context.get("server_id")
+            role = self._schedule_role(config)
+            server_id = self._scheduled_server_id_for_role(context, role)
             if server_id not in (None, ""):
                 return self.db.query(Server).filter(Server.id == int(server_id)).first()
             return self._resolve_idle_server_by_region(self._schedule_region(config, context))
@@ -51,7 +52,6 @@ class ServerResolutionMixin:
             query = query.filter(Server.id.notin_(busy_server_ids))
 
         idle_servers = query.all()
-
         if not idle_servers:
             logger.warning(
                 "No idle server found in region %s; busy_server_ids=%s",
@@ -76,6 +76,38 @@ class ServerResolutionMixin:
         config["server_name"] = server.name
         config["host"] = server.host
         config["region"] = server.region or "私有云"
+
+    def _schedule_role(self, config: Dict[str, Any]) -> str:
+        role = str(config.get("schedule_role") or "").strip()
+        if role:
+            return role
+
+        node_type = str(config.get("_node_type") or config.get("node_type") or "")
+        if node_type.startswith("iot_benchmark_"):
+            return "benchmark"
+        return "default"
+
+    def _scheduled_server_id_for_role(self, context: Dict[str, Any], role: str) -> Optional[int]:
+        scheduled_servers = context.get("_scheduled_servers")
+        if isinstance(scheduled_servers, dict):
+            role_payload = scheduled_servers.get(role)
+            if isinstance(role_payload, dict) and role_payload.get("server_id") not in (None, ""):
+                return int(role_payload["server_id"])
+            return None
+
+        if role == "default" and context.get("server_id") not in (None, ""):
+            return int(context["server_id"])
+        return None
+
+    def _scheduled_server_context(self, role: str, server: Server) -> Dict[str, Any]:
+        return {
+            role: {
+                "server_id": server.id,
+                "server_name": server.name,
+                "host": server.host,
+                "region": server.region or "私有云",
+            }
+        }
 
     def _target_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
         region = config.get("region")
