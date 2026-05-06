@@ -68,6 +68,7 @@ class ExecutionEngine(
             "iotdb_cluster_start": self._execute_iotdb_cluster_start_node,
             "iotdb_cluster_check": self._execute_iotdb_cluster_check_node,
             "iotdb_cluster_stop": self._execute_iotdb_cluster_stop_node,
+            "iot_benchmark_deploy": self._execute_iot_benchmark_deploy_node,
             "iot_benchmark_start": self._execute_iot_benchmark_start_node,
             "iot_benchmark_wait": self._execute_iot_benchmark_wait_node,
             "condition": self._execute_condition_node,

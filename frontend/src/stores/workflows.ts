@@ -25,7 +25,8 @@ const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
   iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes'],
-  iot_benchmark_start: ['server_id', 'region', 'target_host', 'rpc_port'],
+  iot_benchmark_deploy: ['server_id', 'region'],
+  iot_benchmark_start: ['server_id', 'region', 'benchmark_home', 'target_host', 'rpc_port', 'data_nodes'],
   iot_benchmark_wait: ['server_id', 'region']
 }
 
@@ -268,7 +269,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const config = node.data.config
     const output: Record<string, unknown> = {}
 
-    for (const field of ['server_id', 'region', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
+    for (const field of ['server_id', 'region', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'benchmark_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
       const value = config[field]
       if (!isEmptyInheritedValue(value)) {
         output[field] = cloneValue(value)
@@ -315,6 +316,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       const normalizedDataNodes = normalizeClusterNodeListForEditor(config.data_nodes, baseInstallDir, 'datanode')
       if (normalizedDataNodes.length > 0) {
         output.data_nodes = normalizedDataNodes
+      }
+    }
+
+    if (node.data.nodeType === 'iot_benchmark_deploy') {
+      const installDir = config.install_dir
+      if (!isEmptyInheritedValue(installDir)) {
+        output.benchmark_home = String(installDir).replace(/\/+$/, '')
       }
     }
 

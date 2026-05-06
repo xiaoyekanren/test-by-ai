@@ -12,7 +12,7 @@ router = APIRouter()
 TOP_LEVEL_SERVER_NODE_TYPES = {
     "shell", "upload", "download", "config", "iotdb_config",
     "log_view", "iotdb_deploy", "iotdb_start", "iotdb_cli",
-    "iotdb_stop", "iot_benchmark_start", "iot_benchmark_wait"
+    "iotdb_stop", "iot_benchmark_deploy", "iot_benchmark_start", "iot_benchmark_wait"
 }
 
 CLUSTER_SERVER_NODE_TYPES = {

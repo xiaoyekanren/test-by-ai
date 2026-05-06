@@ -169,7 +169,7 @@ const getNodeMissingServerIds = (node: FlowNode) => {
 const nodeTypesRequiringServer = new Set<NodeType>([
   'shell', 'upload', 'download', 'config', 'log_view',
   'iotdb_deploy', 'iotdb_start', 'iotdb_stop', 'iotdb_cli',
-  'iotdb_config', 'iot_benchmark_start', 'iot_benchmark_wait'
+  'iotdb_config', 'iot_benchmark_deploy', 'iot_benchmark_start', 'iot_benchmark_wait'
 ])
 
 const hasConfigValue = (value: unknown) => value !== null && value !== undefined && value !== ''

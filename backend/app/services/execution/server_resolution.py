@@ -132,8 +132,8 @@ class ServerResolutionMixin:
             "shell", "upload", "download", "config", "iotdb_config",
             "log_view", "iotdb_deploy", "iotdb_start", "iotdb_cli",
             "iotdb_stop", "iotdb_cluster_deploy", "iotdb_cluster_start",
-            "iotdb_cluster_check", "iotdb_cluster_stop", "iot_benchmark_start",
-            "iot_benchmark_wait"
+            "iotdb_cluster_check", "iotdb_cluster_stop", "iot_benchmark_deploy",
+            "iot_benchmark_start", "iot_benchmark_wait"
         }
         return node_type in server_required_types
 

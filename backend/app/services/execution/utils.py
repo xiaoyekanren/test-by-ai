@@ -87,6 +87,7 @@ class UtilsMixin:
         timeout: int,
         node_role: str,
         expected_scripts: Optional[List[str]] = None,
+        expected_paths: Optional[List[str]] = None,
         package_url: Optional[str] = None
     ) -> Dict[str, Any]:
         if not remote_package_path:
@@ -126,6 +127,7 @@ class UtilsMixin:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "Unsupported package_type"}
 
         scripts_to_check = expected_scripts or [self._start_script_for_role(node_role)]
+        paths_to_check = expected_paths or []
         tmp_dir = f"{install_dir}.extracting"
         commands = [
             "set -e",
@@ -154,9 +156,15 @@ class UtilsMixin:
             f"mkdir -p {self._quote(install_dir)}",
             f"cp -R \"$source_dir\"/. {self._quote(install_dir)}/"
         ])
-        for script in sorted(set(scripts_to_check)):
-            expected_script_path = f"{install_dir.rstrip('/')}/sbin/{script}"
-            commands.append(f"test -f {self._quote(expected_script_path)}")
+        if paths_to_check:
+            for expected_path in sorted(set(paths_to_check)):
+                normalized_path = str(expected_path).strip().lstrip("/")
+                full_expected_path = install_dir.rstrip("/") + "/" + normalized_path
+                commands.append(f"test -e {self._quote(full_expected_path)}")
+        else:
+            for script in sorted(set(scripts_to_check)):
+                expected_script_path = f"{install_dir.rstrip('/')}/sbin/{script}"
+                commands.append(f"test -f {self._quote(expected_script_path)}")
         commands.append(f"rm -rf {self._quote(tmp_dir)}")
 
         result = self.ssh_service.run_command(
@@ -168,13 +176,15 @@ class UtilsMixin:
             timeout=timeout
         )
         payload = self._ssh_result_to_dict(result)
+        normalized_scripts = sorted(set(scripts_to_check))
         payload.update({
             "remote_package_path": remote_package_path,
             "package_url": package_url or None,
             "iotdb_home": install_dir,
             "conf_path": self._default_config_path(install_dir),
-            "expected_start_script": sorted(set(scripts_to_check))[0],
-            "expected_start_scripts": sorted(set(scripts_to_check))
+            "expected_start_script": normalized_scripts[0] if normalized_scripts else None,
+            "expected_start_scripts": normalized_scripts,
+            "expected_paths": sorted(set(paths_to_check))
         })
         return payload
 
