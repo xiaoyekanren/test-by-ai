@@ -19,6 +19,7 @@ import {
   ElCollapseItem,
   ElSelect,
   ElOption,
+  ElSwitch,
   type FormInstance,
   type FormRules
 } from 'element-plus'
@@ -55,7 +56,8 @@ const formData = reactive<ServerCreate & { password?: string }>({
   username: '',
   password: '',
   description: '',
-  region: '私有云'
+  region: '私有云',
+  schedulable: true
 })
 
 const formRules: FormRules = {
@@ -283,7 +285,8 @@ function openEditDialog(server: Server) {
     username: server.username || '',
     password: '',
     description: server.description || '',
-    region: server.region || '私有云'
+    region: server.region || '私有云',
+    schedulable: server.schedulable
   })
   dialogVisible.value = true
 }
@@ -297,7 +300,8 @@ function resetForm() {
     username: '',
     password: '',
     description: '',
-    region: '私有云'
+    region: '私有云',
+    schedulable: true
   })
   formRef.value?.clearValidate()
 }
@@ -318,7 +322,8 @@ async function submitForm() {
           username: formData.username || null,
           password: formData.password || null,
           description: formData.description || null,
-          region: formData.region
+          region: formData.region,
+          schedulable: formData.schedulable
         })
         dialogVisible.value = false
         // Auto test connection after creating server
@@ -330,7 +335,8 @@ async function submitForm() {
           port: formData.port,
           username: formData.username || null,
           description: formData.description || null,
-          region: formData.region
+          region: formData.region,
+          schedulable: formData.schedulable
         }
         if (formData.password) {
           updateData.password = formData.password
@@ -529,6 +535,14 @@ async function executeCommand() {
                 <span class="busy-tag" :class="row.is_busy ? 'busy' : 'idle'">
                   {{ row.is_busy ? '繁忙' : '空闲' }}
                 </span>
+              </template>
+            </ElTableColumn>
+
+            <ElTableColumn prop="schedulable" label="调度" width="96" align="center">
+              <template #default="{ row }">
+                <ElTag size="small" :type="row.schedulable ? 'success' : 'info'" effect="plain">
+                  {{ row.schedulable ? '可调度' : '固定专用' }}
+                </ElTag>
               </template>
             </ElTableColumn>
 
@@ -744,6 +758,15 @@ async function executeCommand() {
           </ElSelect>
         </ElFormItem>
 
+        <ElFormItem label="随机调度">
+          <div class="switch-field">
+            <ElSwitch v-model="formData.schedulable" />
+            <span class="switch-label">
+              {{ formData.schedulable ? '允许随机调度选择该主机' : '仅固定主机模式手动选择' }}
+            </span>
+          </div>
+        </ElFormItem>
+
         <ElFormItem label="描述" prop="description">
           <ElInput
             v-model="formData.description"
@@ -938,6 +961,17 @@ async function executeCommand() {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switch-label {
+  color: #606266;
+  font-size: 13px;
 }
 
 .server-table :deep(.el-table__cell) {

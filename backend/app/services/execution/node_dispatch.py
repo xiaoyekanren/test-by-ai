@@ -40,32 +40,19 @@ class NodeDispatchMixin:
         config = dict(node.get("config", {}) or {})
         config["_execution_id"] = execution_id
         config["_node_id"] = node_id
+        config["_schedule_mode"] = context.get("_schedule_mode")
+        config["_schedule_region"] = context.get("_schedule_region")
 
         with self.reservation_lock:
             if self._node_uses_top_level_server(node_type):
-                explicit_region = config.get("region") not in (None, "")
-                server = self._resolve_server_with_region(config, context)
+                server = self._resolve_server_for_schedule(config, context)
                 if server:
                     self._write_server_config(config, server)
                     logger.info(
                         "Resolved server %s (%s) in region %s for node %s",
                         server.id, server.name, server.region, node_id
                     )
-                elif config.get("region") in (None, ""):
-                    config["region"] = self._target_region(config, context)
-                merge_context = context
-                if explicit_region and not server:
-                    logger.warning(
-                        "No idle server found in explicit region %s for node %s; inherited server context will not be used",
-                        config.get("region"),
-                        node_id
-                    )
-                    merge_context = {
-                        key: value
-                        for key, value in context.items()
-                        if key not in {"server_id", "server_name", "host"}
-                    }
-                config = self._merge_config_with_context(config, merge_context)
+                config = self._merge_config_with_context(config, context)
 
             node_execution = NodeExecution(
                 execution_id=execution_id,

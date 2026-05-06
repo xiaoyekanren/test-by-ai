@@ -19,132 +19,79 @@ def engine(db_session):
     return ExecutionEngine(db_session)
 
 
-class TestResolveServerWithRegion:
-    """Tests for _resolve_server_with_region method."""
+class TestResolveServerWithSchedule:
+    """Tests for workflow-level fixed/random scheduling."""
 
-    def test_resolve_server_explicit_server_id_in_config(self, engine, db_session):
-        """Test that explicit server_id in config is used directly."""
-        # Setup mock server
+    def test_fixed_mode_uses_config_server_id(self, engine, db_session):
         mock_server = Server(id=1, name="test-server", host="192.168.1.1", region="私有云")
         db_session.query.return_value.filter.return_value.first.return_value = mock_server
 
-        config = {"server_id": 1}
-        context = {}
-
-        result = engine._resolve_server_with_region(config, context)
+        result = engine._resolve_server_for_schedule(
+            {"server_id": 1, "_schedule_mode": "fixed"},
+            {"_schedule_mode": "fixed", "_schedule_region": "私有云"}
+        )
 
         assert result is not None
         assert result.id == 1
-        assert result.name == "test-server"
 
-    def test_resolve_server_explicit_server_id_in_context(self, engine, db_session):
-        """Test that server_id from context is used if not in config."""
-        # Setup mock server
-        mock_server = Server(id=2, name="context-server", host="192.168.1.2", region="公司")
+    def test_fixed_mode_requires_config_server_id(self, engine):
+        with pytest.raises(ValueError, match="requires server_id"):
+            engine._resolve_server_for_schedule(
+                {"_schedule_mode": "fixed"},
+                {"_schedule_mode": "fixed", "_schedule_region": "私有云"}
+            )
+
+    def test_random_mode_reuses_scheduled_server_from_context(self, engine, db_session):
+        mock_server = Server(id=2, name="scheduled-server", host="192.168.1.2", region="私有云")
         db_session.query.return_value.filter.return_value.first.return_value = mock_server
 
-        config = {}
-        context = {"server_id": 2}
-
-        result = engine._resolve_server_with_region(config, context)
+        result = engine._resolve_server_for_schedule(
+            {"_schedule_mode": "random", "_schedule_region": "私有云"},
+            {"_schedule_mode": "random", "_schedule_region": "私有云", "server_id": 2}
+        )
 
         assert result is not None
         assert result.id == 2
 
-    def test_resolve_server_explicit_region_in_config(self, engine, db_session):
-        """Test that explicit region in config selects idle server from that region."""
-        # Setup mock idle servers
+    def test_random_mode_selects_idle_schedulable_server_from_workflow_region(self, engine, db_session):
         mock_servers = [
-            Server(id=3, name="region-server-1", host="192.168.1.3", region="公司-上层"),
-            Server(id=4, name="region-server-2", host="192.168.1.4", region="公司-上层"),
+            Server(id=3, name="region-server-1", host="192.168.1.3", region="公司-上层", schedulable=True),
+            Server(id=4, name="region-server-2", host="192.168.1.4", region="公司-上层", schedulable=True),
         ]
         db_session.query.return_value.filter.return_value.all.return_value = mock_servers
-        # Mock busy server IDs
         engine._compute_busy_server_ids = MagicMock(return_value=[])
 
-        config = {"region": "公司-上层"}
-        context = {}
-
-        result = engine._resolve_server_with_region(config, context)
+        result = engine._resolve_server_for_schedule(
+            {"_schedule_mode": "random", "_schedule_region": "公司-上层"},
+            {"_schedule_mode": "random", "_schedule_region": "公司-上层"}
+        )
 
         assert result is not None
         assert result.region == "公司-上层"
-        # Should be one of the idle servers
         assert result.id in [3, 4]
 
-    def test_resolve_server_region_from_context(self, engine, db_session):
-        """Test that region from context is used if not in config."""
-        mock_servers = [
-            Server(id=5, name="fit-server", host="192.168.1.5", region="Fit楼"),
-        ]
-        db_session.query.return_value.filter.return_value.all.return_value = mock_servers
-        engine._compute_busy_server_ids = MagicMock(return_value=[])
-
-        config = {}
-        context = {"region": "Fit楼"}
-
-        result = engine._resolve_server_with_region(config, context)
-
-        assert result is not None
-        assert result.region == "Fit楼"
-
-    def test_resolve_server_default_region(self, engine, db_session):
-        """Test that default region '私有云' is used when no region specified."""
-        mock_servers = [
-            Server(id=6, name="private-server", host="192.168.1.6", region="私有云"),
-        ]
-        db_session.query.return_value.filter.return_value.all.return_value = mock_servers
-        engine._compute_busy_server_ids = MagicMock(return_value=[])
-
-        config = {}
-        context = {}
-
-        result = engine._resolve_server_with_region(config, context)
-
-        assert result is not None
-        assert result.region == "私有云"
-
-    def test_resolve_server_no_idle_servers(self, engine, db_session):
-        """Test that None is returned when no idle servers available in target region."""
-        # Mock query chain: db.query(Server).filter(Server.region == region).filter(...).all()
-        mock_query = MagicMock()
-        mock_filter = MagicMock()
-        mock_filter2 = MagicMock()
-        db_session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_filter
-        mock_filter.filter.return_value = mock_filter2
-        mock_filter2.all.return_value = []  # Empty list for no idle servers
-
+    def test_random_mode_returns_none_when_no_idle_servers(self, engine, db_session):
+        db_session.query.return_value.filter.return_value.filter.return_value.all.return_value = []
         engine._compute_busy_server_ids = MagicMock(return_value=[1, 2, 3])
 
-        config = {"region": "公有云"}
-        context = {}
-
-        result = engine._resolve_server_with_region(config, context)
+        result = engine._resolve_server_for_schedule(
+            {"_schedule_mode": "random", "_schedule_region": "公有云"},
+            {"_schedule_mode": "random", "_schedule_region": "公有云"}
+        )
 
         assert result is None
 
-    def test_resolve_server_excludes_busy_servers(self, engine, db_session):
-        """Test that busy servers are excluded from selection."""
-        # Only one idle server (id=7) in the region, others are busy
+    def test_random_mode_excludes_busy_servers(self, engine, db_session):
         mock_servers = [
-            Server(id=7, name="idle-server", host="192.168.1.7", region="私有云"),
+            Server(id=7, name="idle-server", host="192.168.1.7", region="私有云", schedulable=True),
         ]
-        # Mock query chain with proper filter chain handling
-        mock_query = MagicMock()
-        mock_filter = MagicMock()
-        mock_filter2 = MagicMock()
-        db_session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_filter
-        mock_filter.filter.return_value = mock_filter2
-        mock_filter2.all.return_value = mock_servers
-
+        db_session.query.return_value.filter.return_value.filter.return_value.all.return_value = mock_servers
         engine._compute_busy_server_ids = MagicMock(return_value=[1, 2, 3, 4, 5, 6])
 
-        config = {}
-        context = {}
-
-        result = engine._resolve_server_with_region(config, context)
+        result = engine._resolve_server_for_schedule(
+            {"_schedule_mode": "random", "_schedule_region": "私有云"},
+            {"_schedule_mode": "random", "_schedule_region": "私有云"}
+        )
 
         assert result is not None
         assert result.id == 7
@@ -332,26 +279,25 @@ class TestBuildContextUpdates:
 class TestRequireServer:
     """Tests for _require_server method."""
 
-    def test_require_server_with_context_resolves_by_region(self, engine, db_session):
-        """Test that _require_server uses _resolve_server_with_region when context is provided."""
+    def test_require_server_fixed_mode(self, engine, db_session):
         mock_server = Server(id=1, name="test", host="192.168.1.1", region="私有云")
         db_session.query.return_value.filter.return_value.first.return_value = mock_server
 
-        config = {"server_id": 1}
-        context = {"region": "私有云"}
+        config = {"server_id": 1, "_schedule_mode": "fixed"}
+        context = {"_schedule_mode": "fixed", "_schedule_region": "私有云"}
 
         result = engine._require_server(config, context)
 
         assert result.id == 1
 
-    def test_require_server_without_context_uses_resolve_server(self, engine, db_session):
-        """Test that _require_server uses _resolve_server when context is None."""
+    def test_require_server_random_mode_reuses_context(self, engine, db_session):
         mock_server = Server(id=2, name="test2", host="192.168.1.2", region="公司")
         db_session.query.return_value.filter.return_value.first.return_value = mock_server
 
-        config = {"server_id": 2}
+        config = {"_schedule_mode": "random", "_schedule_region": "公司"}
+        context = {"_schedule_mode": "random", "_schedule_region": "公司", "server_id": 2}
 
-        result = engine._require_server(config)
+        result = engine._require_server(config, context)
 
         assert result.id == 2
 
@@ -360,10 +306,10 @@ class TestRequireServer:
         db_session.query.return_value.filter.return_value.first.return_value = None
         db_session.query.return_value.filter.return_value.all.return_value = []
 
-        config = {}
-        context = {}
+        config = {"_schedule_mode": "random", "_schedule_region": "私有云"}
+        context = {"_schedule_mode": "random", "_schedule_region": "私有云"}
 
-        with pytest.raises(ValueError, match="no idle server available"):
+        with pytest.raises(ValueError, match="scheduled server"):
             engine._require_server(config, context)
 
 

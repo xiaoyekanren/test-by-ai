@@ -24,7 +24,7 @@ import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
 import { useServerValidation } from '@/composables/useServerValidation'
-import { NODE_CONFIGS } from '@/types'
+import { NODE_CONFIGS, REGION_OPTIONS } from '@/types'
 import type { Execution, FlowNode, NodeExecution, NodeType } from '@/types'
 
 const route = useRoute()
@@ -166,9 +166,54 @@ const getNodeMissingServerIds = (node: FlowNode) => {
   return [...ids]
 }
 
+const nodeTypesRequiringServer = new Set<NodeType>([
+  'shell', 'upload', 'download', 'config', 'log_view',
+  'iotdb_deploy', 'iotdb_start', 'iotdb_stop', 'iotdb_cli',
+  'iotdb_config', 'iot_benchmark_start', 'iot_benchmark_wait'
+])
+
+const hasConfigValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+
+const getNodeScheduleError = (node: FlowNode) => {
+  const config = node.data.config || {}
+
+  if (workflowsStore.scheduleMode === 'random') {
+    if (hasConfigValue(config.server_id)) {
+      return '随机调度模式下不能选择固定服务器'
+    }
+    for (const field of ['config_nodes', 'data_nodes']) {
+      const nodes = config[field]
+      if (!Array.isArray(nodes)) continue
+      if (nodes.some(item => typeof item === 'object' && item !== null && hasConfigValue(item.server_id))) {
+        return '随机调度模式下集群节点不能选择固定服务器'
+      }
+    }
+    return ''
+  }
+
+  if (nodeTypesRequiringServer.has(node.data.nodeType) && !hasConfigValue(config.server_id)) {
+    return '固定主机模式下必须选择服务器'
+  }
+
+  for (const field of ['config_nodes', 'data_nodes']) {
+    const nodes = config[field]
+    if (!Array.isArray(nodes)) continue
+    if (nodes.some(item => typeof item === 'object' && item !== null && !hasConfigValue(item.server_id))) {
+      return '固定主机模式下集群节点必须选择服务器'
+    }
+  }
+
+  return ''
+}
+
 const nodeValidationErrorsById = computed(() => {
   const errors = new Map<string, string>()
   for (const node of workflowsStore.editorNodes) {
+    const scheduleError = getNodeScheduleError(node)
+    if (scheduleError) {
+      errors.set(node.id, scheduleError)
+      continue
+    }
     const missingServerIds = getNodeMissingServerIds(node)
     if (missingServerIds.length > 0) {
       errors.set(node.id, `缺少服务器 #${missingServerIds.join(', #')}`)
@@ -429,6 +474,14 @@ const handleAutoSaveChange = (value: boolean) => {
   workflowsStore.setAutoSave(value)
 }
 
+const handleScheduleModeChange = (value: 'fixed' | 'random') => {
+  workflowsStore.setScheduleMode(value)
+}
+
+const handleScheduleRegionChange = (value: string) => {
+  workflowsStore.setScheduleRegion(value)
+}
+
 // Handle undo
 const handleUndo = () => {
   workflowsStore.undo()
@@ -535,8 +588,13 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       :can-redo="workflowsStore.canRedo"
       :can-run="canRunWorkflow"
       :run-blocked-reason="runBlockedReason"
+      :schedule-mode="workflowsStore.scheduleMode"
+      :schedule-region="workflowsStore.scheduleRegion"
+      :region-options="REGION_OPTIONS"
       @save="handleSave"
       @auto-save-change="handleAutoSaveChange"
+      @schedule-mode-change="handleScheduleModeChange"
+      @schedule-region-change="handleScheduleRegionChange"
       @undo="handleUndo"
       @redo="handleRedo"
       @zoom-in="handleZoomIn"

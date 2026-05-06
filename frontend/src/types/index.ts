@@ -422,6 +422,7 @@ export interface Server {
   tags: string | null
   status: string
   region: string
+  schedulable: boolean
   is_busy: boolean
   created_at: string
   updated_at: string
@@ -436,6 +437,7 @@ export interface ServerCreate {
   description?: string | null
   tags?: string | null
   region?: string
+  schedulable?: boolean
 }
 
 export interface ServerUpdate {
@@ -447,6 +449,7 @@ export interface ServerUpdate {
   description?: string | null
   tags?: string | null
   region?: string
+  schedulable?: boolean
 }
 
 export interface ServerTestResult {
@@ -516,6 +519,8 @@ export interface Workflow {
   nodes: NodeDefinition[]
   edges: EdgeDefinition[]
   variables: Record<string, string>
+  schedule_mode: 'fixed' | 'random'
+  schedule_region: string
   created_at: string
   updated_at: string
 }
@@ -526,6 +531,8 @@ export interface WorkflowCreate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  schedule_mode?: 'fixed' | 'random'
+  schedule_region?: string
 }
 
 export interface WorkflowUpdate {
@@ -534,6 +541,8 @@ export interface WorkflowUpdate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  schedule_mode?: 'fixed' | 'random'
+  schedule_region?: string
 }
 
 // Execution related types

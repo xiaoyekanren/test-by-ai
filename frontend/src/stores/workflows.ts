@@ -149,6 +149,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const selectedNodeId = ref<string | null>(null)
   const selectedEdgeId = ref<string | null>(null)
   const inheritedConfigByNodeId = ref<Record<string, Record<string, unknown>>>({})
+  const scheduleMode = ref<'fixed' | 'random'>('fixed')
+  const scheduleRegion = ref('私有云')
   const isDirty = ref(false)
   const autoSave = ref(true)
   const isSaving = ref(false)
@@ -408,11 +410,45 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     inheritedConfigByNodeId.value = nextInherited
   }
 
+  function clearServerSelectionsForRandomMode() {
+    for (const node of editorNodes.value) {
+      if ('server_id' in node.data.config) {
+        node.data.config.server_id = null
+      }
+      for (const field of ['config_nodes', 'data_nodes']) {
+        const nodes = node.data.config[field]
+        if (!Array.isArray(nodes)) continue
+        node.data.config[field] = nodes.map(item => {
+          if (typeof item !== 'object' || item === null) return item
+          const next = { ...item }
+          delete next.server_id
+          return next
+        })
+      }
+    }
+  }
+
+  function setScheduleMode(value: 'fixed' | 'random') {
+    scheduleMode.value = value
+    if (value === 'random') {
+      clearServerSelectionsForRandomMode()
+    }
+    reapplyInheritedConfig()
+    saveHistory()
+  }
+
+  function setScheduleRegion(value: string) {
+    scheduleRegion.value = value || '私有云'
+    saveHistory()
+  }
+
   // Editor operations
 
   // Initialize editor with workflow data
   function initEditor(workflow: Workflow | null) {
     if (workflow) {
+      scheduleMode.value = workflow.schedule_mode
+      scheduleRegion.value = workflow.schedule_region || '私有云'
       // Convert workflow nodes to flow nodes
       editorNodes.value = workflow.nodes.map(n => ({
         id: n.id,
@@ -434,6 +470,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       }))
     } else {
       // New workflow - start with empty canvas
+      scheduleMode.value = 'fixed'
+      scheduleRegion.value = '私有云'
       editorNodes.value = []
       editorEdges.value = []
     }
@@ -655,14 +693,18 @@ export const useWorkflowsStore = defineStore('workflows', () => {
           name,
           description,
           nodes,
-          edges
+          edges,
+          schedule_mode: scheduleMode.value,
+          schedule_region: scheduleRegion.value
         })
       } else {
         workflow = await createWorkflow({
           name,
           description,
           nodes,
-          edges
+          edges,
+          schedule_mode: scheduleMode.value,
+          schedule_region: scheduleRegion.value
         })
       }
 
@@ -687,6 +729,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectedNodeId.value = null
     selectedEdgeId.value = null
     inheritedConfigByNodeId.value = {}
+    scheduleMode.value = 'fixed'
+    scheduleRegion.value = '私有云'
     history.value = []
     historyIndex.value = -1
     isDirty.value = false
@@ -706,6 +750,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectedEdgeId,
     selectedNode,
     selectedEdge,
+    scheduleMode,
+    scheduleRegion,
     isDirty,
     autoSave,
     isSaving,
@@ -735,6 +781,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     deleteEdge,
     selectNode,
     selectEdge,
+    setScheduleMode,
+    setScheduleRegion,
     saveWorkflowToBackend,
     setAutoSave,
     clearEditor

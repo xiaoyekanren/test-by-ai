@@ -61,6 +61,7 @@ const keyValueDraftSnapshots = ref<Record<string, string>>({})
 
 // Get selected node
 const selectedNode = computed(() => workflowsStore.selectedNode)
+const isRandomScheduling = computed(() => workflowsStore.scheduleMode === 'random')
 
 const nodeHelpText = computed(() => {
   if (!selectedNode.value) return ''
@@ -625,6 +626,9 @@ const fieldSections = computed<FieldSection[]>(() => {
       const packageSource = getConfigValue('package_source')
       if (field.field === 'artifact_local_path' && packageSource === 'url') continue
       if (field.field === 'package_url' && packageSource !== 'url') continue
+    }
+    if (isRandomScheduling.value && ['server_id', 'region'].includes(field.field)) {
+      continue
     }
 
     const key = getFieldSection(field)

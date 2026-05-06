@@ -10,12 +10,9 @@ logger = logging.getLogger(__name__)
 class ServerResolutionMixin:
 
     def _require_server(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Server:
-        if context is not None:
-            server = self._resolve_server_with_region(config, context)
-        else:
-            server = self._resolve_server(config)
+        server = self._resolve_server_for_schedule(config, context or {})
         if not server:
-            raise ValueError("A valid server_id is required or no idle server available in target region")
+            raise ValueError("A valid scheduled server is required")
         return server
 
     def _resolve_server(self, config: Dict[str, Any]) -> Optional[Server]:
@@ -24,25 +21,32 @@ class ServerResolutionMixin:
             return None
         return self.db.query(Server).filter(Server.id == int(server_id)).first()
 
+    def _resolve_server_for_schedule(self, config: Dict[str, Any], context: Dict[str, Any]) -> Optional[Server]:
+        mode = self._schedule_mode(config, context)
+        if mode == "fixed":
+            server_id = config.get("server_id")
+            if server_id in (None, ""):
+                raise ValueError("Fixed scheduling mode requires server_id on every server node")
+            return self.db.query(Server).filter(Server.id == int(server_id)).first()
+
+        if mode == "random":
+            server_id = context.get("server_id")
+            if server_id not in (None, ""):
+                return self.db.query(Server).filter(Server.id == int(server_id)).first()
+            return self._resolve_idle_server_by_region(self._schedule_region(config, context))
+
+        raise ValueError(f"Unsupported schedule_mode: {mode}")
+
     def _resolve_server_with_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> Optional[Server]:
-        server_id = config.get("server_id")
-        if server_id is not None and server_id != "":
-            return self.db.query(Server).filter(Server.id == int(server_id)).first()
-
-        region = config.get("region")
-        if region not in (None, ""):
-            return self._resolve_idle_server_by_region(str(region))
-
-        server_id = context.get("server_id")
-        if server_id is not None and server_id != "":
-            return self.db.query(Server).filter(Server.id == int(server_id)).first()
-
-        return self._resolve_idle_server_by_region(self._target_region(config, context))
+        return self._resolve_server_for_schedule(config, context)
 
     def _resolve_idle_server_by_region(self, region: str) -> Optional[Server]:
         busy_server_ids = self._compute_busy_server_ids()
 
-        query = self.db.query(Server).filter(Server.region == region)
+        query = self.db.query(Server).filter(
+            Server.region == region,
+            Server.schedulable.is_(True)
+        )
         if busy_server_ids:
             query = query.filter(Server.id.notin_(busy_server_ids))
 
@@ -68,6 +72,7 @@ class ServerResolutionMixin:
 
     def _write_server_config(self, config: Dict[str, Any], server: Server) -> None:
         config["server_id"] = server.id
+        config["scheduled_server_id"] = server.id
         config["server_name"] = server.name
         config["host"] = server.host
         config["region"] = server.region or "私有云"
@@ -78,6 +83,18 @@ class ServerResolutionMixin:
             region = context.get("region")
         if region in (None, ""):
             region = "私有云"
+        return str(region)
+
+    def _schedule_mode(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
+        mode = config.get("_schedule_mode") or context.get("_schedule_mode")
+        if mode in (None, ""):
+            raise ValueError("Workflow schedule_mode is required")
+        return str(mode)
+
+    def _schedule_region(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
+        region = config.get("_schedule_region") or context.get("_schedule_region")
+        if region in (None, ""):
+            raise ValueError("Workflow schedule_region is required for random scheduling")
         return str(region)
 
     def _compute_busy_server_ids(self) -> List[int]:

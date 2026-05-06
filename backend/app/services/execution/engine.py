@@ -179,6 +179,10 @@ class ExecutionEngine(
 
         nodes = workflow.nodes or []
         edges = workflow.edges or []
+        workflow_context = {
+            "_schedule_mode": workflow.schedule_mode,
+            "_schedule_region": workflow.schedule_region,
+        }
         passed_count = 0
         failed_count = 0
         skipped_count = 0
@@ -258,7 +262,10 @@ class ExecutionEngine(
                     ]
                     for node_id in ready:
                         pending.remove(node_id)
-                        context = self._merge_parent_contexts(parents[node_id], context_updates)
+                        context = {
+                            **workflow_context,
+                            **self._merge_parent_contexts(parents[node_id], context_updates),
+                        }
                         future = executor.submit(
                             self._execute_workflow_node,
                             execution_id,

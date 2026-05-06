@@ -10,6 +10,7 @@ NODE_TYPE = Literal[
     "iotdb_cluster_check", "iotdb_cluster_stop", "iot_benchmark_start", "iot_benchmark_wait",
     "condition", "loop", "wait", "parallel", "assert", "report", "summary", "notify"
 ]
+SCHEDULE_MODE = Literal["fixed", "random"]
 
 class NodeDefinition(BaseModel):
     id: str
@@ -30,6 +31,8 @@ class WorkflowBase(BaseModel):
     nodes: List[NodeDefinition] = []
     edges: List[EdgeDefinition] = []
     variables: Dict[str, str] = {}
+    schedule_mode: SCHEDULE_MODE = "fixed"
+    schedule_region: str = "私有云"
 
 class WorkflowCreate(WorkflowBase):
     pass
@@ -40,6 +43,8 @@ class WorkflowUpdate(BaseModel):
     nodes: Optional[List[NodeDefinition]] = None
     edges: Optional[List[EdgeDefinition]] = None
     variables: Optional[Dict[str, str]] = None
+    schedule_mode: Optional[SCHEDULE_MODE] = None
+    schedule_region: Optional[str] = None
 
 class WorkflowResponse(WorkflowBase):
     id: int

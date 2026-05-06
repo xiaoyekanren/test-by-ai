@@ -19,6 +19,7 @@ def test_server_model():
     )
     assert server.name == "test-server"
     assert server.host == "192.168.1.1"
+    assert server.schedulable is True
 
 def test_workflow_model():
     """Test Workflow model with nodes JSON"""
@@ -29,6 +30,8 @@ def test_workflow_model():
     )
     assert workflow.name == "test-workflow"
     assert len(workflow.nodes) == 1
+    assert workflow.schedule_mode == "fixed"
+    assert workflow.schedule_region == "私有云"
 
 def test_execution_model():
     """Test Execution model"""

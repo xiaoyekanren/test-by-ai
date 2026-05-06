@@ -8,6 +8,15 @@ from sqlalchemy import Engine
 from .database import Base
 
 
+def _sqlite_path(engine: Engine) -> str:
+    return str(engine.url).replace("sqlite:///", "")
+
+
+def _get_columns(cursor: sqlite3.Cursor, table_name: str) -> list[str]:
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return [row[1] for row in cursor.fetchall()]
+
+
 def migrate_servers_table_columns(engine: Engine) -> None:
     """
     为已有的 servers 表添加缺失的列。
@@ -18,7 +27,7 @@ def migrate_servers_table_columns(engine: Engine) -> None:
     Args:
         engine: 用于迁移的 SQLAlchemy 引擎
     """
-    db_path = str(engine.url).replace("sqlite:///", "")
+    db_path = _sqlite_path(engine)
     if not db_path:
         return
 
@@ -26,8 +35,7 @@ def migrate_servers_table_columns(engine: Engine) -> None:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        cursor.execute("PRAGMA table_info(servers)")
-        columns = [row[1] for row in cursor.fetchall()]
+        columns = _get_columns(cursor, "servers")
 
         if "tags" not in columns:
             cursor.execute("ALTER TABLE servers ADD COLUMN tags VARCHAR(200)")
@@ -35,11 +43,37 @@ def migrate_servers_table_columns(engine: Engine) -> None:
         if "region" not in columns:
             cursor.execute("ALTER TABLE servers ADD COLUMN region VARCHAR(20) DEFAULT '私有云'")
 
+        if "schedulable" not in columns:
+            cursor.execute("ALTER TABLE servers ADD COLUMN schedulable BOOLEAN DEFAULT 1")
+
         conn.commit()
 
         conn.close()
     except sqlite3.OperationalError:
         # Table doesn't exist yet - will be created by create_all()
+        pass
+
+
+def migrate_workflows_table_columns(engine: Engine) -> None:
+    db_path = _sqlite_path(engine)
+    if not db_path:
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        columns = _get_columns(cursor, "workflows")
+
+        if "schedule_mode" not in columns:
+            cursor.execute("ALTER TABLE workflows ADD COLUMN schedule_mode VARCHAR(20) DEFAULT 'fixed'")
+
+        if "schedule_region" not in columns:
+            cursor.execute("ALTER TABLE workflows ADD COLUMN schedule_region VARCHAR(20) DEFAULT '私有云'")
+
+        conn.commit()
+        conn.close()
+    except sqlite3.OperationalError:
         pass
 
 
@@ -64,3 +98,4 @@ def init_db(engine: Engine = None) -> None:
 
     # Run migrations for existing databases
     migrate_servers_table_columns(engine)
+    migrate_workflows_table_columns(engine)
