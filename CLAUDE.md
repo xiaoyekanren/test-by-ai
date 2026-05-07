@@ -59,6 +59,7 @@ docs/
 | 前端架构 | `docs/design/shared/frontend-architecture.md` |
 | SSH 服务 | `docs/design/shared/ssh-service.md` |
 | 发布运行脚本 | `docs/design/shared/release-runtime.md` |
+| 平台演进路线 | `docs/design/shared/iotdb-testing-platform-roadmap.md` |
 
 ## 常用命令
 
