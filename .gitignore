@@ -19,6 +19,9 @@ venv
 
 
 
+# ci
+ci/
+
 # program
 data/*
 !data/app.db.example
