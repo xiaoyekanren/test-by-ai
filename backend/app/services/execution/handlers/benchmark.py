@@ -170,7 +170,12 @@ class BenchmarkHandlersMixin:
             return {"exit_status": -1, "stdout": "", "stderr": "", "error": "benchmark_run is required"}
 
         server_id = benchmark_run.get("server_id") or config.get("server_id")
-        server = self._require_server({"server_id": server_id} if server_id else config, context)
+        server_config = dict(config)
+        if server_id not in (None, ""):
+            server_config["server_id"] = server_id
+        server_config.setdefault("_node_type", "iot_benchmark_wait")
+        server_config["schedule_role"] = self._schedule_role(server_config)
+        server = self._require_server(server_config, context or {})
         self._write_server_config(config, server)
         pid = str(benchmark_run.get("pid") or "").strip()
         stdout_path = str(benchmark_run.get("stdout_path") or "").strip()

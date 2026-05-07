@@ -3,6 +3,7 @@ import random
 from typing import Any, Dict, List, Optional
 
 from app.models.database import Execution, NodeExecution, Server
+from app.workflow_node_types import node_requires_server, node_uses_top_level_server
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +15,6 @@ class ServerResolutionMixin:
         if not server:
             raise ValueError("A valid scheduled server is required")
         return server
-
-    def _resolve_server(self, config: Dict[str, Any]) -> Optional[Server]:
-        server_id = config.get("server_id")
-        if server_id is None:
-            return None
-        return self.db.query(Server).filter(Server.id == int(server_id)).first()
 
     def _resolve_server_for_schedule(self, config: Dict[str, Any], context: Dict[str, Any]) -> Optional[Server]:
         mode = self._schedule_mode(config, context)
@@ -72,7 +67,6 @@ class ServerResolutionMixin:
 
     def _write_server_config(self, config: Dict[str, Any], server: Server) -> None:
         config["server_id"] = server.id
-        config["scheduled_server_id"] = server.id
         config["server_name"] = server.name
         config["host"] = server.host
         config["region"] = server.region or "私有云"
@@ -160,20 +154,7 @@ class ServerResolutionMixin:
         return list(set(busy_ids))
 
     def _node_requires_server(self, node_type: str) -> bool:
-        server_required_types = {
-            "shell", "upload", "download", "config", "iotdb_config",
-            "log_view", "iotdb_deploy", "iotdb_start", "iotdb_cli",
-            "iotdb_stop", "iotdb_cluster_deploy", "iotdb_cluster_start",
-            "iotdb_cluster_check", "iotdb_cluster_stop", "iot_benchmark_deploy",
-            "iot_benchmark_start", "iot_benchmark_wait"
-        }
-        return node_type in server_required_types
+        return node_requires_server(node_type)
 
     def _node_uses_top_level_server(self, node_type: str) -> bool:
-        cluster_topology_types = {
-            "iotdb_cluster_deploy",
-            "iotdb_cluster_start",
-            "iotdb_cluster_check",
-            "iotdb_cluster_stop",
-        }
-        return self._node_requires_server(node_type) and node_type not in cluster_topology_types
+        return node_uses_top_level_server(node_type)

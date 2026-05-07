@@ -6,21 +6,9 @@ from typing import List
 from ..dependencies import get_db
 from ..models.database import Execution, NodeExecution, Workflow
 from ..schemas.workflow import WorkflowCreate, WorkflowUpdate, WorkflowResponse
+from ..workflow_node_types import CLUSTER_SERVER_NODE_TYPES, TOP_LEVEL_SERVER_NODE_TYPES
 
 router = APIRouter()
-
-TOP_LEVEL_SERVER_NODE_TYPES = {
-    "shell", "upload", "download", "config", "iotdb_config",
-    "log_view", "iotdb_deploy", "iotdb_start", "iotdb_cli",
-    "iotdb_stop", "iot_benchmark_deploy", "iot_benchmark_start", "iot_benchmark_wait"
-}
-
-CLUSTER_SERVER_NODE_TYPES = {
-    "iotdb_cluster_deploy",
-    "iotdb_cluster_start",
-    "iotdb_cluster_check",
-    "iotdb_cluster_stop",
-}
 
 
 def _has_value(value) -> bool:

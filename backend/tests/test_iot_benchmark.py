@@ -109,6 +109,40 @@ def test_iot_benchmark_start_maps_common_read_write_config_and_cluster_targets(d
     assert "CSV_OUTPUT=true" in written_config
 
 
+def test_iot_benchmark_wait_uses_benchmark_schedule_role(db_session):
+    db_session.add(Server(id=2, name="iotdb", host="10.0.0.2", port=22, username="root", password="pw"))
+    db_session.add(Server(id=8, name="bench", host="10.0.0.8", port=22, username="root", password="pw"))
+    db_session.commit()
+    engine = ExecutionEngine(db_session)
+    fake_ssh = FakeBenchmarkSSH()
+    engine.ssh_service = fake_ssh
+
+    result = engine._execute_iot_benchmark_wait_node(
+        {
+            "_node_type": "iot_benchmark_wait",
+            "_schedule_mode": "random",
+            "_schedule_region": "私有云",
+        },
+        {
+            "_schedule_mode": "random",
+            "_schedule_region": "私有云",
+            "_scheduled_servers": {
+                "default": {"server_id": 2},
+                "benchmark": {"server_id": 8},
+            },
+            "benchmark_run": {
+                "server_id": 8,
+                "pid": "12345",
+                "stdout_path": "/tmp/benchmark.stdout",
+                "exit_path": "/tmp/benchmark.exit",
+            },
+        },
+    )
+
+    assert result["exit_status"] == 0
+    assert fake_ssh.commands[0]["host"] == "10.0.0.8"
+
+
 def test_iot_benchmark_summary_parser_extracts_metrics(db_session):
     engine = ExecutionEngine(db_session)
     summary = engine._parse_iot_benchmark_summary(

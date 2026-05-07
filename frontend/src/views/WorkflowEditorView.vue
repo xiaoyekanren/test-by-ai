@@ -26,6 +26,7 @@ import { useServersStore } from '@/stores/servers'
 import { useServerValidation } from '@/composables/useServerValidation'
 import { NODE_CONFIGS, REGION_OPTIONS } from '@/types'
 import type { Execution, FlowNode, NodeExecution, NodeType } from '@/types'
+import { nodeUsesTopLevelServer } from '@/utils/workflowNodeTypes'
 
 const route = useRoute()
 const router = useRouter()
@@ -166,12 +167,6 @@ const getNodeMissingServerIds = (node: FlowNode) => {
   return [...ids]
 }
 
-const nodeTypesRequiringServer = new Set<NodeType>([
-  'shell', 'upload', 'download', 'config', 'log_view',
-  'iotdb_deploy', 'iotdb_start', 'iotdb_stop', 'iotdb_cli',
-  'iotdb_config', 'iot_benchmark_deploy', 'iot_benchmark_start', 'iot_benchmark_wait'
-])
-
 const hasConfigValue = (value: unknown) => value !== null && value !== undefined && value !== ''
 
 const getNodeScheduleError = (node: FlowNode) => {
@@ -191,7 +186,7 @@ const getNodeScheduleError = (node: FlowNode) => {
     return ''
   }
 
-  if (nodeTypesRequiringServer.has(node.data.nodeType) && !hasConfigValue(config.server_id)) {
+  if (nodeUsesTopLevelServer(node.data.nodeType) && !hasConfigValue(config.server_id)) {
     return '固定主机模式下必须选择服务器'
   }
 
