@@ -67,19 +67,28 @@ import { Controls } from '@vue-flow/controls'
 | 基础 | shell | 执行 shell 命令 |
 | 基础 | upload | 上传文件 |
 | 基础 | download | 下载文件 |
+| 基础 | config | 配置文件替换 |
+| 基础 | log_view | 查看日志内容 |
 | IoTDB | iotdb_deploy | 部署 IoTDB |
 | IoTDB | iotdb_start | 启动 IoTDB |
 | IoTDB | iotdb_stop | 停止 IoTDB |
 | IoTDB | iotdb_cli | IoTDB CLI |
 | IoTDB | iotdb_config | 配置 IoTDB |
+| IoTDB | iot_benchmark_deploy | 部署 IoT Benchmark |
+| IoTDB | iot_benchmark_start | 启动 IoT Benchmark |
+| IoTDB | iot_benchmark_wait | 等待 IoT Benchmark |
 | 集群 | iotdb_cluster_deploy | 集群部署 |
 | 集群 | iotdb_cluster_start | 集群启动 |
 | 集群 | iotdb_cluster_check | 集群检查 |
 | 集群 | iotdb_cluster_stop | 集群停止 |
 | 控制 | condition | 条件判断 |
-| 控制 | loop | 循环（暂未实现） |
+| 控制 | loop | 循环 |
 | 控制 | wait | 等待 |
-| 控制 | parallel | 并行（暂未实现） |
+| 控制 | parallel | 并行 |
+| 控制 | assert | 断言检查 |
+| 结果 | report | 生成报告 |
+| 结果 | summary | 汇总结果 |
+| 结果 | notify | 发送通知 |
 
 ### 节点配置结构
 
@@ -97,8 +106,9 @@ interface NodeDefinition {
 每种节点类型的配置模板：
 
 ```typescript
-const NODE_CONFIGS: Record<NodeType, NodeConfig> = {
+const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
   shell: {
+    type: 'shell',
     label: 'Shell Command',
     category: 'basic',
     color: '#3b82f6',
@@ -106,14 +116,12 @@ const NODE_CONFIGS: Record<NodeType, NodeConfig> = {
     description: 'Execute shell command on remote server',
     defaultConfig: {
       server_id: null,
+      region: null,
       command: '',
       timeout: 30
     },
-    fields: [
-      { key: 'server_id', type: 'server', label: 'Server' },
-      { key: 'command', type: 'textarea', label: 'Command' },
-      { key: 'timeout', type: 'number', label: 'Timeout (s)' }
-    ]
+    inputs: 1,
+    outputs: 1
   },
   // ...
 }
@@ -127,9 +135,12 @@ const NODE_CONFIGS: Record<NodeType, NodeConfig> = {
 
 ```typescript
 const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
-  shell: ['server_id'],
-  iotdb_start: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
-  iotdb_cli: ['server_id', 'iotdb_home', 'host', 'rpc_port'],
+  shell: ['server_id', 'region'],
+  iotdb_start: ['server_id', 'region', 'iotdb_home', 'host', 'rpc_port', 'wait_port'],
+  iotdb_cli: ['server_id', 'region', 'iotdb_home', 'host', 'rpc_port'],
+  iot_benchmark_deploy: ['server_id', 'region'],
+  iot_benchmark_start: ['server_id', 'region', 'benchmark_home', 'target_host', 'rpc_port', 'data_nodes'],
+  iot_benchmark_wait: ['server_id', 'region'],
   // ...
 }
 ```
@@ -213,6 +224,16 @@ function redo() {
 
 **注意**: 在输入框中时不触发快捷键。
 
+## 调度模式控件
+
+EditorToolbar 右侧提供调度模式和区域选择器：
+
+- **调度模式下拉**：固定主机 / 随机调度
+- **区域选择器**：仅在随机调度模式下显示，选择调度区域
+- 切换到随机模式时自动清空所有节点的 `server_id`
+- 随机模式下 NodeConfigPanel 隐藏 `server_id` 和 `region` 字段
+- 前端实时校验调度模式与节点配置的一致性
+
 ## 自动保存
 
 ### 实现
@@ -246,4 +267,4 @@ let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 
 ---
 
-最后更新: 2026-04-13
+最后更新: 2026-05-07

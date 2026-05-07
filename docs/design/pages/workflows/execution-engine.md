@@ -27,13 +27,13 @@ class ExecutionEngine:
 - `engine.py`: 执行生命周期、CRUD、线程池调度
 - `graph.py`: DAG 构建、拓扑辅助、workflow_state 快照
 - `node_dispatch.py`: 节点注册表分发、独立 session worker
-- `server_resolution.py`: `server_id` / `region` 解析与空闲服务器选择
+- `server_resolution.py`: 固定/随机调度、角色隔离与空闲服务器选择
 - `context.py`: 父节点上下文合并、成功结果向下游传播
 - `utils.py`: SSH 结果转换、路径与配置工具
 - `handlers/basic.py`: shell/upload/download/config/log_view
 - `handlers/iotdb.py`: deploy/start/cli/stop + SQL
 - `handlers/cluster.py`: 集群 deploy/start/check/stop
-- `handlers/benchmark.py`: benchmark start/wait/collect
+- `handlers/benchmark.py`: benchmark deploy/start/wait/collect
 - `handlers/control.py`: condition/loop/wait/parallel/assert
 
 `backend/app/services/execution_engine.py` 仅保留为向后兼容导出层，现有 import 路径无需修改。
@@ -115,11 +115,22 @@ class ExecutionEngine:
 | iotdb_stop | 停止 IoTDB | SSH 执行停止脚本 |
 | iotdb_cli | IoTDB CLI 操作 | SSH 执行 CLI 命令 |
 | iotdb_config | 配置 IoTDB | SSH + 配置文件写入 |
+| log_view | 查看日志内容 | SSH 读取远端日志文件 |
+| iotdb_cluster_deploy | 集群部署 | 多节点 SSH 部署 + 角色配置 |
+| iotdb_cluster_start | 集群启动 | 按角色顺序启动 |
+| iotdb_cluster_check | 集群检查 | CLI 查询集群状态 |
+| iotdb_cluster_stop | 集群停止 | 按角色顺序停止 |
+| iot_benchmark_deploy | 部署 IoT Benchmark | SSH 上传/下载并解压 benchmark 包 |
+| iot_benchmark_start | 启动 IoT Benchmark | SSH 后台启动，返回 benchmark_run |
+| iot_benchmark_wait | 等待 IoT Benchmark | 轮询远端进程，返回结果摘要 |
 | condition | 条件分支 (if/else) | 执行 shell 表达式，exit 0 → True 分支，非零 → False 分支 |
 | loop | 循环执行 | for 循环 N 次迭代，自动重复执行子节点 |
 | wait | 等待条件满足 | 轮询执行 shell 命令直到 exit 0 或超时 |
 | parallel | 并行网关 | 透传节点，引擎已原生并行调度 |
 | assert | 断言检查 | SSH 检查日志/文件/进程/端口/自定义命令 |
+| report | 生成测试报告 | 输出格式化报告 |
+| summary | 汇总断言结果 | 聚合上游断言 |
+| notify | 发送通知 | 触发通知渠道 |
 
 ### _execute_node 实现
 
@@ -188,7 +199,7 @@ def create_execution(execution_data, background_tasks, db):
 
 **决策**: 使用 context 字典在父子节点间传递运行时结果。
 
-**实现**: 仅成功节点更新 context；下游节点合并所有父节点 context 后执行。显式 `region` 可阻止继承 `server_id` / `host`，避免跨区域复用旧服务器。
+**实现**: 仅成功节点更新 context；下游节点合并所有父节点 context 后执行。`_scheduled_servers` 在合并时做深合并而非覆盖，确保不同角色的调度结果不丢失。
 
 **示例**:
 ```python
@@ -198,6 +209,22 @@ context['iotdb_home'] = '/opt/iotdb'
 # iotdb_start 节点读取 iotdb_home
 iotdb_home = context.get('iotdb_home')
 ```
+
+### 工作流调度模式
+
+**决策**: 工作流支持固定主机（`fixed`）和随机调度（`random`）两种互斥模式。
+
+**实现**:
+- 工作流级别的 `schedule_mode` 和 `schedule_region` 通过 `workflow_context` 注入每个节点的执行上下文
+- 固定模式要求每个节点显式配置 `server_id`
+- 随机模式由引擎从目标区域的空闲、可调度服务器中随机选择
+- benchmark 节点使用独立的 `benchmark` 调度角色，不与 IoTDB 节点共享随机主机
+
+**原因**:
+- 避免固定和随机混用导致资源冲突
+- 角色隔离确保 benchmark 不会被分配到 IoTDB 所在主机
+
+详见 [region-scheduling.md](../servers/region-scheduling.md)。
 
 ## 执行记录持久化
 
@@ -229,4 +256,4 @@ iotdb_home = context.get('iotdb_home')
 
 ---
 
-最后更新: 2026-04-20
+最后更新: 2026-05-07

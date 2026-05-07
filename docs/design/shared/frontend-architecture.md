@@ -140,6 +140,8 @@ frontend/src/
 - `editorNodes: FlowNode[]` - 编辑器节点
 - `editorEdges: FlowEdge[]` - 编辑器连线
 - `selectedNodeId` - 选中的节点
+- `scheduleMode` - 调度模式（`fixed` / `random`）
+- `scheduleRegion` - 随机调度区域
 - `isDirty` - 是否有未保存更改
 - `canUndo/canRedo` - 撤销/重做能力
 
@@ -220,7 +222,7 @@ const historyIndex = ref(-1)
 **核心功能**:
 - Vue Flow 拖拽编辑
 - 节点面板（拖入新节点）
-- 工具栏（保存、撤销、重做、执行）
+- 工具栏（保存、撤销、重做、执行、调度模式/区域选择）
 - 节点配置面板
 - 执行状态面板
 
@@ -234,4 +236,4 @@ const historyIndex = ref(-1)
 
 ---
 
-最后更新: 2026-04-17
+最后更新: 2026-05-07

@@ -188,6 +188,14 @@ manage.bat status
 | iotdb_cli | 执行 CLI 命令 | commands, server_id, timeout |
 | iotdb_config | 应用 IoTDB 配置项 | iotdb_home, node_role, rpc_port, file_path, config_items, server_id/region |
 
+### IoT Benchmark 节点
+
+| 类型 | 功能 | 配置参数 |
+|------|------|----------|
+| iot_benchmark_deploy | 部署 IoT Benchmark | install_dir, package_source, package_url/artifact_local_path, server_id |
+| iot_benchmark_start | 启动 IoT Benchmark | benchmark_home, target_host, rpc_port, device_number, sensor_number 等 |
+| iot_benchmark_wait | 等待 IoT Benchmark | timeout_seconds, poll_interval_seconds, tail_lines |
+
 ### 集群节点
 
 | 类型 | 功能 |
@@ -297,4 +305,4 @@ manage.bat release
 
 ---
 
-最后更新: 2026-04-20
+最后更新: 2026-05-07

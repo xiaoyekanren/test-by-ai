@@ -33,7 +33,7 @@ backend/app/
 │   └── iotdb.py     # IoTDB 可视化（CLI/日志/配置）
 ├── models/          # 数据库模型
 │   ├── database.py  # ORM 模型定义
-│   └── setup.py     # 数据库初始化
+│   └── setup.py     # 数据库初始化 + SQLite 列迁移
 ├── schemas/         # Pydantic 数据模型
 │   ├── server.py    # ServerCreate/Update/Response
 │   ├── workflow.py  # WorkflowCreate/Update + Node/Edge 定义
@@ -79,8 +79,8 @@ backend/app/
 
 | 模型 | 描述 | 主要字段 |
 |------|------|----------|
-| Server | SSH 服务器配置 | id, name, host, port, username, password, status, tags |
-| Workflow | 工作流定义 | id, name, nodes(JSON), edges(JSON), variables(JSON) |
+| Server | SSH 服务器配置 | id, name, host, port, username, password, status, tags, region, schedulable |
+| Workflow | 工作流定义 | id, name, nodes(JSON), edges(JSON), variables(JSON), schedule_mode, schedule_region |
 | Execution | 执行记录 | id, workflow_id, status, trigger_type, duration, result |
 | NodeExecution | 节点执行记录 | id, execution_id, node_id, status, output_data, error_message |
 | SystemSetting | 系统设置 | id, key, value(JSON) |
@@ -179,4 +179,4 @@ Server     ──── 独立实体（被节点配置引用）
 
 ---
 
-最后更新: 2026-04-20
+最后更新: 2026-05-07
