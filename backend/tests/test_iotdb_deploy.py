@@ -35,6 +35,8 @@ def test_iotdb_deploy_downloads_package_url_before_extracting(db_session):
 
     result = engine._execute_iotdb_deploy_node({
         "server_id": 1,
+        "_schedule_mode": "fixed",
+        "_schedule_region": "私有云",
         "package_url": "https://example.com/apache-iotdb-bin.zip",
         "remote_package_path": "/tmp/apache-iotdb-bin.zip",
         "install_dir": "/opt/iotdb",
@@ -62,6 +64,8 @@ def test_iotdb_deploy_rejects_local_artifact_and_package_url_together(db_session
 
     result = engine._execute_iotdb_deploy_node({
         "server_id": 1,
+        "_schedule_mode": "fixed",
+        "_schedule_region": "私有云",
         "artifact_local_path": "/tmp/apache-iotdb-bin.zip",
         "package_url": "https://example.com/apache-iotdb-bin.zip",
         "remote_package_path": "/tmp/apache-iotdb-bin.zip",

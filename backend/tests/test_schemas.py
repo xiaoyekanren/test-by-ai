@@ -11,6 +11,7 @@ def test_server_create_schema():
     server = ServerCreate(**data)
     assert server.name == "test"
     assert server.port == 22  # default
+    assert server.schedulable is True
 
 def test_server_create_requires_name_host():
     """Test ServerCreate requires name and host"""
@@ -31,6 +32,8 @@ def test_workflow_create_schema():
     wf = WorkflowCreate(**data)
     assert wf.name == "test-workflow"
     assert len(wf.nodes) == 1
+    assert wf.schedule_mode == "fixed"
+    assert wf.schedule_region == "私有云"
 
 def test_execution_create_schema():
     """Test ExecutionCreate"""

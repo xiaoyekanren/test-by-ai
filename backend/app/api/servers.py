@@ -50,6 +50,7 @@ def _build_server_response(server: Server, is_busy: bool) -> ServerResponse:
         "tags": server.tags,
         "status": server.status,
         "region": server.region or "私有云",
+        "schedulable": bool(server.schedulable),
         "is_busy": is_busy,
         "created_at": server.created_at,
         "updated_at": server.updated_at
@@ -132,7 +133,8 @@ def create_server(server: ServerCreate, db: Session = Depends(get_db)):
         password=server.password.get_secret_value() if server.password else None,
         description=server.description,
         tags=server.tags,
-        region=server.region
+        region=server.region,
+        schedulable=server.schedulable
     )
 
     db.add(db_server)

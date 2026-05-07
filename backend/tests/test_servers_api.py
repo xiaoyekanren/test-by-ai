@@ -21,6 +21,7 @@ def test_create_server(client):
     data = response.json()
     assert data["name"] == "test-server"
     assert data["id"] == 1
+    assert data["schedulable"] is True
 
 def test_create_server_with_all_fields(client):
     response = client.post("/api/servers", json={
@@ -30,7 +31,8 @@ def test_create_server_with_all_fields(client):
         "username": "admin",
         "password": "secret",
         "description": "Test server description",
-        "tags": "production,linux"
+        "tags": "production,linux",
+        "schedulable": False
     })
     assert response.status_code == 201
     data = response.json()
@@ -40,6 +42,7 @@ def test_create_server_with_all_fields(client):
     assert data["username"] == "admin"
     assert data["description"] == "Test server description"
     assert data["tags"] == "production,linux"
+    assert data["schedulable"] is False
 
 def test_create_duplicate_server(client):
     client.post("/api/servers", json={"name": "duplicate-test", "host": "192.168.1.1"})
@@ -59,10 +62,11 @@ def test_get_server_not_found(client):
 
 def test_update_server(client):
     client.post("/api/servers", json={"name": "test", "host": "192.168.1.1"})
-    response = client.put("/api/servers/1", json={"host": "192.168.1.2"})
+    response = client.put("/api/servers/1", json={"host": "192.168.1.2", "schedulable": False})
     assert response.status_code == 200
     data = response.json()
     assert data["host"] == "192.168.1.2"
+    assert data["schedulable"] is False
 
 def test_update_server_name_conflict(client):
     client.post("/api/servers", json={"name": "server1", "host": "192.168.1.1"})

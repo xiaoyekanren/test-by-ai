@@ -26,7 +26,11 @@ class ClusterHandlersMixin:
         deploy_targets = self._group_cluster_entries_by_install(config_nodes + data_nodes)
 
         for target in deploy_targets:
-            server = self._require_server({"server_id": target["server_id"]}, context)
+            server = self._require_server({
+                "server_id": target["server_id"],
+                "_schedule_mode": config.get("_schedule_mode"),
+                "_schedule_region": config.get("_schedule_region"),
+            }, context)
             entries = target["entries"]
             deploy_result = self._deploy_package_to_server(
                 server=server,

@@ -68,6 +68,7 @@ class ExecutionEngine(
             "iotdb_cluster_start": self._execute_iotdb_cluster_start_node,
             "iotdb_cluster_check": self._execute_iotdb_cluster_check_node,
             "iotdb_cluster_stop": self._execute_iotdb_cluster_stop_node,
+            "iot_benchmark_deploy": self._execute_iot_benchmark_deploy_node,
             "iot_benchmark_start": self._execute_iot_benchmark_start_node,
             "iot_benchmark_wait": self._execute_iot_benchmark_wait_node,
             "condition": self._execute_condition_node,
@@ -179,6 +180,10 @@ class ExecutionEngine(
 
         nodes = workflow.nodes or []
         edges = workflow.edges or []
+        workflow_context = {
+            "_schedule_mode": workflow.schedule_mode,
+            "_schedule_region": workflow.schedule_region,
+        }
         passed_count = 0
         failed_count = 0
         skipped_count = 0
@@ -258,7 +263,10 @@ class ExecutionEngine(
                     ]
                     for node_id in ready:
                         pending.remove(node_id)
-                        context = self._merge_parent_contexts(parents[node_id], context_updates)
+                        context = {
+                            **workflow_context,
+                            **self._merge_parent_contexts(parents[node_id], context_updates),
+                        }
                         future = executor.submit(
                             self._execute_workflow_node,
                             execution_id,

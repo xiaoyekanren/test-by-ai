@@ -15,6 +15,7 @@ class ServerBase(BaseModel):
     description: Optional[str] = None
     tags: Optional[str] = Field(default=None, max_length=200)
     region: REGION_OPTIONS = Field(default="私有云")
+    schedulable: bool = True
 
 class ServerCreate(ServerBase):
     pass
@@ -28,6 +29,7 @@ class ServerUpdate(BaseModel):
     description: Optional[str] = None
     tags: Optional[str] = None
     region: Optional[REGION_OPTIONS] = None
+    schedulable: Optional[bool] = None
 
 class ServerResponse(BaseModel):
     id: int
@@ -39,6 +41,7 @@ class ServerResponse(BaseModel):
     tags: Optional[str] = Field(default=None, max_length=200)
     status: str = "offline"
     region: REGION_OPTIONS = "私有云"
+    schedulable: bool = True
     is_busy: bool = False
     created_at: datetime
     updated_at: datetime

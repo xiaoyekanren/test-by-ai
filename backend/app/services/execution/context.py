@@ -20,6 +20,7 @@ class ContextMixin:
             "cluster_name",
             "config_nodes",
             "data_nodes",
+            "benchmark_home",
             "benchmark_run",
             "benchmark_result",
             "region",
@@ -41,16 +42,19 @@ class ContextMixin:
         updates: Dict[str, Any] = {}
         server_id = config.get("server_id")
         if server_id is not None:
+            role = self._schedule_role({**config, "_node_type": node_type})
             updates["server_id"] = server_id
             server = self.db.query(Server).filter(Server.id == int(server_id)).first()
             if server:
                 updates["host"] = server.host
                 updates["region"] = server.region
+                updates["_scheduled_servers"] = self._scheduled_server_context(role, server)
 
         for key in [
             "node_role", "iotdb_home", "conf_path", "rpc_port", "wait_port",
             "remote_package_path", "backup_path", "cluster_name", "config_nodes",
-            "data_nodes", "benchmark_run", "benchmark_result", "target_host", "region"
+            "data_nodes", "benchmark_home", "benchmark_run", "benchmark_result",
+            "target_host", "region"
         ]:
             if key in result and result[key] not in (None, ""):
                 updates[key] = result[key]

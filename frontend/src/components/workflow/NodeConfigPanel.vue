@@ -61,6 +61,7 @@ const keyValueDraftSnapshots = ref<Record<string, string>>({})
 
 // Get selected node
 const selectedNode = computed(() => workflowsStore.selectedNode)
+const isRandomScheduling = computed(() => workflowsStore.scheduleMode === 'random')
 
 const nodeHelpText = computed(() => {
   if (!selectedNode.value) return ''
@@ -83,6 +84,10 @@ const nodeHelpText = computed(() => {
 
   if (selectedNode.value.data.nodeType === 'iot_benchmark_start') {
     return '在后台启动一次 IoT Benchmark 运行。后续节点可继续执行，Wait IoT Benchmark 会轮询远程进程。'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iot_benchmark_deploy') {
+    return '部署 IoT Benchmark 客户端，后续 Start IoT Benchmark 会自动继承 benchmark_home。'
   }
 
   if (selectedNode.value.data.nodeType === 'iot_benchmark_wait') {
@@ -181,10 +186,10 @@ const cancelEditLabel = () => {
 const updateConfig = (field: string, value: unknown) => {
   if (!selectedNode.value) return
   const nextConfig: Record<string, unknown> = { [field]: value }
-  const isIotdbDeploy = selectedNode.value.data.nodeType === 'iotdb_deploy'
+  const isPackageDeployNode = ['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)
   const hasPackageSource = typeof value === 'string' ? value.trim() !== '' : Boolean(value)
 
-  if (isIotdbDeploy && field === 'package_source') {
+  if (isPackageDeployNode && field === 'package_source') {
     if (value === 'local') {
       nextConfig.package_url = ''
     }
@@ -192,11 +197,11 @@ const updateConfig = (field: string, value: unknown) => {
       nextConfig.artifact_local_path = ''
     }
   }
-  if (isIotdbDeploy && hasPackageSource && field === 'artifact_local_path') {
+  if (isPackageDeployNode && hasPackageSource && field === 'artifact_local_path') {
     nextConfig.package_source = 'local'
     nextConfig.package_url = ''
   }
-  if (isIotdbDeploy && hasPackageSource && field === 'package_url') {
+  if (isPackageDeployNode && hasPackageSource && field === 'package_url') {
     nextConfig.package_source = 'url'
     nextConfig.artifact_local_path = ''
   }
@@ -225,7 +230,7 @@ const updateRegionConfig = (value: string | null | undefined) => {
 // Get config value
 const getConfigValue = (field: string): unknown => {
   if (!selectedNode.value) return null
-  if (selectedNode.value.data.nodeType === 'iotdb_deploy' && field === 'package_source') {
+  if (['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType) && field === 'package_source') {
     const explicitSource = selectedNode.value.data.config.package_source
     return explicitSource === 'url' ? 'url' : 'local'
   }
@@ -494,6 +499,26 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Stop nodes gracefully before forcing' },
       { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
     ],
+    iot_benchmark_deploy: [
+      { field: 'server_id', label: 'Benchmark Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'package_source', label: 'Package Source', type: 'select', options: [
+        { value: 'local', label: 'Upload Local Artifact' },
+        { value: 'url', label: 'Download from URL' }
+      ]},
+      { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: 'D:\\ImportantFolder\\Desktop\\test-by-ai\\data\\iot-benchmark-iotdb-2.0-java8.zip' },
+      { field: 'package_url', label: 'Package URL', type: 'text', placeholder: 'https://example.com/iot-benchmark-iotdb-2.0-java8.zip' },
+      { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/iot-benchmark-iotdb-2.0-java8.zip' },
+      { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iot-benchmark-iotdb-2.0-java8' },
+      { field: 'package_type', label: 'Package Type', type: 'select', options: [
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'zip', label: 'ZIP' },
+        { value: 'tar.gz', label: 'tar.gz' }
+      ]},
+      { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
+      { field: 'overwrite', label: 'Overwrite Install Directory', type: 'checkbox', placeholder: 'Remove existing install directory before deploy' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
+    ],
     iot_benchmark_start: [
       { field: 'server_id', label: 'Benchmark Server', type: 'server' },
       { field: 'region', label: 'Region', type: 'region' },
@@ -522,6 +547,30 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       ]},
       { field: 'loop', label: 'Loop', type: 'number', min: 1, max: 100000000 },
       { field: 'operation_proportion', label: 'Operation Proportion', type: 'text', placeholder: '1:0:0:0:0:0:0:0:0:0:0:0' },
+      { field: 'device_number', label: 'Device Number', type: 'number', min: 1, max: 100000000 },
+      { field: 'sensor_number', label: 'Sensor Number', type: 'number', min: 1, max: 1000000 },
+      { field: 'data_client_number', label: 'Data Clients', type: 'number', min: 1, max: 10000 },
+      { field: 'schema_client_number', label: 'Schema Clients', type: 'number', min: 1, max: 10000 },
+      { field: 'batch_size_per_write', label: 'Batch Size Per Write', type: 'number', min: 1, max: 100000 },
+      { field: 'device_num_per_write', label: 'Devices Per Write', type: 'number', min: 1, max: 100000 },
+      { field: 'create_schema', label: 'Create Schema', type: 'checkbox', placeholder: 'CREATE_SCHEMA' },
+      { field: 'is_delete_data', label: 'Delete Data Before Run', type: 'checkbox', placeholder: 'IS_DELETE_DATA' },
+      { field: 'point_step', label: 'Point Step', type: 'number', min: 1, max: 100000000 },
+      { field: 'query_sensor_num', label: 'Query Sensor Num', type: 'number', min: 1, max: 1000000 },
+      { field: 'query_device_num', label: 'Query Device Num', type: 'number', min: 1, max: 1000000 },
+      { field: 'query_interval', label: 'Query Interval', type: 'number', min: 1, max: 1000000000 },
+      { field: 'write_operation_timeout_ms', label: 'Write Timeout (ms)', type: 'number', min: 1, max: 86400000 },
+      { field: 'read_operation_timeout_ms', label: 'Read Timeout (ms)', type: 'number', min: 1, max: 86400000 },
+      { field: 'test_max_time', label: 'Max Test Time', type: 'number', min: 0, max: 86400000 },
+      { field: 'result_print_interval', label: 'Result Print Interval', type: 'number', min: 1, max: 86400 },
+      { field: 'enable_fixed_query', label: 'Enable Fixed Query', type: 'checkbox', placeholder: 'ENABLE_FIXED_QUERY' },
+      { field: 'test_data_persistence', label: 'Result Persistence', type: 'select', options: [
+        { value: 'None', label: 'None' },
+        { value: 'CSV', label: 'CSV' },
+        { value: 'MySQL', label: 'MySQL' },
+        { value: 'IoTDB', label: 'IoTDB' }
+      ]},
+      { field: 'csv_output', label: 'CSV Output', type: 'checkbox', placeholder: 'CSV_OUTPUT' },
       { field: 'config_items', label: 'Extra Config Items', type: 'keyValue', placeholder: 'Override config.properties item' },
       { field: 'timeout', label: 'Start Timeout (seconds)', type: 'number', min: 1, max: 600 }
     ],
@@ -607,8 +656,8 @@ const getFieldSection = (field: FieldDefinition) => {
   if (['package_source', 'artifact_local_path', 'package_url', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
   if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'benchmark_home'].includes(field.field)) return 'paths'
   if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
-  if (['poll_interval_seconds', 'tail_lines', 'kill_on_timeout', 'loop'].includes(field.field)) return 'runtime'
-  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write', 'work_mode', 'operation_proportion'].includes(field.field)) return 'configuration'
+  if (['poll_interval_seconds', 'tail_lines', 'kill_on_timeout', 'loop', 'test_max_time', 'result_print_interval', 'write_operation_timeout_ms', 'read_operation_timeout_ms'].includes(field.field)) return 'runtime'
+  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write', 'work_mode', 'operation_proportion', 'device_number', 'sensor_number', 'data_client_number', 'schema_client_number', 'batch_size_per_write', 'device_num_per_write', 'create_schema', 'is_delete_data', 'point_step', 'query_sensor_num', 'query_device_num', 'query_interval', 'enable_fixed_query', 'test_data_persistence', 'csv_output'].includes(field.field)) return 'configuration'
   if (['command', 'commands', 'sqls', 'validation_sqls', 'expression', 'condition'].includes(field.field)) return 'command'
   if (['assert_type', 'params', 'expected', 'iterations', 'interval', 'max_concurrent'].includes(field.field)) return 'checks'
   if (['recipient', 'template'].includes(field.field)) return 'notification'
@@ -621,10 +670,13 @@ const fieldSections = computed<FieldSection[]>(() => {
 
   const sections: FieldSection[] = []
   for (const field of getFieldDefinitions(selectedNode.value.data.nodeType as NodeType)) {
-    if (selectedNode.value.data.nodeType === 'iotdb_deploy') {
+    if (['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)) {
       const packageSource = getConfigValue('package_source')
       if (field.field === 'artifact_local_path' && packageSource === 'url') continue
       if (field.field === 'package_url' && packageSource !== 'url') continue
+    }
+    if (isRandomScheduling.value && ['server_id', 'region'].includes(field.field)) {
+      continue
     }
 
     const key = getFieldSection(field)

@@ -53,6 +53,8 @@ def test_cluster_deploy_deploys_and_writes_role_configs(db_session):
     engine.ssh_service = fake_ssh
 
     result = engine._execute_iotdb_cluster_deploy_node({
+        "_schedule_mode": "fixed",
+        "_schedule_region": "公司",
         "remote_package_path": "/tmp/apache-iotdb-bin.zip",
         "install_dir": "/opt/iotdb-cluster",
         "cluster_name": "prodCluster",
@@ -95,6 +97,8 @@ def test_cluster_deploy_deploys_once_and_merges_config_for_colocated_roles(db_se
     engine.ssh_service = fake_ssh
 
     result = engine._execute_iotdb_cluster_deploy_node({
+        "_schedule_mode": "fixed",
+        "_schedule_region": "公司",
         "remote_package_path": "/tmp/apache-iotdb-bin.zip",
         "install_dir": "/opt/iotdb",
         "cluster_name": "prodCluster",

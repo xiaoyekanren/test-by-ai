@@ -20,9 +20,7 @@ venv
 
 
 # program
-data/logs/
-data/pids/
-data/deps/
-data/app.db
+data/*
+!data/app.db.example
 release/
 

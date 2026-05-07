@@ -3,7 +3,9 @@ import { computed } from 'vue'
 import {
   ElButton,
   ElTooltip,
-  ElSwitch
+  ElSwitch,
+  ElSelect,
+  ElOption
 } from 'element-plus'
 import {
   DocumentChecked,
@@ -26,6 +28,9 @@ const props = defineProps<{
   canRedo: boolean
   canRun: boolean
   runBlockedReason: string
+  scheduleMode: 'fixed' | 'random'
+  scheduleRegion: string
+  regionOptions: string[]
 }>()
 
 const emit = defineEmits<{
@@ -37,6 +42,8 @@ const emit = defineEmits<{
   (e: 'zoomOut'): void
   (e: 'fitView'): void
   (e: 'run'): void
+  (e: 'scheduleModeChange', value: 'fixed' | 'random'): void
+  (e: 'scheduleRegionChange', value: string): void
 }>()
 
 const handleSave = () => {
@@ -69,6 +76,14 @@ const handleFitView = () => {
 
 const handleRun = () => {
   emit('run')
+}
+
+const handleScheduleModeChange = (value: string | number | boolean) => {
+  emit('scheduleModeChange', value === 'random' ? 'random' : 'fixed')
+}
+
+const handleScheduleRegionChange = (value: string | number | boolean) => {
+  emit('scheduleRegionChange', String(value || '私有云'))
 }
 
 const pageTitle = computed(() => {
@@ -133,6 +148,31 @@ const pageTitle = computed(() => {
     </div>
 
     <div class="toolbar-right">
+      <div class="schedule-controls">
+        <ElSelect
+          :model-value="scheduleMode"
+          size="small"
+          class="schedule-mode-select"
+          @update:model-value="handleScheduleModeChange"
+        >
+          <ElOption label="固定主机" value="fixed" />
+          <ElOption label="随机调度" value="random" />
+        </ElSelect>
+        <ElSelect
+          v-if="scheduleMode === 'random'"
+          :model-value="scheduleRegion"
+          size="small"
+          class="schedule-region-select"
+          @update:model-value="handleScheduleRegionChange"
+        >
+          <ElOption
+            v-for="region in regionOptions"
+            :key="region"
+            :label="region"
+            :value="region"
+          />
+        </ElSelect>
+      </div>
       <div class="auto-save-toggle">
         <span class="label">Auto Save</span>
         <ElSwitch
@@ -220,6 +260,20 @@ const pageTitle = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.schedule-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-mode-select {
+  width: 112px;
+}
+
+.schedule-region-select {
+  width: 120px;
 }
 
 .auto-save-toggle {

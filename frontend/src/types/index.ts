@@ -251,6 +251,29 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     inputs: 1,
     outputs: 1
   },
+  iot_benchmark_deploy: {
+    type: 'iot_benchmark_deploy',
+    label: 'Deploy IoT Benchmark',
+    category: 'iotdb',
+    icon: 'Download',
+    color: '#C0392B',
+    description: '部署 IoT Benchmark 客户端',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      package_source: 'local',
+      artifact_local_path: '',
+      package_url: '',
+      remote_package_path: '/tmp/iot-benchmark-iotdb-2.0-java8.zip',
+      install_dir: '/opt/iot-benchmark-iotdb-2.0-java8',
+      package_type: 'auto',
+      extract_subdir: '',
+      overwrite: false,
+      timeout: 600
+    },
+    inputs: 1,
+    outputs: 1
+  },
   iot_benchmark_start: {
     type: 'iot_benchmark_start',
     label: 'Start IoT Benchmark',
@@ -272,6 +295,25 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
       work_mode: 'testWithDefaultPath',
       loop: 100,
       operation_proportion: '1:0:0:0:0:0:0:0:0:0:0:0',
+      device_number: 6000,
+      sensor_number: 200,
+      data_client_number: 20,
+      schema_client_number: 20,
+      batch_size_per_write: 100,
+      device_num_per_write: 1,
+      create_schema: true,
+      is_delete_data: true,
+      point_step: 5000,
+      query_sensor_num: 1,
+      query_device_num: 1,
+      query_interval: 250000,
+      write_operation_timeout_ms: 120000,
+      read_operation_timeout_ms: 300000,
+      test_max_time: 0,
+      result_print_interval: 3600,
+      enable_fixed_query: true,
+      test_data_persistence: 'None',
+      csv_output: true,
       config_items: {},
       timeout: 60
     },
@@ -422,6 +464,7 @@ export interface Server {
   tags: string | null
   status: string
   region: string
+  schedulable: boolean
   is_busy: boolean
   created_at: string
   updated_at: string
@@ -436,6 +479,7 @@ export interface ServerCreate {
   description?: string | null
   tags?: string | null
   region?: string
+  schedulable?: boolean
 }
 
 export interface ServerUpdate {
@@ -447,6 +491,7 @@ export interface ServerUpdate {
   description?: string | null
   tags?: string | null
   region?: string
+  schedulable?: boolean
 }
 
 export interface ServerTestResult {
@@ -485,6 +530,7 @@ export type NodeType =
   | "iotdb_cluster_start"
   | "iotdb_cluster_check"
   | "iotdb_cluster_stop"
+  | "iot_benchmark_deploy"
   | "iot_benchmark_start"
   | "iot_benchmark_wait"
   | "condition"
@@ -516,6 +562,8 @@ export interface Workflow {
   nodes: NodeDefinition[]
   edges: EdgeDefinition[]
   variables: Record<string, string>
+  schedule_mode: 'fixed' | 'random'
+  schedule_region: string
   created_at: string
   updated_at: string
 }
@@ -526,6 +574,8 @@ export interface WorkflowCreate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  schedule_mode?: 'fixed' | 'random'
+  schedule_region?: string
 }
 
 export interface WorkflowUpdate {
@@ -534,6 +584,8 @@ export interface WorkflowUpdate {
   nodes?: NodeDefinition[]
   edges?: EdgeDefinition[]
   variables?: Record<string, string>
+  schedule_mode?: 'fixed' | 'random'
+  schedule_region?: string
 }
 
 // Execution related types
