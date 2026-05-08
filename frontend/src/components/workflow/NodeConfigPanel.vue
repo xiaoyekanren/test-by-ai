@@ -507,7 +507,7 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
         { value: 'url', label: 'Download from URL' }
       ]},
       { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: 'D:\\ImportantFolder\\Desktop\\test-by-ai\\data\\iot-benchmark-iotdb-2.0-java8.zip' },
-      { field: 'package_url', label: 'Package URL', type: 'text', placeholder: 'https://example.com/iot-benchmark-iotdb-2.0-java8.zip' },
+      { field: 'package_url', label: 'Package URL', type: 'text', placeholder: 'http://172.20.31.2:8080/download/others/iot-benchmark-iotdb-2.0-java8.zip' },
       { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/iot-benchmark-iotdb-2.0-java8.zip' },
       { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iot-benchmark-iotdb-2.0-java8' },
       { field: 'package_type', label: 'Package Type', type: 'select', options: [

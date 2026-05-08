@@ -261,9 +261,9 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     defaultConfig: {
       server_id: null,
       region: null,
-      package_source: 'local',
+      package_source: 'url',
       artifact_local_path: '',
-      package_url: '',
+      package_url: 'http://172.20.31.2:8080/download/others/iot-benchmark-iotdb-2.0-java8.zip',
       remote_package_path: '/tmp/iot-benchmark-iotdb-2.0-java8.zip',
       install_dir: '/opt/iot-benchmark-iotdb-2.0-java8',
       package_type: 'auto',
