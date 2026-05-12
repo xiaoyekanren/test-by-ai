@@ -20,7 +20,7 @@ from pathlib import Path
 # Configuration
 PROJECT_NAME = "testflow"
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 8000
+BACKEND_PORT = 4399
 FRONTEND_PORT = 5173
 DATA_DIR = ROOT_DIR / "data"
 PID_DIR = DATA_DIR / "pids"

@@ -20,6 +20,13 @@ class ContextMixin:
             "cluster_name",
             "config_nodes",
             "data_nodes",
+            "ainode_home",
+            "ainode_conf_path",
+            "ain_rpc_address",
+            "ain_rpc_port",
+            "ain_seed_config_node",
+            "ain_cluster_ingress_address",
+            "ain_cluster_ingress_port",
             "benchmark_home",
             "benchmark_run",
             "benchmark_result",
@@ -53,8 +60,10 @@ class ContextMixin:
         for key in [
             "node_role", "iotdb_home", "conf_path", "rpc_port", "wait_port",
             "remote_package_path", "backup_path", "cluster_name", "config_nodes",
-            "data_nodes", "benchmark_home", "benchmark_run", "benchmark_result",
-            "target_host", "region"
+            "data_nodes", "ainode_home", "ainode_conf_path", "ain_rpc_address",
+            "ain_rpc_port", "ain_seed_config_node", "ain_cluster_ingress_address",
+            "ain_cluster_ingress_port", "benchmark_home", "benchmark_run",
+            "benchmark_result", "target_host", "region"
         ]:
             if key in result and result[key] not in (None, ""):
                 updates[key] = result[key]

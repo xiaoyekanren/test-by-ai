@@ -36,7 +36,7 @@ manage.bat status
 启动成功后访问：
 
 - 前端: `http://localhost:5173`
-- API 文档: `http://localhost:8000/docs`
+- API 文档: `http://localhost:4399/docs`
 
 ## 打包发布
 

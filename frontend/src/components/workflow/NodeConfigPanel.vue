@@ -98,6 +98,14 @@ const nodeHelpText = computed(() => {
     return '可使用本地制品路径或安装包 URL 作为安装包来源。所选安装包将暂存在远程安装包路径后再进行部署。'
   }
 
+  if (selectedNode.value.data.nodeType === 'iotdb_ainode_deploy') {
+    return '部署 AINode 后会写入 iotdb-ainode.properties。若前序连接了集群部署节点，会自动继承 ConfigNode/DataNode 拓扑。'
+  }
+
+  if (selectedNode.value.data.nodeType === 'iotdb_ainode_check') {
+    return '此节点通过 DataNode CLI 执行 show ainodes。若继承了集群拓扑，会优先使用第一个 DataNode。'
+  }
+
   return ''
 })
 
@@ -186,7 +194,7 @@ const cancelEditLabel = () => {
 const updateConfig = (field: string, value: unknown) => {
   if (!selectedNode.value) return
   const nextConfig: Record<string, unknown> = { [field]: value }
-  const isPackageDeployNode = ['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)
+  const isPackageDeployNode = ['iotdb_deploy', 'iotdb_ainode_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)
   const hasPackageSource = typeof value === 'string' ? value.trim() !== '' : Boolean(value)
 
   if (isPackageDeployNode && field === 'package_source') {
@@ -230,7 +238,7 @@ const updateRegionConfig = (value: string | null | undefined) => {
 // Get config value
 const getConfigValue = (field: string): unknown => {
   if (!selectedNode.value) return null
-  if (['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType) && field === 'package_source') {
+  if (['iotdb_deploy', 'iotdb_ainode_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType) && field === 'package_source') {
     const explicitSource = selectedNode.value.data.config.package_source
     return explicitSource === 'url' ? 'url' : 'local'
   }
@@ -327,7 +335,7 @@ const getFieldLayoutClass = (field: FieldDefinition) => {
   if (field.type === 'number') return 'field-compact field-inline'
   if (field.type === 'checkbox') return 'field-compact field-inline'
   if (['host', 'username', 'password', 'node_role', 'package_source', 'package_type', 'wait_strategy', 'sql_dialect', 'format', 'type', 'region'].includes(field.field)) return 'field-medium field-inline'
-  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'package_url', 'remote_package_path'].includes(field.field)) return 'field-wide field-inline'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'artifact_local_path', 'package_url', 'remote_package_path', 'ainode_home', 'ain_seed_config_node', 'ain_cluster_ingress_address'].includes(field.field)) return 'field-wide field-inline'
   if (field.type === 'server' || field.type === 'region') return 'field-wide field-inline'
   return 'field-wide field-inline'
 }
@@ -499,6 +507,72 @@ const getFieldDefinitions = (nodeType: NodeType): FieldDefinition[] => {
       { field: 'graceful', label: 'Graceful Shutdown', type: 'checkbox', placeholder: 'Stop nodes gracefully before forcing' },
       { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
     ],
+    iotdb_ainode_deploy: [
+      { field: 'server_id', label: 'AINode Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'package_source', label: 'Package Source', type: 'select', options: [
+        { value: 'local', label: 'Upload Local Artifact' },
+        { value: 'url', label: 'Download from URL' }
+      ]},
+      { field: 'artifact_local_path', label: 'Artifact Local Path', type: 'text', placeholder: '/Users/zzm/Downloads/timechodb-2.0.9.2-ainode-bin' },
+      { field: 'package_url', label: 'Package URL', type: 'text', placeholder: 'https://example.com/timechodb-ainode-bin.tar.gz' },
+      { field: 'remote_package_path', label: 'Remote Package Path', type: 'text', placeholder: '/tmp/timechodb-2.0.9.2-ainode-bin.tar.gz' },
+      { field: 'install_dir', label: 'Install Directory', type: 'text', placeholder: '/opt/iotdb-ainode' },
+      { field: 'package_type', label: 'Package Type', type: 'select', options: [
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'zip', label: 'ZIP' },
+        { value: 'tar.gz', label: 'tar.gz' }
+      ]},
+      { field: 'extract_subdir', label: 'Extract Subdirectory', type: 'text', placeholder: 'Optional inner directory name' },
+      { field: 'overwrite', label: 'Overwrite Install Directory', type: 'checkbox', placeholder: 'Remove existing install directory before deploy' },
+      { field: 'cluster_name', label: 'Cluster Name', type: 'text', placeholder: 'defaultCluster' },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Inherited from cluster deploy node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Inherited from cluster deploy node' },
+      { field: 'ain_seed_config_node', label: 'AIN Seed ConfigNode', type: 'text', placeholder: 'Optional, e.g. 10.0.0.1:10710' },
+      { field: 'ain_rpc_address', label: 'AIN RPC Address', type: 'text', placeholder: 'Optional, defaults to AINode server host' },
+      { field: 'ain_rpc_port', label: 'AIN RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'ain_cluster_ingress_address', label: 'Ingress DataNode Host', type: 'text', placeholder: 'Optional, inherited from first DataNode' },
+      { field: 'ain_cluster_ingress_port', label: 'Ingress DataNode Port', type: 'number', min: 1, max: 65535 },
+      { field: 'username', label: 'Ingress Username', type: 'text', placeholder: 'root' },
+      { field: 'password', label: 'Ingress Password', type: 'text', placeholder: 'root' },
+      { field: 'config_items', label: 'Extra AINode Config', type: 'keyValue', placeholder: 'e.g. ain_inference_memory_usage_ratio = 0.2' },
+      { field: 'backup_before_write', label: 'Backup Before Write', type: 'checkbox', placeholder: 'Create a backup before applying overrides' },
+      { field: 'timeout', label: 'Timeout (seconds)', type: 'number', min: 1, max: 3600 }
+    ],
+    iotdb_ainode_start: [
+      { field: 'server_id', label: 'AINode Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'ainode_home', label: 'AINode Home', type: 'text', placeholder: '/opt/iotdb-ainode' },
+      { field: 'ain_rpc_address', label: 'AIN RPC Address', type: 'text', placeholder: 'Optional, defaults to server host' },
+      { field: 'ain_rpc_port', label: 'AIN RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'wait_port', label: 'Wait Port', type: 'number', min: 1, max: 65535 },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
+    ],
+    iotdb_ainode_stop: [
+      { field: 'server_id', label: 'AINode Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'ainode_home', label: 'AINode Home', type: 'text', placeholder: '/opt/iotdb-ainode' },
+      { field: 'ain_rpc_port', label: 'AIN RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'remove_target', label: 'Remove Target', type: 'text', placeholder: 'Optional host:port override for stop script' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 600 }
+    ],
+    iotdb_ainode_check: [
+      { field: 'server_id', label: 'CLI Server', type: 'server' },
+      { field: 'region', label: 'Region', type: 'region' },
+      { field: 'iotdb_home', label: 'IoTDB Home', type: 'text', placeholder: '/opt/iotdb-cluster' },
+      { field: 'host', label: 'DataNode Host', type: 'text', placeholder: 'Optional, inherited from first DataNode' },
+      { field: 'rpc_port', label: 'DataNode RPC Port', type: 'number', min: 1, max: 65535 },
+      { field: 'config_nodes', label: 'Config Nodes', type: 'clusterNodes', placeholder: 'Inherited from cluster deploy/start node' },
+      { field: 'data_nodes', label: 'Data Nodes', type: 'clusterNodes', placeholder: 'Inherited from cluster deploy/start node' },
+      { field: 'username', label: 'Username', type: 'text', placeholder: 'root' },
+      { field: 'password', label: 'Password', type: 'text', placeholder: 'root' },
+      { field: 'sql_dialect', label: 'SQL Dialect', type: 'select', options: [
+        { value: 'tree', label: 'Tree' },
+        { value: 'table', label: 'Table' }
+      ]},
+      { field: 'validation_sqls', label: 'Validation SQLs', type: 'textarea', placeholder: 'Optional extra SQL statements, one per line...' },
+      { field: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 1800 }
+    ],
     iot_benchmark_deploy: [
       { field: 'server_id', label: 'Benchmark Server', type: 'server' },
       { field: 'region', label: 'Region', type: 'region' },
@@ -651,13 +725,13 @@ const fieldSectionTitles: Record<string, string> = {
 }
 
 const getFieldSection = (field: FieldDefinition) => {
-  if (['server_id', 'host', 'target_host', 'username', 'password', 'region'].includes(field.field)) return 'connection'
+  if (['server_id', 'host', 'target_host', 'username', 'password', 'region', 'ain_rpc_address', 'ain_cluster_ingress_address'].includes(field.field)) return 'connection'
   if (['db_switch', 'dialect', 'db_name'].includes(field.field)) return 'connection'
   if (['package_source', 'artifact_local_path', 'package_url', 'remote_package_path', 'package_type', 'extract_subdir', 'overwrite'].includes(field.field)) return 'package'
-  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'benchmark_home'].includes(field.field)) return 'paths'
-  if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful'].includes(field.field)) return 'runtime'
+  if (['local_path', 'remote_path', 'file_path', 'iotdb_home', 'install_dir', 'benchmark_home', 'ainode_home'].includes(field.field)) return 'paths'
+  if (['timeout', 'timeout_seconds', 'retry', 'rpc_port', 'wait_port', 'node_role', 'wait_strategy', 'graceful', 'ain_rpc_port', 'ain_cluster_ingress_port'].includes(field.field)) return 'runtime'
   if (['poll_interval_seconds', 'tail_lines', 'kill_on_timeout', 'loop', 'test_max_time', 'result_print_interval', 'write_operation_timeout_ms', 'read_operation_timeout_ms'].includes(field.field)) return 'runtime'
-  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write', 'work_mode', 'operation_proportion', 'device_number', 'sensor_number', 'data_client_number', 'schema_client_number', 'batch_size_per_write', 'device_num_per_write', 'create_schema', 'is_delete_data', 'point_step', 'query_sensor_num', 'query_device_num', 'query_interval', 'enable_fixed_query', 'test_data_persistence', 'csv_output'].includes(field.field)) return 'configuration'
+  if (['config_items', 'config_nodes', 'data_nodes', 'common_config', 'cluster_name', 'backup_before_write', 'ain_seed_config_node', 'work_mode', 'operation_proportion', 'device_number', 'sensor_number', 'data_client_number', 'schema_client_number', 'batch_size_per_write', 'device_num_per_write', 'create_schema', 'is_delete_data', 'point_step', 'query_sensor_num', 'query_device_num', 'query_interval', 'enable_fixed_query', 'test_data_persistence', 'csv_output'].includes(field.field)) return 'configuration'
   if (['command', 'commands', 'sqls', 'validation_sqls', 'expression', 'condition'].includes(field.field)) return 'command'
   if (['assert_type', 'params', 'expected', 'iterations', 'interval', 'max_concurrent'].includes(field.field)) return 'checks'
   if (['recipient', 'template'].includes(field.field)) return 'notification'
@@ -670,7 +744,7 @@ const fieldSections = computed<FieldSection[]>(() => {
 
   const sections: FieldSection[] = []
   for (const field of getFieldDefinitions(selectedNode.value.data.nodeType as NodeType)) {
-    if (['iotdb_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)) {
+  if (['iotdb_deploy', 'iotdb_ainode_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)) {
       const packageSource = getConfigValue('package_source')
       if (field.field === 'artifact_local_path' && packageSource === 'url') continue
       if (field.field === 'package_url' && packageSource !== 'url') continue
