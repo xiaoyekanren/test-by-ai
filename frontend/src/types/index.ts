@@ -691,7 +691,7 @@ export interface WorkflowUpdate {
 // Execution related types
 
 export type ExecutionStatus = "pending" | "running" | "paused" | "completed" | "failed" | "stopped"
-export type TriggerType = "manual" | "scheduled" | "api"
+export type TriggerType = "manual" | "scheduled" | "api" | "webhook"
 export type ExecutionResult = "passed" | "failed" | "partial"
 
 export interface Execution {
@@ -712,6 +712,58 @@ export interface ExecutionCreate {
   workflow_id: number
   trigger_type?: TriggerType
   triggered_by?: string | null
+}
+
+// GitLab webhook related types
+
+export interface GitLabWebhookRule {
+  id: number
+  name: string
+  enabled: boolean
+  workflow_ids: number[]
+  project_id: string | null
+  project_path: string | null
+  ref_patterns: string[]
+  secret_configured: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface GitLabWebhookRuleCreate {
+  name: string
+  enabled?: boolean
+  workflow_ids: number[]
+  project_id?: string | null
+  project_path?: string | null
+  ref_patterns?: string[]
+  secret_token: string
+}
+
+export interface GitLabWebhookRuleUpdate {
+  name?: string
+  enabled?: boolean
+  workflow_ids?: number[]
+  project_id?: string | null
+  project_path?: string | null
+  ref_patterns?: string[]
+  secret_token?: string
+}
+
+export interface GitLabWebhookEvent {
+  id: number
+  rule_id: number
+  event_uuid: string | null
+  project_id: string | null
+  project_path: string | null
+  ref: string | null
+  before_sha: string | null
+  after_sha: string | null
+  user_name: string | null
+  user_username: string | null
+  status: string
+  execution_ids: number[]
+  error: string | null
+  received_at: string
 }
 
 export type NodeExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'

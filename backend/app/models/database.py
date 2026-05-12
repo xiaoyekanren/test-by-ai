@@ -101,3 +101,50 @@ class SystemSetting(Base):
     key = Column(String(100), unique=True, nullable=False)
     value = Column(JSON, nullable=False)
     updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
+
+
+class GitLabWebhookRule(Base):
+    __tablename__ = "gitlab_webhook_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, server_default="1")
+    workflow_ids = Column(JSON, default=list)
+    project_id = Column(String(50))
+    project_path = Column(String(300))
+    ref_patterns = Column(JSON, default=list)
+    secret_hash = Column(String(100), nullable=False)
+    created_at = Column(UTCDateTime(), default=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
+
+    events = relationship("GitLabWebhookEvent", back_populates="rule")
+
+    def __init__(self, **kwargs):
+        if "enabled" not in kwargs:
+            kwargs["enabled"] = True
+        if "workflow_ids" not in kwargs:
+            kwargs["workflow_ids"] = []
+        if "ref_patterns" not in kwargs:
+            kwargs["ref_patterns"] = []
+        super().__init__(**kwargs)
+
+
+class GitLabWebhookEvent(Base):
+    __tablename__ = "gitlab_webhook_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_id = Column(Integer, ForeignKey("gitlab_webhook_rules.id"), nullable=False)
+    event_uuid = Column(String(100))
+    project_id = Column(String(50))
+    project_path = Column(String(300))
+    ref = Column(String(300))
+    before_sha = Column(String(80))
+    after_sha = Column(String(80))
+    user_name = Column(String(100))
+    user_username = Column(String(100))
+    status = Column(String(30), default="accepted")
+    execution_ids = Column(JSON, default=list)
+    error = Column(Text)
+    received_at = Column(UTCDateTime(), default=utc_now)
+
+    rule = relationship("GitLabWebhookRule", back_populates="events")

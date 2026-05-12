@@ -20,7 +20,7 @@ from pathlib import Path
 # Configuration
 PROJECT_NAME = "testflow"
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 4399
+BACKEND_PORT = 3389
 FRONTEND_PORT = 5173
 DATA_DIR = ROOT_DIR / "data"
 PID_DIR = DATA_DIR / "pids"
@@ -440,7 +440,7 @@ def get_pids_by_port(port):
     else:  # Linux/Mac
         try:
             result = subprocess.run(
-                ["lsof", "-i", f":{port}", "-t"],
+                ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
                 capture_output=True, text=True, timeout=5
             )
             if result.stdout.strip():
@@ -707,7 +707,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 5173
+BACKEND_PORT = 3389
 PID_DIR = Path("data/pids")
 LOG_DIR = Path("data/logs")
 DEP_STATE_DIR = Path("data/deps")

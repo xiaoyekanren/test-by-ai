@@ -19,7 +19,11 @@ import type {
   IoTDBFileInfo,
   IoTDBLogContent,
   IoTDBConfigContent,
-  IoTDBRestartResult
+  IoTDBRestartResult,
+  GitLabWebhookEvent,
+  GitLabWebhookRule,
+  GitLabWebhookRuleCreate,
+  GitLabWebhookRuleUpdate
 } from '@/types'
 
 const apiClient = axios.create({
@@ -112,6 +116,23 @@ export const executionsApi = {
 
   getNodes: (id: number): Promise<NodeExecution[]> =>
     apiClient.get(`/executions/${id}/nodes`)
+}
+
+export const webhooksApi = {
+  listGitLabRules: (): Promise<GitLabWebhookRule[]> =>
+    apiClient.get('/webhooks/gitlab/rules'),
+
+  createGitLabRule: (data: GitLabWebhookRuleCreate): Promise<GitLabWebhookRule> =>
+    apiClient.post('/webhooks/gitlab/rules', data),
+
+  updateGitLabRule: (id: number, data: GitLabWebhookRuleUpdate): Promise<GitLabWebhookRule> =>
+    apiClient.put(`/webhooks/gitlab/rules/${id}`, data),
+
+  deleteGitLabRule: (id: number): Promise<void> =>
+    apiClient.delete(`/webhooks/gitlab/rules/${id}`),
+
+  listGitLabEvents: (params?: { rule_id?: number; limit?: number }): Promise<GitLabWebhookEvent[]> =>
+    apiClient.get('/webhooks/gitlab/events', { params })
 }
 
 // Monitoring API

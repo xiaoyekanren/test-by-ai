@@ -1,11 +1,15 @@
+import json
 import logging
+import re
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.database import Execution, Workflow
+from app.models.database import Execution, NodeExecution, Workflow
+from app.config import BASE_DIR
 from app.services.ssh_service import SSHService
 from app.utils.time import utc_now
 
@@ -23,6 +27,9 @@ from .handlers import (
 )
 
 logger = logging.getLogger(__name__)
+
+WEBHOOK_EXECUTION_LOG_DIR = BASE_DIR / "data" / "logs" / "executions"
+SENSITIVE_KEY_PATTERN = re.compile(r"(password|passwd|secret|token|authorization|cookie|private[_-]?key)", re.IGNORECASE)
 
 
 class ExecutionEngine(
@@ -159,6 +166,82 @@ class ExecutionEngine(
             Execution.id == execution_id
         ).scalar()
         return dict(summary or {})
+
+    def _finalize_webhook_execution(self, execution: Execution) -> None:
+        if execution.trigger_type != "webhook":
+            return
+
+        try:
+            WEBHOOK_EXECUTION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+            log_path = WEBHOOK_EXECUTION_LOG_DIR / f"{execution.id}.jsonl"
+            node_executions = self.db.query(NodeExecution).filter(
+                NodeExecution.execution_id == execution.id
+            ).order_by(NodeExecution.id.asc()).all()
+
+            with open(log_path, "w", encoding="utf-8") as output:
+                output.write(json.dumps({
+                    "type": "execution",
+                    "execution_id": execution.id,
+                    "workflow_id": execution.workflow_id,
+                    "status": execution.status,
+                    "result": execution.result,
+                    "duration": execution.duration,
+                    "summary": self._redact_for_log(execution.summary or {}),
+                }, ensure_ascii=False) + "\n")
+
+                for node_execution in node_executions:
+                    output_data = node_execution.output_data or {}
+                    output.write(json.dumps({
+                        "type": "node",
+                        "node_execution_id": node_execution.id,
+                        "node_id": node_execution.node_id,
+                        "node_type": node_execution.node_type,
+                        "status": node_execution.status,
+                        "duration": node_execution.duration,
+                        "started_at": node_execution.started_at.isoformat() if node_execution.started_at else None,
+                        "finished_at": node_execution.finished_at.isoformat() if node_execution.finished_at else None,
+                        "error_message": self._truncate_log_value(node_execution.error_message),
+                        "stdout": self._truncate_log_value(output_data.get("stdout") if isinstance(output_data, dict) else None),
+                        "stderr": self._truncate_log_value(output_data.get("stderr") if isinstance(output_data, dict) else None),
+                        "error": self._truncate_log_value(output_data.get("error") if isinstance(output_data, dict) else None),
+                    }, ensure_ascii=False) + "\n")
+
+            for node_execution in node_executions:
+                node_execution.log_path = str(log_path)
+                node_execution.input_data = None
+                node_execution.output_data = None
+
+            execution.summary = {
+                **(execution.summary or {}),
+                "webhook_log_path": str(log_path),
+                "node_details_pruned": True,
+            }
+        except Exception as exc:
+            logger.exception("Failed to finalize webhook execution %s", execution.id)
+            execution.summary = {
+                **(execution.summary or {}),
+                "webhook_log_error": str(exc),
+            }
+
+    def _redact_for_log(self, value):
+        if isinstance(value, dict):
+            return {
+                key: "***"
+                if SENSITIVE_KEY_PATTERN.search(str(key))
+                else self._redact_for_log(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._redact_for_log(item) for item in value]
+        return self._truncate_log_value(value)
+
+    def _truncate_log_value(self, value, limit: int = 4000):
+        if value is None:
+            return None
+        text = str(value)
+        if len(text) <= limit:
+            return text
+        return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
 
     def execute_workflow(self, execution_id: int) -> None:
         execution = self.get_execution(execution_id)
@@ -368,6 +451,7 @@ class ExecutionEngine(
                 execution.status = "failed"
                 execution.result = "failed" if passed_count == 0 else "partial"
 
+            self._finalize_webhook_execution(execution)
             self.db.commit()
         except Exception as exc:
             logger.exception("Error in execution %s", execution_id)
@@ -385,4 +469,5 @@ class ExecutionEngine(
                     locals().get("statuses", {})
                 ),
             }
+            self._finalize_webhook_execution(execution)
             self.db.commit()
