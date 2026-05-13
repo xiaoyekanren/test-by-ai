@@ -262,7 +262,7 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
       server_id: null,
       region: null,
       package_source: 'local',
-      artifact_local_path: '/Users/zzm/Downloads/timechodb-2.0.9.2-ainode-bin',
+      artifact_local_path: '',
       package_url: '',
       remote_package_path: '/tmp/timechodb-2.0.9.2-ainode-bin.tar.gz',
       install_dir: '/opt/iotdb-ainode',

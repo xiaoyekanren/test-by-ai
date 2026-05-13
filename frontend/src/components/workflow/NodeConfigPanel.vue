@@ -744,7 +744,7 @@ const fieldSections = computed<FieldSection[]>(() => {
 
   const sections: FieldSection[] = []
   for (const field of getFieldDefinitions(selectedNode.value.data.nodeType as NodeType)) {
-  if (['iotdb_deploy', 'iotdb_ainode_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)) {
+    if (['iotdb_deploy', 'iotdb_ainode_deploy', 'iot_benchmark_deploy'].includes(selectedNode.value.data.nodeType)) {
       const packageSource = getConfigValue('package_source')
       if (field.field === 'artifact_local_path' && packageSource === 'url') continue
       if (field.field === 'package_url' && packageSource !== 'url') continue

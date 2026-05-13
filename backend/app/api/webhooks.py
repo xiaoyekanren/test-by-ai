@@ -1,6 +1,7 @@
 import fnmatch
 import hashlib
 import hmac
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
@@ -19,16 +20,43 @@ from app.services.execution_engine import ExecutionEngine
 
 router = APIRouter()
 
+logger = __import__("logging").getLogger(__name__)
+
+
+def _run_workflow_in_background(session_factory, execution_id: int) -> None:
+    """在独立 Session 中执行工作流，避免使用请求级 Session。"""
+    bg_session = session_factory()
+    try:
+        bg_engine = ExecutionEngine(bg_session, session_factory=session_factory)
+        bg_engine.execute_workflow(execution_id)
+    except Exception:
+        logger.exception("Background workflow execution %s failed", execution_id)
+    finally:
+        bg_session.close()
+
+
+_PBKDF2_ITERATIONS = 260_000
+
 
 def _hash_secret(secret: str) -> str:
-    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, _PBKDF2_ITERATIONS)
+    return f"pbkdf2:{salt.hex()}:{dk.hex()}"
 
 
 def _verify_secret(secret_hash: str, provided: Optional[str]) -> bool:
     if not secret_hash or not provided:
         return False
-    return hmac.compare_digest(secret_hash, _hash_secret(provided))
+    if secret_hash.startswith("pbkdf2:"):
+        parts = secret_hash.split(":", 2)
+        if len(parts) != 3:
+            return False
+        salt = bytes.fromhex(parts[1])
+        expected = bytes.fromhex(parts[2])
+        dk = hashlib.pbkdf2_hmac("sha256", provided.encode("utf-8"), salt, _PBKDF2_ITERATIONS)
+        return hmac.compare_digest(dk, expected)
+    # 兼容旧 sha256 格式
+    return hmac.compare_digest(secret_hash, f"sha256:{hashlib.sha256(provided.encode('utf-8')).hexdigest()}")
 
 
 def _rule_response(rule: GitLabWebhookRule) -> GitLabWebhookRuleResponse:
@@ -276,6 +304,7 @@ async def trigger_gitlab_webhook(
         )
 
     engine = ExecutionEngine(db)
+    session_factory = engine.session_factory
     execution_ids: List[int] = []
     for workflow_id in workflow_ids:
         execution = engine.create_execution(
@@ -294,7 +323,7 @@ async def trigger_gitlab_webhook(
         db.commit()
         db.refresh(execution)
         execution_ids.append(execution.id)
-        background_tasks.add_task(engine.execute_workflow, execution.id)
+        background_tasks.add_task(_run_workflow_in_background, session_factory, execution.id)
 
     _create_event(db, rule_id, summary, "accepted", execution_ids=execution_ids)
     return GitLabWebhookTriggerResponse(

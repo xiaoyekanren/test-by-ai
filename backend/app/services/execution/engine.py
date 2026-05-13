@@ -167,8 +167,8 @@ class ExecutionEngine(
         ).scalar()
         return dict(summary or {})
 
-    def _finalize_webhook_execution(self, execution: Execution) -> None:
-        if execution.trigger_type != "webhook":
+    def _finalize_webhook_execution(self, execution: Optional[Execution]) -> None:
+        if execution is None or getattr(execution, "trigger_type", None) != "webhook":
             return
 
         try:
