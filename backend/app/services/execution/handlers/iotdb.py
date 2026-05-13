@@ -52,7 +52,7 @@ class IoTDBHandlersMixin:
         wait_strategy = str(config.get("wait_strategy", "port"))
 
         script_name = self._start_script_for_role(role)
-        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name} && true"
+        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name}"
         start_result = self.ssh_service.run_command(
             host=server.host,
             username=server.username,
@@ -61,10 +61,8 @@ class IoTDBHandlersMixin:
             port=server.port,
             timeout=min(timeout_seconds, 60)
         )
-        if start_result.exit_status != 0:
-            payload = self._ssh_result_to_dict(start_result)
-            payload.update({"iotdb_home": iotdb_home, "rpc_port": rpc_port, "wait_port": wait_port, "node_role": role})
-            return payload
+        # 启动脚本 fork 后台进程后 SSH channel 可能超时返回 -1，
+        # 不以 exit code 判断是否启动成功，统一用端口探测确认。
 
         deadline = time.time() + timeout_seconds
         last_result = None
@@ -251,7 +249,7 @@ class IoTDBHandlersMixin:
         wait_port = int(config.get("wait_port", config.get("ain_rpc_port", 10810)))
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
 
-        start_script = f"cd {self._quote(ainode_home)} && bash sbin/start-ainode.sh -d && true"
+        start_script = f"cd {self._quote(ainode_home)} && bash sbin/start-ainode.sh -d"
         start_result = self.ssh_service.run_command(
             host=server.host,
             username=server.username,
@@ -260,10 +258,7 @@ class IoTDBHandlersMixin:
             port=server.port,
             timeout=min(timeout_seconds, 60)
         )
-        if start_result.exit_status != 0:
-            payload = self._ssh_result_to_dict(start_result)
-            payload.update({"ainode_home": ainode_home, "ain_rpc_address": host, "ain_rpc_port": wait_port, "wait_port": wait_port})
-            return payload
+        # 同 IoTDB start：不以启动脚本 exit code 判断，用端口探测确认。
 
         deadline = time.time() + timeout_seconds
         last_result = None
