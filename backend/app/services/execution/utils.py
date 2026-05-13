@@ -128,7 +128,9 @@ class UtilsMixin:
                 "server_id": server.id,
                 "local_path": upload_local_path,
                 "remote_path": remote_package_path,
-                "timeout": timeout
+                "timeout": timeout,
+                "_schedule_mode": "fixed",
+                "_schedule_region": server.region or "",
             })
             if generated_archive:
                 try:
