@@ -52,12 +52,12 @@ class IoTDBHandlersMixin:
         wait_strategy = str(config.get("wait_strategy", "port"))
 
         script_name = self._start_script_for_role(role)
-        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name}"
+        start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name} && true"
         start_result = self.ssh_service.run_command(
             host=server.host,
             username=server.username,
             password=server.password,
-            command="bash -lc " + self._quote(start_script),
+            command=start_script,
             port=server.port,
             timeout=min(timeout_seconds, 60)
         )
@@ -251,12 +251,12 @@ class IoTDBHandlersMixin:
         wait_port = int(config.get("wait_port", config.get("ain_rpc_port", 10810)))
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
 
-        start_script = f"cd {self._quote(ainode_home)} && bash sbin/start-ainode.sh -d"
+        start_script = f"cd {self._quote(ainode_home)} && bash sbin/start-ainode.sh -d && true"
         start_result = self.ssh_service.run_command(
             host=server.host,
             username=server.username,
             password=server.password,
-            command="bash -lc " + self._quote(start_script),
+            command=start_script,
             port=server.port,
             timeout=min(timeout_seconds, 60)
         )
