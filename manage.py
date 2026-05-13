@@ -118,7 +118,9 @@ def command_output(cmd, cwd=None):
         text=True,
         timeout=10,
     )
-    return result.stdout.strip() or result.stderr.strip()
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
 
 
 def ensure_python_version():
@@ -755,7 +757,9 @@ def venv_python_path():
 
 def command_output(cmd):
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-    return result.stdout.strip() or result.stderr.strip()
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
 
 
 def file_sha256(path):
@@ -1201,7 +1205,10 @@ def get_release_version(version: str | None = None) -> str:
     if version:
         return safe_package_component(version, "version")
 
-    base_version = command_output(["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT_DIR) or "0.0.0"
+    base_version = command_output(["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT_DIR)
+    if not base_version:
+        tags = command_output(["git", "tag", "--sort=-v:refname"], cwd=ROOT_DIR).splitlines()
+        base_version = tags[0] if tags else "0.0.0"
     snapshot_date = datetime.now().strftime("%Y%m%d")
     return safe_package_component(f"{base_version}-snapshot-{snapshot_date}", "version")
 
