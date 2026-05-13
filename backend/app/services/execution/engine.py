@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.database import Execution, NodeExecution, Workflow
+from app.models.database import Execution, NodeExecution, Server, Workflow
 from app.config import BASE_DIR
 from app.services.ssh_service import SSHService
 from app.utils.time import utc_now
@@ -243,6 +243,85 @@ class ExecutionEngine(
             return text
         return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
 
+    def _cleanup_execution_processes(self, execution: Optional[Execution]) -> Dict[str, Any]:
+        """工作流结束后 kill 掉期间在各服务器上启动的所有 IoTDB/AINode/Benchmark 进程。"""
+        if execution is None:
+            return {}
+
+        node_executions = self.db.query(NodeExecution).filter(
+            NodeExecution.execution_id == execution.id
+        ).all()
+
+        server_install_dirs: Dict[int, Set[str]] = {}
+        for ne in node_executions:
+            inp = ne.input_data or {}
+            for sid, dirs in self._extract_server_dirs(inp).items():
+                server_install_dirs.setdefault(sid, set()).update(dirs)
+
+        if not server_install_dirs:
+            return {}
+
+        cleanup_results: Dict[str, Any] = {}
+        for server_id, dirs in server_install_dirs.items():
+            server = self.db.query(Server).filter(Server.id == server_id).first()
+            if not server:
+                continue
+            stop_parts = []
+            for d in sorted(dirs):
+                stop_parts.append(
+                    f"cd {self._quote(d)} 2>/dev/null && "
+                    f"for s in sbin/stop-*.sh; do [ -f \"$s\" ] && bash \"$s\" -f 2>/dev/null; done"
+                )
+            stop_parts.append(
+                "pkill -9 -f 'IoTDB\\|ConfigNode\\|DataNode\\|AINode\\|iot-benchmark' 2>/dev/null; "
+                "echo cleanup_done"
+            )
+            cmd = "; ".join(stop_parts)
+            try:
+                result = self.ssh_service.run_command(
+                    host=server.host,
+                    username=server.username,
+                    password=server.password,
+                    command=cmd,
+                    port=server.port,
+                    timeout=30
+                )
+                cleanup_results[f"{server.host}({server_id})"] = {
+                    "exit_status": result.exit_status,
+                    "stdout": self._truncate_log_value(result.stdout, 500),
+                    "dirs": list(dirs),
+                }
+            except Exception as exc:
+                cleanup_results[f"{server.host}({server_id})"] = {"error": str(exc)}
+        return cleanup_results
+
+    def _extract_server_dirs(self, input_data: Dict[str, Any]) -> Dict[int, Set[str]]:
+        result: Dict[int, Set[str]] = {}
+        sid = input_data.get("server_id")
+        if sid not in (None, ""):
+            dirs = set()
+            for key in ("iotdb_home", "ainode_home", "install_dir", "benchmark_home"):
+                val = input_data.get(key)
+                if val not in (None, ""):
+                    dirs.add(str(val))
+            if dirs:
+                result[int(sid)] = dirs
+
+        for group_key in ("config_nodes", "data_nodes"):
+            group = input_data.get(group_key)
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if not isinstance(item, dict):
+                    continue
+                item_sid = item.get("server_id")
+                if item_sid in (None, ""):
+                    continue
+                item_dir = item.get("install_dir") or item.get("iotdb_home")
+                if item_dir not in (None, ""):
+                    result.setdefault(int(item_sid), set()).add(str(item_dir))
+        return result
+
     def execute_workflow(self, execution_id: int) -> None:
         execution = self.get_execution(execution_id)
         if not execution:
@@ -451,6 +530,9 @@ class ExecutionEngine(
                 execution.status = "failed"
                 execution.result = "failed" if passed_count == 0 else "partial"
 
+            cleanup = self._cleanup_execution_processes(execution)
+            if cleanup:
+                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
             self._finalize_webhook_execution(execution)
             self.db.commit()
         except Exception as exc:
@@ -469,5 +551,8 @@ class ExecutionEngine(
                     locals().get("statuses", {})
                 ),
             }
+            cleanup = self._cleanup_execution_processes(execution)
+            if cleanup:
+                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
             self._finalize_webhook_execution(execution)
             self.db.commit()
