@@ -13,6 +13,8 @@
 | 工作流 | [pages/workflows/iot-benchmark-async-node.md](pages/workflows/iot-benchmark-async-node.md) | IoT Benchmark deploy/start/wait、读写参数映射、集群目标和结果摘要 | 2026-05-07 |
 | IoTDB 可视化 | [pages/iotdb/visualization.md](pages/iotdb/visualization.md) | WebSocket CLI、日志管理、配置编辑 | 2026-04-13 |
 | 系统监控 | [pages/monitoring/service.md](pages/monitoring/service.md) | 本地/远程监控、进程管理、自动刷新 | 2026-04-13 |
+| 工作流 | [pages/workflows/ainode-workflow-nodes.md](pages/workflows/ainode-workflow-nodes.md) | AINode deploy/start/stop/check 节点、配置继承和端口探测 | 2026-05-14 |
+| Webhook | [pages/webhooks/gitlab-webhook.md](pages/webhooks/gitlab-webhook.md) | GitLab Push Hook 触发工作流、规则过滤、安全验证和日志保留 | 2026-05-14 |
 
 ## 共享能力
 
@@ -31,7 +33,8 @@
 | 应用壳和导航 | [pages/app-shell/ui-layout.md](pages/app-shell/ui-layout.md) | [shared/frontend-architecture.md](shared/frontend-architecture.md) |
 | 服务器管理和调度 | [pages/servers/region-scheduling.md](pages/servers/region-scheduling.md) | [shared/ssh-service.md](shared/ssh-service.md)、[shared/backend-architecture.md](shared/backend-architecture.md) |
 | 工作流编辑和执行 | [pages/workflows/editor.md](pages/workflows/editor.md)、[pages/workflows/execution-engine.md](pages/workflows/execution-engine.md) | [shared/backend-architecture.md](shared/backend-architecture.md)、[shared/frontend-architecture.md](shared/frontend-architecture.md) |
-| IoTDB 和 Benchmark | [pages/iotdb/visualization.md](pages/iotdb/visualization.md)、[pages/workflows/iot-benchmark-async-node.md](pages/workflows/iot-benchmark-async-node.md) | [shared/ssh-service.md](shared/ssh-service.md) |
+| IoTDB 和 Benchmark | [pages/iotdb/visualization.md](pages/iotdb/visualization.md)、[pages/workflows/iot-benchmark-async-node.md](pages/workflows/iot-benchmark-async-node.md)、[pages/workflows/ainode-workflow-nodes.md](pages/workflows/ainode-workflow-nodes.md) | [shared/ssh-service.md](shared/ssh-service.md) |
+| Webhook 集成 | [pages/webhooks/gitlab-webhook.md](pages/webhooks/gitlab-webhook.md) | [shared/backend-architecture.md](shared/backend-architecture.md) |
 | 发布交付 | - | [shared/release-runtime.md](shared/release-runtime.md) |
 | 平台演进 | - | [shared/iotdb-testing-platform-roadmap.md](shared/iotdb-testing-platform-roadmap.md) |
 
@@ -52,4 +55,4 @@
 
 ---
 
-此目录自 2026-04-10 创建，于 2026-05-07 补充工作流调度和 benchmark 设计。
+此目录自 2026-04-10 创建，于 2026-05-14 补充 AINode 和 Webhook 设计。

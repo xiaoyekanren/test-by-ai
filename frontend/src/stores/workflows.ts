@@ -25,6 +25,10 @@ const INHERITED_FIELDS_BY_NODE_TYPE: Partial<Record<NodeType, string[]>> = {
   iotdb_cluster_start: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_check: ['cluster_name', 'config_nodes', 'data_nodes'],
   iotdb_cluster_stop: ['cluster_name', 'config_nodes', 'data_nodes'],
+  iotdb_ainode_deploy: ['server_id', 'region', 'cluster_name', 'config_nodes', 'data_nodes'],
+  iotdb_ainode_start: ['server_id', 'region', 'ainode_home', 'ain_rpc_address', 'ain_rpc_port', 'wait_port'],
+  iotdb_ainode_stop: ['server_id', 'region', 'ainode_home', 'ain_rpc_port'],
+  iotdb_ainode_check: ['server_id', 'region', 'iotdb_home', 'host', 'rpc_port', 'config_nodes', 'data_nodes'],
   iot_benchmark_deploy: ['server_id', 'region'],
   iot_benchmark_start: ['server_id', 'region', 'benchmark_home', 'target_host', 'rpc_port', 'data_nodes'],
   iot_benchmark_wait: ['server_id', 'region']
@@ -269,7 +273,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const config = node.data.config
     const output: Record<string, unknown> = {}
 
-    for (const field of ['server_id', 'region', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'benchmark_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes']) {
+    for (const field of ['server_id', 'region', 'host', 'rpc_port', 'wait_port', 'iotdb_home', 'benchmark_home', 'remote_package_path', 'file_path', 'node_role', 'cluster_name', 'config_nodes', 'data_nodes', 'ainode_home', 'ain_rpc_address', 'ain_rpc_port', 'ain_seed_config_node', 'ain_cluster_ingress_address', 'ain_cluster_ingress_port']) {
       const value = config[field]
       if (!isEmptyInheritedValue(value)) {
         output[field] = cloneValue(value)
@@ -316,6 +320,25 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       const normalizedDataNodes = normalizeClusterNodeListForEditor(config.data_nodes, baseInstallDir, 'datanode')
       if (normalizedDataNodes.length > 0) {
         output.data_nodes = normalizedDataNodes
+      }
+    }
+
+    if (node.data.nodeType === 'iotdb_ainode_deploy') {
+      const installDir = config.install_dir
+      if (!isEmptyInheritedValue(installDir)) {
+        const ainodeHome = String(installDir).replace(/\/+$/, '')
+        output.ainode_home = ainodeHome
+        output.iotdb_home = ainodeHome
+        output.conf_path = `${ainodeHome}/conf/iotdb-ainode.properties`
+      }
+      if (isEmptyInheritedValue(output.ain_rpc_address) && !isEmptyInheritedValue(output.host)) {
+        output.ain_rpc_address = output.host
+      }
+      if (isEmptyInheritedValue(output.ain_rpc_port)) {
+        output.ain_rpc_port = config.ain_rpc_port || 10810
+      }
+      if (isEmptyInheritedValue(output.wait_port)) {
+        output.wait_port = output.ain_rpc_port
       }
     }
 

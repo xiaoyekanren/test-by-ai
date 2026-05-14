@@ -251,6 +251,102 @@ export const NODE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     inputs: 1,
     outputs: 1
   },
+  iotdb_ainode_deploy: {
+    type: 'iotdb_ainode_deploy',
+    label: 'IoTDB AINode Deploy',
+    category: 'iotdb',
+    icon: 'Download',
+    color: '#7D3C98',
+    description: '部署 IoTDB AINode 并写入注册配置',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      package_source: 'local',
+      artifact_local_path: '',
+      package_url: '',
+      remote_package_path: '/tmp/timechodb-2.0.9.2-ainode-bin.tar.gz',
+      install_dir: '/opt/iotdb-ainode',
+      package_type: 'auto',
+      extract_subdir: '',
+      overwrite: false,
+      cluster_name: 'defaultCluster',
+      config_nodes: [],
+      data_nodes: [],
+      ain_seed_config_node: '',
+      ain_rpc_address: '',
+      ain_rpc_port: 10810,
+      ain_cluster_ingress_address: '',
+      ain_cluster_ingress_port: 6667,
+      username: 'root',
+      password: 'root',
+      config_items: {},
+      backup_before_write: true,
+      timeout: 600
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_ainode_start: {
+    type: 'iotdb_ainode_start',
+    label: 'IoTDB AINode Start',
+    category: 'iotdb',
+    icon: 'VideoPlay',
+    color: '#1F8A70',
+    description: '启动 IoTDB AINode',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      ainode_home: '',
+      ain_rpc_address: '',
+      ain_rpc_port: 10810,
+      wait_port: 10810,
+      timeout_seconds: 120
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_ainode_stop: {
+    type: 'iotdb_ainode_stop',
+    label: 'IoTDB AINode Stop',
+    category: 'iotdb',
+    icon: 'VideoPause',
+    color: '#B03A2E',
+    description: '停止 IoTDB AINode',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      ainode_home: '',
+      ain_rpc_port: 10810,
+      remove_target: '',
+      timeout_seconds: 60
+    },
+    inputs: 1,
+    outputs: 1
+  },
+  iotdb_ainode_check: {
+    type: 'iotdb_ainode_check',
+    label: 'IoTDB AINode Check',
+    category: 'iotdb',
+    icon: 'CircleCheck',
+    color: '#2874A6',
+    description: '通过 DataNode CLI 执行 show ainodes',
+    defaultConfig: {
+      server_id: null,
+      region: null,
+      iotdb_home: '',
+      host: '',
+      rpc_port: 6667,
+      config_nodes: [],
+      data_nodes: [],
+      username: 'root',
+      password: 'root',
+      sql_dialect: 'tree',
+      validation_sqls: [],
+      timeout_seconds: 300
+    },
+    inputs: 1,
+    outputs: 1
+  },
   iot_benchmark_deploy: {
     type: 'iot_benchmark_deploy',
     label: 'Deploy IoT Benchmark',
@@ -530,6 +626,10 @@ export type NodeType =
   | "iotdb_cluster_start"
   | "iotdb_cluster_check"
   | "iotdb_cluster_stop"
+  | "iotdb_ainode_deploy"
+  | "iotdb_ainode_start"
+  | "iotdb_ainode_stop"
+  | "iotdb_ainode_check"
   | "iot_benchmark_deploy"
   | "iot_benchmark_start"
   | "iot_benchmark_wait"
@@ -591,7 +691,7 @@ export interface WorkflowUpdate {
 // Execution related types
 
 export type ExecutionStatus = "pending" | "running" | "paused" | "completed" | "failed" | "stopped"
-export type TriggerType = "manual" | "scheduled" | "api"
+export type TriggerType = "manual" | "scheduled" | "api" | "webhook"
 export type ExecutionResult = "passed" | "failed" | "partial"
 
 export interface Execution {
@@ -612,6 +712,58 @@ export interface ExecutionCreate {
   workflow_id: number
   trigger_type?: TriggerType
   triggered_by?: string | null
+}
+
+// GitLab webhook related types
+
+export interface GitLabWebhookRule {
+  id: number
+  name: string
+  enabled: boolean
+  workflow_ids: number[]
+  project_id: string | null
+  project_path: string | null
+  ref_patterns: string[]
+  secret_configured: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface GitLabWebhookRuleCreate {
+  name: string
+  enabled?: boolean
+  workflow_ids: number[]
+  project_id?: string | null
+  project_path?: string | null
+  ref_patterns?: string[]
+  secret_token: string
+}
+
+export interface GitLabWebhookRuleUpdate {
+  name?: string
+  enabled?: boolean
+  workflow_ids?: number[]
+  project_id?: string | null
+  project_path?: string | null
+  ref_patterns?: string[]
+  secret_token?: string
+}
+
+export interface GitLabWebhookEvent {
+  id: number
+  rule_id: number
+  event_uuid: string | null
+  project_id: string | null
+  project_path: string | null
+  ref: string | null
+  before_sha: string | null
+  after_sha: string | null
+  user_name: string | null
+  user_username: string | null
+  status: string
+  execution_ids: number[]
+  error: string | null
+  received_at: string
 }
 
 export type NodeExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'

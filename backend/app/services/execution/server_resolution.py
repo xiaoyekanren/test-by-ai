@@ -114,6 +114,10 @@ class ServerResolutionMixin:
     def _schedule_mode(self, config: Dict[str, Any], context: Dict[str, Any]) -> str:
         mode = config.get("_schedule_mode") or context.get("_schedule_mode")
         if mode in (None, ""):
+            # 内部调用（如 cluster handler 构造的小 config）可能没有
+            # _schedule_mode，此时若已有明确 server_id 则按 fixed 处理
+            if config.get("server_id") not in (None, ""):
+                return "fixed"
             raise ValueError("Workflow schedule_mode is required")
         return str(mode)
 

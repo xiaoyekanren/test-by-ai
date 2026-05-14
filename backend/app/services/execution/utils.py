@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
@@ -103,13 +105,38 @@ class UtilsMixin:
                 "error": "Use either artifact_local_path or package_url, not both"
             }
 
-        if artifact_local_path:
+        upload_local_path = artifact_local_path
+        generated_archive = ""
+        if artifact_local_path and os.path.isdir(artifact_local_path):
+            archive_base = os.path.join(
+                tempfile.gettempdir(),
+                f"{os.path.basename(artifact_local_path.rstrip(os.sep))}-{int(time.time())}"
+            )
+            local_dir = artifact_local_path.rstrip(os.sep)
+            generated_archive = shutil.make_archive(
+                archive_base,
+                "gztar",
+                root_dir=os.path.dirname(local_dir) or ".",
+                base_dir=os.path.basename(local_dir)
+            )
+            upload_local_path = generated_archive
+            if remote_package_path and not remote_package_path.lower().endswith((".tar.gz", ".tgz")):
+                remote_package_path = f"{remote_package_path.rstrip('/')}.tar.gz"
+
+        if upload_local_path:
             upload_result = self._execute_upload_node({
                 "server_id": server.id,
-                "local_path": artifact_local_path,
+                "local_path": upload_local_path,
                 "remote_path": remote_package_path,
-                "timeout": timeout
+                "timeout": timeout,
+                "_schedule_mode": "fixed",
+                "_schedule_region": server.region or "",
             })
+            if generated_archive:
+                try:
+                    os.remove(generated_archive)
+                except OSError:
+                    pass
             if upload_result.get("exit_status") != 0:
                 return upload_result
         elif package_url:

@@ -1,11 +1,15 @@
+import json
 import logging
+import re
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.database import Execution, Workflow
+from app.models.database import Execution, NodeExecution, Server, Workflow
+from app.config import BASE_DIR
 from app.services.ssh_service import SSHService
 from app.utils.time import utc_now
 
@@ -23,6 +27,9 @@ from .handlers import (
 )
 
 logger = logging.getLogger(__name__)
+
+WEBHOOK_EXECUTION_LOG_DIR = BASE_DIR / "data" / "logs" / "executions"
+SENSITIVE_KEY_PATTERN = re.compile(r"(password|passwd|secret|token|authorization|cookie|private[_-]?key)", re.IGNORECASE)
 
 
 class ExecutionEngine(
@@ -64,6 +71,10 @@ class ExecutionEngine(
             "iotdb_start": self._execute_iotdb_start_node,
             "iotdb_cli": self._execute_iotdb_cli_node,
             "iotdb_stop": self._execute_iotdb_stop_node,
+            "iotdb_ainode_deploy": self._execute_iotdb_ainode_deploy_node,
+            "iotdb_ainode_start": self._execute_iotdb_ainode_start_node,
+            "iotdb_ainode_stop": self._execute_iotdb_ainode_stop_node,
+            "iotdb_ainode_check": self._execute_iotdb_ainode_check_node,
             "iotdb_cluster_deploy": self._execute_iotdb_cluster_deploy_node,
             "iotdb_cluster_start": self._execute_iotdb_cluster_start_node,
             "iotdb_cluster_check": self._execute_iotdb_cluster_check_node,
@@ -155,6 +166,163 @@ class ExecutionEngine(
             Execution.id == execution_id
         ).scalar()
         return dict(summary or {})
+
+    def _finalize_webhook_execution(self, execution: Optional[Execution]) -> None:
+        if execution is None or getattr(execution, "trigger_type", None) != "webhook":
+            return
+
+        try:
+            WEBHOOK_EXECUTION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+            log_path = WEBHOOK_EXECUTION_LOG_DIR / f"{execution.id}.jsonl"
+            node_executions = self.db.query(NodeExecution).filter(
+                NodeExecution.execution_id == execution.id
+            ).order_by(NodeExecution.id.asc()).all()
+
+            with open(log_path, "w", encoding="utf-8") as output:
+                output.write(json.dumps({
+                    "type": "execution",
+                    "execution_id": execution.id,
+                    "workflow_id": execution.workflow_id,
+                    "status": execution.status,
+                    "result": execution.result,
+                    "duration": execution.duration,
+                    "summary": self._redact_for_log(execution.summary or {}),
+                }, ensure_ascii=False) + "\n")
+
+                for node_execution in node_executions:
+                    output_data = node_execution.output_data or {}
+                    output.write(json.dumps({
+                        "type": "node",
+                        "node_execution_id": node_execution.id,
+                        "node_id": node_execution.node_id,
+                        "node_type": node_execution.node_type,
+                        "status": node_execution.status,
+                        "duration": node_execution.duration,
+                        "started_at": node_execution.started_at.isoformat() if node_execution.started_at else None,
+                        "finished_at": node_execution.finished_at.isoformat() if node_execution.finished_at else None,
+                        "error_message": self._truncate_log_value(node_execution.error_message),
+                        "stdout": self._truncate_log_value(output_data.get("stdout") if isinstance(output_data, dict) else None),
+                        "stderr": self._truncate_log_value(output_data.get("stderr") if isinstance(output_data, dict) else None),
+                        "error": self._truncate_log_value(output_data.get("error") if isinstance(output_data, dict) else None),
+                    }, ensure_ascii=False) + "\n")
+
+            for node_execution in node_executions:
+                node_execution.log_path = str(log_path)
+                node_execution.input_data = None
+                node_execution.output_data = None
+
+            execution.summary = {
+                **(execution.summary or {}),
+                "webhook_log_path": str(log_path),
+                "node_details_pruned": True,
+            }
+        except Exception as exc:
+            logger.exception("Failed to finalize webhook execution %s", execution.id)
+            execution.summary = {
+                **(execution.summary or {}),
+                "webhook_log_error": str(exc),
+            }
+
+    def _redact_for_log(self, value):
+        if isinstance(value, dict):
+            return {
+                key: "***"
+                if SENSITIVE_KEY_PATTERN.search(str(key))
+                else self._redact_for_log(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._redact_for_log(item) for item in value]
+        return self._truncate_log_value(value)
+
+    def _truncate_log_value(self, value, limit: int = 4000):
+        if value is None:
+            return None
+        text = str(value)
+        if len(text) <= limit:
+            return text
+        return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
+
+    def _cleanup_execution_processes(self, execution: Optional[Execution]) -> Dict[str, Any]:
+        if execution is None:
+            return {}
+
+        node_executions = self.db.query(NodeExecution).filter(
+            NodeExecution.execution_id == execution.id
+        ).all()
+
+        server_install_dirs: Dict[int, Set[str]] = {}
+        for ne in node_executions:
+            inp = ne.input_data or {}
+            for sid, dirs in self._extract_server_dirs(inp).items():
+                server_install_dirs.setdefault(sid, set()).update(dirs)
+
+        if not server_install_dirs:
+            return {}
+
+        cleanup_results: Dict[str, Any] = {}
+        for server_id, dirs in server_install_dirs.items():
+            server = self.db.query(Server).filter(Server.id == server_id).first()
+            if not server:
+                continue
+            parts = []
+            for d in sorted(dirs):
+                quoted = self._quote(d)
+                parts.append(
+                    f"cd {quoted} 2>/dev/null && "
+                    f"for s in sbin/stop-*.sh; do [ -f \"$s\" ] && bash \"$s\" -f 2>/dev/null; done"
+                )
+                # 基于安装目录路径精准查找残留进程，先 SIGTERM 再 SIGKILL
+                parts.append(
+                    f"_pids=$(pgrep -f {quoted} 2>/dev/null); "
+                    f"if [ -n \"$_pids\" ]; then kill $_pids 2>/dev/null; sleep 2; kill -9 $_pids 2>/dev/null; fi"
+                )
+            parts.append("echo cleanup_done")
+            cmd = "; ".join(parts)
+            try:
+                result = self.ssh_service.run_command(
+                    host=server.host,
+                    username=server.username,
+                    password=server.password,
+                    command=cmd,
+                    port=server.port,
+                    timeout=30
+                )
+                cleanup_results[f"{server.host}({server_id})"] = {
+                    "exit_status": result.exit_status,
+                    "stdout": self._truncate_log_value(result.stdout, 500),
+                    "dirs": list(dirs),
+                }
+            except Exception as exc:
+                cleanup_results[f"{server.host}({server_id})"] = {"error": str(exc)}
+        return cleanup_results
+
+    def _extract_server_dirs(self, input_data: Dict[str, Any]) -> Dict[int, Set[str]]:
+        result: Dict[int, Set[str]] = {}
+        sid = input_data.get("server_id")
+        if sid not in (None, ""):
+            dirs = set()
+            for key in ("iotdb_home", "ainode_home", "install_dir", "benchmark_home"):
+                val = input_data.get(key)
+                if val not in (None, ""):
+                    dirs.add(str(val))
+            if dirs:
+                result[int(sid)] = dirs
+
+        for group_key in ("config_nodes", "data_nodes"):
+            group = input_data.get(group_key)
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if not isinstance(item, dict):
+                    continue
+                item_sid = item.get("server_id")
+                if item_sid in (None, ""):
+                    continue
+                item_dir = item.get("install_dir") or item.get("iotdb_home")
+                if item_dir not in (None, ""):
+                    result.setdefault(int(item_sid), set()).add(str(item_dir))
+        return result
 
     def execute_workflow(self, execution_id: int) -> None:
         execution = self.get_execution(execution_id)
@@ -364,6 +532,10 @@ class ExecutionEngine(
                 execution.status = "failed"
                 execution.result = "failed" if passed_count == 0 else "partial"
 
+            cleanup = self._cleanup_execution_processes(execution)
+            if cleanup:
+                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
+            self._finalize_webhook_execution(execution)
             self.db.commit()
         except Exception as exc:
             logger.exception("Error in execution %s", execution_id)
@@ -381,4 +553,8 @@ class ExecutionEngine(
                     locals().get("statuses", {})
                 ),
             }
+            cleanup = self._cleanup_execution_processes(execution)
+            if cleanup:
+                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
+            self._finalize_webhook_execution(execution)
             self.db.commit()

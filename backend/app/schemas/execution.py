@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Status literals for execution
 EXECUTION_STATUS = Literal["pending", "running", "paused", "completed", "failed", "stopped"]
-TRIGGER_TYPE = Literal["manual", "scheduled", "api"]
+TRIGGER_TYPE = Literal["manual", "scheduled", "api", "webhook"]
 EXECUTION_RESULT = Literal["passed", "failed", "partial"]
 
 class ExecutionCreate(BaseModel):
