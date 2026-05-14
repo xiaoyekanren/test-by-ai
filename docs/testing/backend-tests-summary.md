@@ -16,7 +16,7 @@ cd backend
 python3.13 -m pytest --collect-only -q
 ```
 
-最后收集结果：141 tests。
+最后收集结果：149 tests。
 
 ## 测试文件列表
 
@@ -30,7 +30,8 @@ python3.13 -m pytest --collect-only -q
 | `test_execution_engine_region.py` | 35 | 固定/随机调度、繁忙服务器计算、节点 server 需求、调度角色和上下文合并 |
 | `test_executions_api.py` | 6 | 执行 API 创建、查询、列表、停止和删除 |
 | `test_iot_benchmark.py` | 4 | IoT Benchmark 部署校验、启动配置映射、等待节点调度角色和结果摘要解析 |
-| `test_iotdb_deploy.py` | 2 | IoTDB 部署节点 package_url 下载和 local/url 互斥校验 |
+| `test_iotdb_deploy.py` | 5 | IoTDB 部署节点 package_url 下载、local/url 互斥校验、AINode 配置写入、启动端口探测和 check SQL |
+| `test_gitlab_webhooks_api.py` | 5 | GitLab Webhook secret 验证、事件过滤、多工作流触发和执行日志裁剪 |
 | `test_main.py` | 2 | FastAPI app 导入和健康检查端点 |
 | `test_models.py` | 5 | SQLAlchemy model 实例化和 aware UTC 时间字段 |
 | `test_monitoring_api.py` | 16 | 本地/远程监控服务、进程列表和 kill API |
@@ -57,6 +58,8 @@ python3.13 -m pytest --collect-only -q
 | IoTDB 集群节点 | `test_execution_engine_cluster.py` |
 | IoT Benchmark 节点 | `test_iot_benchmark.py` |
 | IoTDB 部署节点 | `test_iotdb_deploy.py` |
+| IoTDB AINode 节点 | `test_iotdb_deploy.py` |
+| GitLab Webhook API | `test_gitlab_webhooks_api.py` |
 | 监控服务和 API | `test_monitoring_api.py` |
 | SSH 服务 | `test_ssh_service.py` |
 | 应用入口 | `test_main.py` |
@@ -100,6 +103,14 @@ DAG 测试覆盖 roots 并发执行、join 节点等待全部上游、上游失�
 
 IoT Benchmark 测试覆盖部署目录结构校验、启动时配置文件字段映射、集群 DataNode 目标地址生成、等待节点按 benchmark 调度角色连接主机，以及摘要指标解析。
 
+### AINode 部署
+
+AINode 测试覆盖 deploy 节点的配置文件写入（iotdb-ainode.properties 中 cluster_name、ain_seed_config_node、ain_rpc_address、ingress 地址端口和自定义 config_items）、start 节点的 daemon 启动脚本调用和端口探测等待、check 节点通过 DataNode CLI 执行 `show ainodes` 和自定义验证 SQL。
+
+### GitLab Webhook
+
+GitLab Webhook 测试覆盖 Secret Token 缺失/错误时的 401 拒绝、非 Push Hook 事件忽略并记录 event、ref pattern 不匹配时忽略、一个规则触发多个工作流的并发执行和事件记录，以及 webhook 触发执行完成后的日志写入和 node execution payload 裁剪。
+
 ### 监控
 
 监控测试覆盖本地 psutil 状态、进程排序、kill 结果、远程服务器不存在的 404，以及通过 SSH 获取远程状态和进程列表。
@@ -112,4 +123,4 @@ IoT Benchmark 测试覆盖部署目录结构校验、启动时配置文件字段
 
 ---
 
-文档更新日期：2026-05-07
+文档更新日期：2026-05-14

@@ -244,7 +244,6 @@ class ExecutionEngine(
         return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
 
     def _cleanup_execution_processes(self, execution: Optional[Execution]) -> Dict[str, Any]:
-        """工作流结束后 kill 掉期间在各服务器上启动的所有 IoTDB/AINode/Benchmark 进程。"""
         if execution is None:
             return {}
 
@@ -266,17 +265,20 @@ class ExecutionEngine(
             server = self.db.query(Server).filter(Server.id == server_id).first()
             if not server:
                 continue
-            stop_parts = []
+            parts = []
             for d in sorted(dirs):
-                stop_parts.append(
-                    f"cd {self._quote(d)} 2>/dev/null && "
+                quoted = self._quote(d)
+                parts.append(
+                    f"cd {quoted} 2>/dev/null && "
                     f"for s in sbin/stop-*.sh; do [ -f \"$s\" ] && bash \"$s\" -f 2>/dev/null; done"
                 )
-            stop_parts.append(
-                "pkill -9 -f 'IoTDB\\|ConfigNode\\|DataNode\\|AINode\\|iot-benchmark' 2>/dev/null; "
-                "echo cleanup_done"
-            )
-            cmd = "; ".join(stop_parts)
+                # 基于安装目录路径精准查找残留进程，先 SIGTERM 再 SIGKILL
+                parts.append(
+                    f"_pids=$(pgrep -f {quoted} 2>/dev/null); "
+                    f"if [ -n \"$_pids\" ]; then kill $_pids 2>/dev/null; sleep 2; kill -9 $_pids 2>/dev/null; fi"
+                )
+            parts.append("echo cleanup_done")
+            cmd = "; ".join(parts)
             try:
                 result = self.ssh_service.run_command(
                     host=server.host,

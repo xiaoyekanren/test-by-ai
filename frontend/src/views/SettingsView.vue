@@ -18,13 +18,15 @@ import {
   ElSwitch,
   ElTable,
   ElTableColumn,
-  ElTag
+  ElTag,
+  ElCollapse,
+  ElCollapseItem
 } from 'element-plus'
 import { Delete, DocumentCopy, Edit, Plus, Refresh } from '@element-plus/icons-vue'
 
 import { webhooksApi, workflowsApi } from '@/api'
 import { useSettingsStore } from '@/stores/settings'
-import type { GitLabWebhookRule, Workflow } from '@/types'
+import type { GitLabWebhookEvent, GitLabWebhookRule, Workflow } from '@/types'
 
 const settingsStore = useSettingsStore()
 const saving = ref(false)
@@ -33,6 +35,7 @@ const webhookDialogVisible = ref(false)
 const editingWebhookRuleId = ref<number | null>(null)
 const workflows = ref<Workflow[]>([])
 const webhookRules = ref<GitLabWebhookRule[]>([])
+const webhookEvents = ref<GitLabWebhookEvent[]>([])
 
 const monitorForm = ref({
   refreshInterval: 10
@@ -142,12 +145,14 @@ function resetWebhookForm() {
 async function fetchWebhookData() {
   webhookLoading.value = true
   try {
-    const [nextWorkflows, nextRules] = await Promise.all([
+    const [nextWorkflows, nextRules, nextEvents] = await Promise.all([
       workflowsApi.list(),
-      webhooksApi.listGitLabRules()
+      webhooksApi.listGitLabRules(),
+      webhooksApi.listGitLabEvents({ limit: 50 })
     ])
     workflows.value = nextWorkflows
     webhookRules.value = nextRules
+    webhookEvents.value = nextEvents
   } catch (error) {
     console.error(error)
     ElMessage.error('加载 GitLab Webhook 配置失败')
@@ -277,6 +282,27 @@ async function deleteWebhookRule(rule: GitLabWebhookRule) {
   } finally {
     webhookLoading.value = false
   }
+}
+
+function eventRuleName(event: GitLabWebhookEvent) {
+  return webhookRules.value.find(r => r.id === event.rule_id)?.name || `规则 #${event.rule_id}`
+}
+
+function shortRef(ref: string | null) {
+  if (!ref) return '-'
+  return ref.replace(/^refs\/heads\//, '')
+}
+
+function eventStatusType(status: string) {
+  if (status === 'accepted') return 'success'
+  if (status === 'error') return 'danger'
+  return 'info'
+}
+
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 onMounted(async () => {
@@ -474,6 +500,45 @@ onMounted(async () => {
         </ElTableColumn>
       </ElTable>
 
+      <ElCollapse class="webhook-events-collapse">
+        <ElCollapseItem title="触发事件记录" name="events">
+          <ElTable :data="webhookEvents" size="small" border empty-text="暂无触发记录">
+            <ElTableColumn label="时间" width="170">
+              <template #default="{ row }">
+                {{ formatTime(row.received_at) }}
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="规则" min-width="120">
+              <template #default="{ row }">
+                {{ eventRuleName(row) }}
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="分支" min-width="130">
+              <template #default="{ row }">
+                {{ shortRef(row.ref) }}
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="推送人" width="120">
+              <template #default="{ row }">
+                {{ row.user_name || '-' }}
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="状态" width="100">
+              <template #default="{ row }">
+                <ElTag :type="eventStatusType(row.status)" size="small">
+                  {{ row.status }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="执行 ID" min-width="100">
+              <template #default="{ row }">
+                {{ row.execution_ids.length ? row.execution_ids.join(', ') : '-' }}
+              </template>
+            </ElTableColumn>
+          </ElTable>
+        </ElCollapseItem>
+      </ElCollapse>
+
       <ElDivider />
 
       <ElDescriptions :column="1" border size="small">
@@ -599,6 +664,10 @@ onMounted(async () => {
 .card-actions {
   display: flex;
   gap: 6px;
+}
+
+.webhook-events-collapse {
+  margin-top: 10px;
 }
 
 .unit {
