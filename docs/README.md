@@ -66,7 +66,7 @@ Windows 可执行：
 manage.bat release
 ```
 
-发布命令会先构建前端，再把运行所需文件收集到 `release/仓库-版本/`，并生成带同名顶层目录的 `release/仓库-版本.zip`。默认版本基于最近 Git tag 生成，例如最近版本为 `0.2` 时生成 `test-by-ai-0.2-snapshot-20260420`；如需生成正式版本，可执行 `./manage.sh release --version 0.1.0`。
+发布命令会先构建前端，再把运行所需文件收集到 `release/仓库-版本/`，并生成带同名顶层目录的 `release/仓库-版本.zip`。包名前缀固定为 `testflow`。默认版本基于最近 Git tag 生成，格式 `<tag>-snapshot-YYYYMMDD`，例如 `testflow-0.3-snapshot-20260515`；正式版请显式指定 `--version`，如 `./manage.sh release --version 0.3` 生成 `release/testflow-0.3.zip`。
 
 发布包默认包含：
 
@@ -86,8 +86,8 @@ manage.bat release
 
 发布包目录和 zip 命名规则：
 
-- 文件夹: `仓库-版本/`，例如 `test-by-ai-0.1/`
-- zip 包: `仓库-版本.zip`，例如 `test-by-ai-0.1.zip`
+- 文件夹: `testflow-<版本>/`，例如 `testflow-0.3/`
+- zip 包: `testflow-<版本>.zip`，例如 `testflow-0.3.zip`
 
 发布包在 Windows 上使用 `manage.bat install` 创建 `venv/` 并安装后端依赖。脚本在括号代码块内使用延迟变量展开读取 Python 解析结果，避免首次创建虚拟环境时把 Python 命令提前展开为空。
 
