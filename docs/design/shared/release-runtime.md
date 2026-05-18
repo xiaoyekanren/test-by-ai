@@ -1,6 +1,6 @@
 # 发布运行脚本设计
 
-最后更新: 2026-04-17
+最后更新: 2026-05-15
 
 ## 目标
 
@@ -10,7 +10,7 @@
 
 源码根目录执行 `./manage.sh release` 或 `manage.bat release` 后，`manage.py` 会生成 `release/仓库-版本/`，并同步生成 `release/仓库-版本.zip`。zip 包内保留同名顶层文件夹，解压后不会把文件散落到当前目录。
 
-版本默认基于最近 Git tag 生成，格式为 `<latest-tag>-snapshot-YYYYMMDD`，例如 `0.2-snapshot-20260420`；需要生成正式版本时，可执行 `./manage.sh release --version 0.1.0`。
+版本默认基于最近 Git tag 生成，格式为 `<latest-tag>-snapshot-YYYYMMDD`，例如 `0.3-snapshot-20260515`；需要生成正式版本时（如向 GitHub Release 上传发布资产），需显式指定 `--version`，例如 `./manage.sh release --version 0.3` 会生成 `release/testflow-0.3/` 与 `release/testflow-0.3.zip`，文件名不带 snapshot 后缀。
 
 核心内容如下：
 
@@ -25,9 +25,9 @@
 
 ## 命名规则
 
-- 文件夹命名: `仓库-版本/`，例如 `testflow-0.1/`。
-- zip 包命名: `仓库-版本.zip`，例如 `testflow-0.1.zip`。
-- zip 内结构: 顶层目录必须是 `仓库-版本/`，运行文件位于该目录下。
+- 文件夹命名: `testflow-<版本>/`，例如 `testflow-0.3/`。
+- zip 包命名: `testflow-<版本>.zip`，例如 `testflow-0.3.zip`。
+- zip 内结构: 顶层目录必须是 `testflow-<版本>/`，运行文件位于该目录下。
 
 ## Windows 运行流程
 

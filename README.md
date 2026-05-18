@@ -46,7 +46,7 @@ manage.bat status
 
 Windows 可执行 `manage.bat release`。
 
-命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。默认版本基于最近 Git tag 生成，例如最近版本为 `0.2` 时生成 `testflow-0.2-snapshot-20260420`；正式版本可通过 `--version` 指定。
+命令会先执行前端构建，再生成可交付目录 `release/仓库-版本/` 和同名 zip 包。默认版本基于最近 Git tag 生成，格式为 `<tag>-snapshot-YYYYMMDD`（例如 `testflow-0.3-snapshot-20260515`）。正式发布请通过 `--version` 指定纯版本号，例如 `./manage.sh release --version 0.3` 会生成 `release/testflow-0.3.zip`。
 
 ## 文档入口
 
