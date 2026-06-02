@@ -20,7 +20,7 @@ from pathlib import Path
 # Configuration
 PROJECT_NAME = "testflow"
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 3389
+BACKEND_PORT = 4399
 FRONTEND_PORT = 5173
 DATA_DIR = ROOT_DIR / "data"
 PID_DIR = DATA_DIR / "pids"
@@ -400,7 +400,7 @@ def print_access_summary():
     print_section("Access")
     print_kv("Frontend:", f"http://localhost:{FRONTEND_PORT}")
     print_kv("Backend:", f"http://localhost:{BACKEND_PORT}")
-    print_kv("API Docs:", f"http://localhost:{BACKEND_PORT}/docs")
+    print_kv("API Docs:", f"http://localhost:{FRONTEND_PORT}/docs")
 
 
 def print_logs_summary():
@@ -709,7 +709,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-BACKEND_PORT = 3389
+BACKEND_PORT = 5173
 PID_DIR = Path("data/pids")
 LOG_DIR = Path("data/logs")
 DEP_STATE_DIR = Path("data/deps")
@@ -1319,8 +1319,8 @@ manage.bat start
 
 Then open:
 
-- App: http://localhost:{BACKEND_PORT}
-- API Docs: http://localhost:{BACKEND_PORT}/docs
+- App: http://localhost:{FRONTEND_PORT}
+- API Docs: http://localhost:{FRONTEND_PORT}/docs
 
 ## Commands
 
@@ -1432,7 +1432,7 @@ def show_help():
     print(f"Access URLs:")
     print(f"  Frontend:  http://localhost:{FRONTEND_PORT}")
     print(f"  Backend:   http://localhost:{BACKEND_PORT}")
-    print(f"  API Docs:  http://localhost:{BACKEND_PORT}/docs")
+    print(f"  API Docs:  http://localhost:{FRONTEND_PORT}/docs")
 
 
 def main():

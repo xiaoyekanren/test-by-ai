@@ -29,9 +29,21 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3389',
+        target: 'http://localhost:4399',
         changeOrigin: true,
         ws: true
+      },
+      '/docs': {
+        target: 'http://localhost:4399',
+        changeOrigin: true
+      },
+      '/openapi.json': {
+        target: 'http://localhost:4399',
+        changeOrigin: true
+      },
+      '/redoc': {
+        target: 'http://localhost:4399',
+        changeOrigin: true
       }
     }
   }
