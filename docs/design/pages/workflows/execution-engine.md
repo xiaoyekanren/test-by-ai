@@ -52,7 +52,8 @@ class ExecutionEngine:
       │
       ├──────────────▶ completed (全部节点成功)
       │
-      ├──────────────▶ failed (节点失败或手动停止)
+      ├──────────────▶ failed (节点失败)
+      ├──────────────▶ stopped (手动停止)
       │
 ```
 
@@ -92,6 +93,12 @@ class ExecutionEngine:
               │ success -> 累积 context│
               │ failed  -> 下游跳过    │
               └──────────────────────┘
+                         │
+                         ▼
+                 ┌─────────────┐
+                 │ finally 清理 │
+                 │ 启动的进程   │
+                 └─────────────┘
                          │
                          ▼
                  ┌─────────────┐
@@ -157,6 +164,7 @@ self._node_handlers = {
     "stdout": "...",         # 标准输出
     "stderr": "...",         # 标准错误
     "error": None,           # 错误信息
+    "managed_processes": [], # 启动节点登记的清理目标
     # 节点特定输出...
 }
 ```
@@ -226,6 +234,47 @@ iotdb_home = context.get('iotdb_home')
 
 详见 [region-scheduling.md](../servers/region-scheduling.md)。
 
+### 启动进程清理
+
+**决策**: 工作流默认清理本次由平台启动的远端进程；只有工作流显式打开 `process_resident=true` 时才跳过清理。
+
+**实现**:
+- `Workflow.process_resident` 默认 `false`，前端显示为“进程常驻”开关。
+- `iotdb_start`、`iotdb_ainode_start`、`iotdb_cluster_start` 和 `iot_benchmark_start` 在成功启动或启动后等待失败时返回 `managed_processes`。
+- `execute_workflow` 使用 `finally` 调用 `_cleanup_execution_processes`，覆盖 completed、failed、stopped 和异常路径。
+- 清理优先使用 `managed_processes.stop_command`，随后按 pid、受限 `fallback_pattern` 或登记 `home` 的 `/proc/<pid>/cwd` 目录匹配做兜底终止。
+- fallback 和 cwd 兜底都会按 `managed_processes.kind` 过滤命令行：IoTDB 仅匹配 DataNode/ConfigNode/IoTDB 主类或启动形态，AINode 仅匹配 AINode，IoT Benchmark 仅匹配 benchmark 启动形态。
+- cwd 兜底用于覆盖 IoTDB 启动失败但 Java 进程仍残留的场景；例如 DataNode 还未监听 RPC 端口，且命令行只包含 `sbin/..` 相对路径时，自带 stop 脚本和 `pgrep -f /opt/iotdb` 都可能漏掉它。
+- 清理结果写入 `Execution.summary.process_cleanup`。
+
+`managed_processes` 示例：
+
+```json
+[
+  {
+    "kind": "iotdb",
+    "server_id": 1,
+    "host": "10.0.0.1",
+    "node_id": "node-1",
+    "node_type": "iotdb_start",
+    "home": "/opt/iotdb",
+    "role": "datanode",
+    "stop_command": "cd /opt/iotdb && bash sbin/stop-datanode.sh -f",
+    "fallback_pattern": "/opt/iotdb"
+  }
+]
+```
+
+**边界**:
+- 普通 `shell` 节点中用户手写 `nohup xxx &` 不会自动登记，平台无法可靠识别任意后台进程。
+- 没有 `managed_processes` 的节点不会被自动清理，新增启动型节点必须显式登记清理目标。
+- 如果同一台机器上多个工作流或人工操作共用同一个安装目录启动同类进程，一个工作流结束时仍会把同目录下的同类进程视为本次清理目标。需要保留这类进程时，应使用独立安装目录或打开 `process_resident`。
+
+**不兼容点**:
+- 新版工作流表需要 `process_resident` 列；既有 SQLite 数据库不会自动迁移。
+- 进程清理摘要从 `summary.cleanup` 改为 `summary.process_cleanup`。
+- 旧的按 `input_data` 安装目录推断并扫描进程的兼容清理路径已移除。
+
 ## 执行记录持久化
 
 ### Execution 记录
@@ -240,6 +289,8 @@ iotdb_home = context.get('iotdb_home')
 | duration | 执行耗时（秒） |
 | result | passed/failed/partial |
 | summary | {"total": 10, "passed": 8, "failed": 2} |
+
+`summary.process_cleanup` 记录进程清理结果。常驻模式下写入 `{ "skipped": true, "reason": "workflow_process_resident" }`。
 
 ### NodeExecution 记录
 
@@ -256,4 +307,4 @@ iotdb_home = context.get('iotdb_home')
 
 ---
 
-最后更新: 2026-05-07
+最后更新: 2026-06-02

@@ -37,7 +37,7 @@ import {
 } from '@element-plus/icons-vue'
 import { executionsApi } from '@/api'
 import { useWorkflowsStore } from '@/stores/workflows'
-import { isNodeSuccess, isNodeFinished } from '@/utils/execution'
+import { isExecutionActive, isNodeSuccess, isNodeFinished } from '@/utils/execution'
 import type { EdgeDefinition, Execution, NodeDefinition, NodeExecution, Workflow, WorkflowCreate } from '@/types'
 
 const router = useRouter()
@@ -83,7 +83,9 @@ const executionDialogVisible = ref(false)
 const currentExecutionWorkflow = ref<Workflow | null>(null)
 const currentDialogExecution = ref<Execution | null>(null)
 const dialogNodeExecutions = ref<NodeExecution[]>([])
+const activeWorkflowIds = ref<Set<number>>(new Set())
 let executionPollTimer: ReturnType<typeof setInterval> | null = null
+let activeExecutionPollTimer: ReturnType<typeof setInterval> | null = null
 
 // Computed
 const isEmpty = computed(() => workflowsStore.workflows.length === 0 && !workflowsStore.loading)
@@ -93,12 +95,64 @@ const dialogExecutionProgress = computed(() => {
   return Math.round((completed / dialogNodeExecutions.value.length) * 100)
 })
 
+const hasDisplayValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+
+const getNodeExecutionHostLabel = (nodeExec: NodeExecution) => {
+  const inputData = nodeExec.input_data || {}
+  for (const key of ['server_name', 'host', 'target_host', 'ain_rpc_address']) {
+    const value = inputData[key]
+    if (hasDisplayValue(value)) return String(value)
+  }
+
+  if (hasDisplayValue(inputData.server_id)) {
+    return `Server #${inputData.server_id}`
+  }
+
+  return '无主机'
+}
+
 // Methods
 const fetchWorkflows = async () => {
   try {
     await workflowsStore.fetchWorkflows()
   } catch (error) {
     ElMessage.error('加载工作流列表失败')
+  }
+}
+
+const refreshActiveWorkflowIds = async () => {
+  try {
+    const [pendingExecutions, runningExecutions] = await Promise.all([
+      executionsApi.list({ status: 'pending', limit: 100 }),
+      executionsApi.list({ status: 'running', limit: 100 })
+    ])
+    activeWorkflowIds.value = new Set(
+      [...pendingExecutions, ...runningExecutions]
+        .filter(execution => isExecutionActive(execution.status))
+        .map(execution => execution.workflow_id)
+    )
+  } catch (error) {
+    console.error('刷新运行中工作流失败：', error)
+  }
+}
+
+const isWorkflowActive = (workflowId: number) => activeWorkflowIds.value.has(workflowId)
+
+const markWorkflowActive = (workflowId: number) => {
+  activeWorkflowIds.value = new Set([...activeWorkflowIds.value, workflowId])
+}
+
+const startActiveExecutionPolling = () => {
+  stopActiveExecutionPolling()
+  activeExecutionPollTimer = setInterval(() => {
+    void refreshActiveWorkflowIds()
+  }, 3000)
+}
+
+const stopActiveExecutionPolling = () => {
+  if (activeExecutionPollTimer) {
+    clearInterval(activeExecutionPollTimer)
+    activeExecutionPollTimer = null
   }
 }
 
@@ -142,7 +196,10 @@ const handleDuplicate = async (row: Workflow) => {
       description: row.description,
       nodes: row.nodes,
       edges: row.edges,
-      variables: row.variables
+      variables: row.variables,
+      schedule_mode: row.schedule_mode,
+      schedule_region: row.schedule_region,
+      process_resident: row.process_resident
     })
     ElMessage.success('工作流已复制')
     router.push(`/workflows/${newWorkflow.id}/edit`)
@@ -206,7 +263,10 @@ const handleExport = (row: Workflow) => {
       description: row.description,
       nodes: row.nodes || [],
       edges: row.edges || [],
-      variables: row.variables || {}
+      variables: row.variables || {},
+      schedule_mode: row.schedule_mode,
+      schedule_region: row.schedule_region,
+      process_resident: row.process_resident
     }
   }
 
@@ -258,7 +318,10 @@ const normalizeImportedWorkflow = (value: unknown): WorkflowCreate => {
     description: typeof root.description === 'string' ? root.description : null,
     nodes,
     edges,
-    variables
+    variables,
+    schedule_mode: root.schedule_mode === 'random' ? 'random' : 'fixed',
+    schedule_region: typeof root.schedule_region === 'string' ? root.schedule_region : '私有云',
+    process_resident: Boolean(root.process_resident)
   }
 }
 
@@ -343,6 +406,11 @@ const formatDate = (dateString: string) => {
 
 // Execute workflow
 const handleExecute = async (row: Workflow) => {
+  if (isWorkflowActive(row.id)) {
+    ElMessage.info('工作流正在运行')
+    return
+  }
+
   try {
     await ElMessageBox.confirm(
       `确定要执行工作流「${row.name}」吗？`,
@@ -359,6 +427,7 @@ const handleExecute = async (row: Workflow) => {
       workflow_id: row.id,
       trigger_type: 'manual'
     })
+    markWorkflowActive(row.id)
 
     // Show execution dialog
     currentDialogExecution.value = execution
@@ -391,6 +460,7 @@ const startExecutionPolling = (executionId: number) => {
       // Stop polling if execution is finished
       if (execution.status === 'completed' || execution.status === 'failed' || execution.status === 'stopped') {
         stopExecutionPolling()
+        void refreshActiveWorkflowIds()
         if (execution.status === 'stopped') {
           ElMessage.info('执行已停止')
         } else if (execution.result === 'passed') {
@@ -420,6 +490,7 @@ const handleStopExecution = async () => {
   try {
     currentDialogExecution.value = await executionsApi.stop(currentDialogExecution.value.id)
     dialogNodeExecutions.value = await executionsApi.getNodes(currentDialogExecution.value.id)
+    void refreshActiveWorkflowIds()
     stopExecutionPolling()
     ElMessage.info('执行已停止')
   } catch (error) {
@@ -452,11 +523,14 @@ const formatDuration = (seconds: number | null): string => {
 
 // Lifecycle
 onMounted(() => {
-  fetchWorkflows()
+  void fetchWorkflows()
+  void refreshActiveWorkflowIds()
+  startActiveExecutionPolling()
 })
 
 onUnmounted(() => {
   stopExecutionPolling()
+  stopActiveExecutionPolling()
 })
 </script>
 
@@ -549,11 +623,12 @@ onUnmounted(() => {
         <ElTableColumn label="操作" width="190" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
-              <ElTooltip content="执行" placement="top">
+              <ElTooltip :content="isWorkflowActive(row.id) ? '工作流正在运行' : '执行'" placement="top">
                 <ElButton
                   type="success"
                   :icon="VideoPlay"
                   size="small"
+                  :disabled="isWorkflowActive(row.id)"
                   @click="handleExecute(row)"
                   link
                 />
@@ -784,7 +859,7 @@ onUnmounted(() => {
                 </div>
                 <div class="node-exec-details">
                   <span class="node-type-enhanced">{{ nodeExec.node_type }}</span>
-                  <span class="node-id-enhanced">{{ nodeExec.node_id.slice(0, 8) }}</span>
+                  <span class="node-host-enhanced">{{ getNodeExecutionHostLabel(nodeExec) }}</span>
                 </div>
               </div>
               <div class="node-exec-meta-enhanced">
@@ -1076,12 +1151,6 @@ onUnmounted(() => {
 .node-type {
   font-weight: 500;
   color: #303133;
-}
-
-.node-id {
-  font-size: 12px;
-  color: #909399;
-  font-family: monospace;
 }
 
 .node-exec-meta {
@@ -1406,7 +1475,7 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-.node-id-enhanced {
+.node-host-enhanced {
   font-size: 11px;
   color: #94a3b8;
   font-family: 'Monaco', 'Menlo', monospace;

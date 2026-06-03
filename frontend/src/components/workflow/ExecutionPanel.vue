@@ -30,6 +30,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'executionStarted', execution: Execution): void
   (e: 'executionCompleted', execution: Execution): void
+  (e: 'executionStartFailed'): void
   (e: 'executionCleared'): void
   (e: 'nodeExecutionsUpdated', nodeExecutions: NodeExecution[]): void
 }>()
@@ -107,6 +108,22 @@ const getNodeStatusInfo = (status: string) => {
   return nodeStatusConfig[status] || nodeStatusConfig.pending
 }
 
+const hasDisplayValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+
+const getNodeExecutionHostLabel = (nodeExec: NodeExecution) => {
+  const inputData = nodeExec.input_data || {}
+  for (const key of ['server_name', 'host', 'target_host', 'ain_rpc_address']) {
+    const value = inputData[key]
+    if (hasDisplayValue(value)) return String(value)
+  }
+
+  if (hasDisplayValue(inputData.server_id)) {
+    return `Server #${inputData.server_id}`
+  }
+
+  return '无主机'
+}
+
 const normalizeLogText = (value: string): string => {
   return value
     .replace(/\\r\\n/g, '\n')
@@ -170,6 +187,7 @@ const handleRun = async () => {
     emit('executionStarted', execution)
   } catch (error) {
     console.error('启动执行失败：', error)
+    emit('executionStartFailed')
   } finally {
     isStarting.value = false
   }
@@ -372,7 +390,7 @@ onUnmounted(() => {
                 <component :is="getNodeStatusInfo(nodeExec.status).icon" />
               </ElIcon>
               <span class="node-type">{{ nodeExec.node_type }}</span>
-              <span class="node-id">{{ nodeExec.node_id.slice(0, 8) }}</span>
+              <span class="node-host">{{ getNodeExecutionHostLabel(nodeExec) }}</span>
             </div>
             <div class="node-meta">
               <span class="duration">{{ formatDuration(nodeExec.duration) }}</span>
@@ -616,7 +634,7 @@ onUnmounted(() => {
   color: #303133;
 }
 
-.node-id {
+.node-host {
   font-size: 11px;
   color: #909399;
   font-family: monospace;

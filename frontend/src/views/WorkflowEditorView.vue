@@ -21,12 +21,14 @@ import EditorToolbar from '@/components/workflow/EditorToolbar.vue'
 import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel.vue'
 import ExecutionPanel from '@/components/workflow/ExecutionPanel.vue'
+import { executionsApi } from '@/api'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
 import { useServerValidation } from '@/composables/useServerValidation'
 import { NODE_CONFIGS, REGION_OPTIONS } from '@/types'
 import type { Execution, FlowNode, NodeExecution, NodeType } from '@/types'
 import { nodeUsesTopLevelServer } from '@/utils/workflowNodeTypes'
+import { isExecutionActive } from '@/utils/execution'
 
 const route = useRoute()
 const router = useRouter()
@@ -69,6 +71,8 @@ const executionPanelRef = ref<InstanceType<typeof ExecutionPanel> | null>(null)
 const editorNodeExecutions = ref<NodeExecution[]>([])
 const configDialogVisible = ref(false)
 const nodeSwitcherDialogVisible = ref(false)
+const isWorkflowExecutionRunning = ref(false)
+let runStatePollTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedNodeConfig = computed(() => {
   const nodeType = workflowsStore.selectedNode?.data.nodeType
@@ -169,6 +173,61 @@ const getNodeMissingServerIds = (node: FlowNode) => {
 
 const hasConfigValue = (value: unknown) => value !== null && value !== undefined && value !== ''
 
+const serverHostById = computed(() => {
+  return new Map(serversStore.servers.map(server => [server.id, server.host || server.name]))
+})
+
+const getServerHostLabel = (serverId: unknown) => {
+  if (!hasConfigValue(serverId)) return ''
+  const numericId = Number(serverId)
+  return serverHostById.value.get(numericId) || `Server #${numericId}`
+}
+
+const getConfigStringValue = (value: unknown) => {
+  if (!hasConfigValue(value)) return ''
+  return String(value)
+}
+
+const getClusterHostLabels = (config: Record<string, unknown>) => {
+  const hosts: string[] = []
+  for (const field of ['config_nodes', 'data_nodes']) {
+    const nodes = config[field]
+    if (!Array.isArray(nodes)) continue
+    for (const item of nodes) {
+      if (!item || typeof item !== 'object') continue
+      const node = item as Record<string, unknown>
+      const host = getConfigStringValue(node.host) || getServerHostLabel(node.server_id)
+      if (host && !hosts.includes(host)) {
+        hosts.push(host)
+      }
+    }
+  }
+  return hosts
+}
+
+const getNodeSubtitle = (nodeType: NodeType, config: Record<string, unknown>) => {
+  const directHost = (
+    getConfigStringValue(config.server_name) ||
+    getConfigStringValue(config.host) ||
+    getConfigStringValue(config.target_host) ||
+    getConfigStringValue(config.ain_rpc_address) ||
+    getConfigStringValue(config.ain_cluster_ingress_address)
+  )
+  if (directHost) return directHost
+
+  const serverHost = getServerHostLabel(config.server_id)
+  if (serverHost) return serverHost
+
+  const clusterHosts = getClusterHostLabels(config)
+  if (clusterHosts.length > 0) return clusterHosts.join(', ')
+
+  if (workflowsStore.scheduleMode === 'random' && nodeUsesTopLevelServer(nodeType)) {
+    return '随机调度'
+  }
+
+  return '无主机'
+}
+
 const getNodeScheduleError = (node: FlowNode) => {
   const config = node.data.config || {}
 
@@ -224,8 +283,44 @@ const workflowValidationErrors = computed(() => {
   })
 })
 
-const canRunWorkflow = computed(() => workflowValidationErrors.value.length === 0)
-const runBlockedReason = computed(() => workflowValidationErrors.value[0] || '')
+const canRunWorkflow = computed(() => workflowValidationErrors.value.length === 0 && !isWorkflowExecutionRunning.value)
+const runBlockedReason = computed(() => {
+  if (isWorkflowExecutionRunning.value) return '工作流正在运行'
+  return workflowValidationErrors.value[0] || ''
+})
+
+const refreshWorkflowRunState = async () => {
+  if (!workflowId.value) {
+    isWorkflowExecutionRunning.value = false
+    return
+  }
+
+  try {
+    const [pendingExecutions, runningExecutions] = await Promise.all([
+      executionsApi.list({ workflow_id: workflowId.value, status: 'pending', limit: 20 }),
+      executionsApi.list({ workflow_id: workflowId.value, status: 'running', limit: 20 })
+    ])
+    isWorkflowExecutionRunning.value = [...pendingExecutions, ...runningExecutions]
+      .some(execution => isExecutionActive(execution.status))
+  } catch (error) {
+    console.error('刷新工作流运行状态失败：', error)
+  }
+}
+
+const stopRunStatePolling = () => {
+  if (runStatePollTimer) {
+    clearInterval(runStatePollTimer)
+    runStatePollTimer = null
+  }
+}
+
+const startRunStatePolling = () => {
+  stopRunStatePolling()
+  if (!workflowId.value) return
+  runStatePollTimer = setInterval(() => {
+    void refreshWorkflowRunState()
+  }, 3000)
+}
 
 // Auto-save timer
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
@@ -282,6 +377,8 @@ onMounted(async () => {
         workflowName.value = workflow.name
         workflowDescription.value = workflow.description || ''
         workflowsStore.initEditor(workflow)
+        await refreshWorkflowRunState()
+        startRunStatePolling()
       }
     } catch {
       ElMessage.error('加载工作流失败')
@@ -301,6 +398,7 @@ onUnmounted(() => {
   if (autoSaveTimer) {
     clearInterval(autoSaveTimer)
   }
+  stopRunStatePolling()
   workflowsStore.clearEditor()
 })
 
@@ -477,6 +575,10 @@ const handleScheduleRegionChange = (value: string) => {
   workflowsStore.setScheduleRegion(value)
 }
 
+const handleProcessResidentChange = (value: boolean) => {
+  workflowsStore.setProcessResident(value)
+}
+
 // Handle undo
 const handleUndo = () => {
   workflowsStore.undo()
@@ -505,6 +607,11 @@ const handleFitView = () => {
 // Handle run workflow
 const handleRun = async () => {
   if (workflowId.value) {
+    if (isWorkflowExecutionRunning.value) {
+      ElMessage.info('工作流正在运行')
+      return
+    }
+
     if (workflowValidationErrors.value.length > 0) {
       const firstInvalidNodeId = nodeValidationErrorsById.value.keys().next().value
       if (firstInvalidNodeId) {
@@ -534,6 +641,7 @@ const handleRun = async () => {
       }
     }
     // Ask the panel to start a run as soon as it opens.
+    isWorkflowExecutionRunning.value = true
     executionRunRequestId.value += 1
     showExecutionPanel.value = true
   }
@@ -541,11 +649,20 @@ const handleRun = async () => {
 
 // Handle execution started
 const handleExecutionStarted = (execution: Execution) => {
+  isWorkflowExecutionRunning.value = true
   ElMessage.success(`执行 #${execution.id} 已启动`)
+}
+
+const handleExecutionStartFailed = () => {
+  isWorkflowExecutionRunning.value = false
+  void refreshWorkflowRunState()
+  ElMessage.error('启动执行失败')
 }
 
 // Handle execution completed
 const handleExecutionCompleted = (execution: Execution) => {
+  isWorkflowExecutionRunning.value = false
+  void refreshWorkflowRunState()
   if (execution.result === 'passed') {
     ElMessage.success('工作流执行成功')
   } else if (execution.result === 'failed') {
@@ -561,6 +678,7 @@ const handleNodeExecutionsUpdated = (nodeExecutions: NodeExecution[]) => {
 
 const handleExecutionCleared = () => {
   editorNodeExecutions.value = []
+  void refreshWorkflowRunState()
 }
 
 const handleExecutionStatusDblclick = async (nodeId: string) => {
@@ -585,11 +703,13 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
       :run-blocked-reason="runBlockedReason"
       :schedule-mode="workflowsStore.scheduleMode"
       :schedule-region="workflowsStore.scheduleRegion"
+      :process-resident="workflowsStore.processResident"
       :region-options="REGION_OPTIONS"
       @save="handleSave"
       @auto-save-change="handleAutoSaveChange"
       @schedule-mode-change="handleScheduleModeChange"
       @schedule-region-change="handleScheduleRegionChange"
+      @process-resident-change="handleProcessResidentChange"
       @undo="handleUndo"
       @redo="handleRedo"
       @zoom-in="handleZoomIn"
@@ -626,7 +746,10 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
           <template #node-workflowNode="nodeProps">
             <WorkflowNode
               :id="nodeProps.id"
-              :data="nodeProps.data"
+              :data="{
+                ...nodeProps.data,
+                subtitle: getNodeSubtitle(nodeProps.data.nodeType, nodeProps.data.config || {})
+              }"
               :selected="nodeProps.selected"
               :execution-status="nodeExecutionStatusById.get(nodeProps.id) || null"
               :validation-error="nodeValidationErrorsById.get(nodeProps.id) || null"
@@ -652,6 +775,7 @@ const handleExecutionStatusDblclick = async (nodeId: string) => {
         :workflow-id="workflowId"
         :run-request-id="executionRunRequestId"
         @execution-started="handleExecutionStarted"
+        @execution-start-failed="handleExecutionStartFailed"
         @execution-completed="handleExecutionCompleted"
         @execution-cleared="handleExecutionCleared"
         @node-executions-updated="handleNodeExecutionsUpdated"

@@ -34,6 +34,7 @@ def test_workflow_create_schema():
     assert len(wf.nodes) == 1
     assert wf.schedule_mode == "fixed"
     assert wf.schedule_region == "私有云"
+    assert wf.process_resident is False
 
 def test_execution_create_schema():
     """Test ExecutionCreate"""

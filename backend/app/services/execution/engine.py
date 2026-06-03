@@ -243,86 +243,213 @@ class ExecutionEngine(
             return text
         return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
 
-    def _cleanup_execution_processes(self, execution: Optional[Execution]) -> Dict[str, Any]:
+    def _cleanup_execution_processes(
+        self,
+        execution: Optional[Execution],
+        workflow: Optional[Workflow] = None
+    ) -> Dict[str, Any]:
         if execution is None:
             return {}
 
+        managed_processes = self._collect_managed_processes(execution.id)
+        if workflow is not None and bool(getattr(workflow, "process_resident", False)):
+            if not managed_processes:
+                return {}
+            return {
+                "skipped": True,
+                "reason": "workflow_process_resident",
+                "registered": len(managed_processes),
+                "processes": [
+                    self._summarize_managed_process(process)
+                    for process in managed_processes
+                ],
+            }
+
+        if managed_processes:
+            return {
+                "mode": "managed_processes",
+                "registered": len(managed_processes),
+                "results": self._cleanup_managed_processes(managed_processes),
+            }
+        return {}
+
+    def _collect_managed_processes(self, execution_id: int) -> List[Dict[str, Any]]:
         node_executions = self.db.query(NodeExecution).filter(
-            NodeExecution.execution_id == execution.id
+            NodeExecution.execution_id == execution_id
         ).all()
 
-        server_install_dirs: Dict[int, Set[str]] = {}
+        processes: List[Dict[str, Any]] = []
+        seen: Set[str] = set()
         for ne in node_executions:
-            inp = ne.input_data or {}
-            for sid, dirs in self._extract_server_dirs(inp).items():
-                server_install_dirs.setdefault(sid, set()).update(dirs)
-
-        if not server_install_dirs:
-            return {}
-
-        cleanup_results: Dict[str, Any] = {}
-        for server_id, dirs in server_install_dirs.items():
-            server = self.db.query(Server).filter(Server.id == server_id).first()
-            if not server:
+            output_data = ne.output_data or {}
+            if not isinstance(output_data, dict):
                 continue
-            parts = []
-            for d in sorted(dirs):
-                quoted = self._quote(d)
-                parts.append(
-                    f"cd {quoted} 2>/dev/null && "
-                    f"for s in sbin/stop-*.sh; do [ -f \"$s\" ] && bash \"$s\" -f 2>/dev/null; done"
-                )
-                # 基于安装目录路径精准查找残留进程，先 SIGTERM 再 SIGKILL
-                parts.append(
-                    f"_pids=$(pgrep -f {quoted} 2>/dev/null); "
-                    f"if [ -n \"$_pids\" ]; then kill $_pids 2>/dev/null; sleep 2; kill -9 $_pids 2>/dev/null; fi"
-                )
-            parts.append("echo cleanup_done")
-            cmd = "; ".join(parts)
+            raw_processes = output_data.get("managed_processes") or []
+            if not isinstance(raw_processes, list):
+                continue
+            for item in raw_processes:
+                if not isinstance(item, dict):
+                    continue
+                process = dict(item)
+                process.setdefault("node_id", ne.node_id)
+                process.setdefault("node_type", ne.node_type)
+                key = json.dumps({
+                    "server_id": process.get("server_id"),
+                    "kind": process.get("kind"),
+                    "home": process.get("home"),
+                    "pid": process.get("pid"),
+                    "stop_command": process.get("stop_command"),
+                    "node_id": process.get("node_id"),
+                }, sort_keys=True, ensure_ascii=False)
+                if key in seen:
+                    continue
+                seen.add(key)
+                processes.append(process)
+        return processes
+
+    def _cleanup_managed_processes(self, processes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        cleanup_results: List[Dict[str, Any]] = []
+        for process in reversed(processes):
+            result = self._summarize_managed_process(process)
+            server_id = process.get("server_id")
+            if server_id in (None, ""):
+                result["error"] = "managed process is missing server_id"
+                cleanup_results.append(result)
+                continue
+
+            server = self.db.query(Server).filter(Server.id == int(server_id)).first()
+            if not server:
+                result["error"] = f"server {server_id} not found"
+                cleanup_results.append(result)
+                continue
+
+            command = self._build_managed_cleanup_command(process)
+            if not command:
+                result["error"] = "managed process has no cleanup command"
+                cleanup_results.append(result)
+                continue
+
             try:
-                result = self.ssh_service.run_command(
+                ssh_result = self.ssh_service.run_command(
                     host=server.host,
                     username=server.username,
                     password=server.password,
-                    command=cmd,
+                    command="bash -lc " + self._quote(command),
                     port=server.port,
-                    timeout=30
+                    timeout=60
                 )
-                cleanup_results[f"{server.host}({server_id})"] = {
-                    "exit_status": result.exit_status,
-                    "stdout": self._truncate_log_value(result.stdout, 500),
-                    "dirs": list(dirs),
-                }
+                result.update({
+                    "exit_status": ssh_result.exit_status,
+                    "stdout": self._truncate_log_value(ssh_result.stdout, 1000),
+                    "stderr": self._truncate_log_value(ssh_result.stderr or ssh_result.error, 1000),
+                })
             except Exception as exc:
-                cleanup_results[f"{server.host}({server_id})"] = {"error": str(exc)}
+                result["error"] = str(exc)
+            cleanup_results.append(result)
         return cleanup_results
 
-    def _extract_server_dirs(self, input_data: Dict[str, Any]) -> Dict[int, Set[str]]:
-        result: Dict[int, Set[str]] = {}
-        sid = input_data.get("server_id")
-        if sid not in (None, ""):
-            dirs = set()
-            for key in ("iotdb_home", "ainode_home", "install_dir", "benchmark_home"):
-                val = input_data.get(key)
-                if val not in (None, ""):
-                    dirs.add(str(val))
-            if dirs:
-                result[int(sid)] = dirs
+    def _summarize_managed_process(self, process: Dict[str, Any]) -> Dict[str, Any]:
+        summary = {
+            "kind": process.get("kind"),
+            "server_id": process.get("server_id"),
+            "host": process.get("host"),
+            "node_id": process.get("node_id"),
+            "node_type": process.get("node_type"),
+        }
+        for key in ("home", "role", "pid"):
+            if process.get(key) not in (None, ""):
+                summary[key] = process.get(key)
+        return summary
 
-        for group_key in ("config_nodes", "data_nodes"):
-            group = input_data.get(group_key)
-            if not isinstance(group, list):
-                continue
-            for item in group:
-                if not isinstance(item, dict):
-                    continue
-                item_sid = item.get("server_id")
-                if item_sid in (None, ""):
-                    continue
-                item_dir = item.get("install_dir") or item.get("iotdb_home")
-                if item_dir not in (None, ""):
-                    result.setdefault(int(item_sid), set()).add(str(item_dir))
-        return result
+    def _build_managed_cleanup_command(self, process: Dict[str, Any]) -> str:
+        commands = ["set +e"]
+        stop_command = str(process.get("stop_command") or "").strip()
+        if stop_command:
+            commands.extend([
+                stop_command,
+                "stop_code=$?",
+            ])
+        else:
+            commands.append("stop_code=0")
+
+        kind = str(process.get("kind") or "").strip()
+        quoted_kind = self._quote(kind)
+        commands.extend([
+            f"_cleanup_kind={quoted_kind}",
+            "_matches_managed_process() {",
+            "  _managed_cmd=$1",
+            '  case "$_cleanup_kind" in',
+            "    iotdb)",
+            '      case "$_managed_cmd" in *com.timecho.iotdb.DataNode*|*org.apache.iotdb.db.service.DataNode*|*com.timecho.iotdb.ConfigNode*|*org.apache.iotdb.confignode.service.ConfigNode*|*org.apache.iotdb.db.service.IoTDB*|*DataNode\\ -s*|*ConfigNode\\ -s*) return 0 ;; esac',
+            "      ;;",
+            "    iotdb_ainode)",
+            '      case "$_managed_cmd" in *AINode*|*ainode*) return 0 ;; esac',
+            "      ;;",
+            "    iot_benchmark)",
+            '      case "$_managed_cmd" in *benchmark.sh*|*IoTBenchmark*|*iot-benchmark*) return 0 ;; esac',
+            "      ;;",
+            "    *)",
+            "      return 0",
+            "      ;;",
+            "  esac",
+            "  return 1",
+            "}",
+        ])
+
+        pid = str(process.get("pid") or "").strip()
+        if pid:
+            quoted_pid = self._quote(pid)
+            commands.extend([
+                f"pkill -TERM -P {quoted_pid} 2>/dev/null || true",
+                f"kill {quoted_pid} 2>/dev/null || true",
+                "sleep 2",
+                f"pkill -KILL -P {quoted_pid} 2>/dev/null || true",
+                f"kill -9 {quoted_pid} 2>/dev/null || true",
+            ])
+
+        fallback_pattern = str(process.get("fallback_pattern") or "").strip()
+        if fallback_pattern:
+            quoted_pattern = self._quote(fallback_pattern)
+            commands.extend([
+                '_pids=""',
+                f"for _pid in $(pgrep -f {quoted_pattern} 2>/dev/null); do",
+                '  [ "$_pid" = "$$" ] && continue',
+                '  _cmd=$(tr "\\0" " " < "/proc/$_pid/cmdline" 2>/dev/null)',
+                '  _matches_managed_process "$_cmd" || continue',
+                '  _pids="${_pids} ${_pid}"',
+                'done',
+                'for _pid in $_pids; do kill "$_pid" 2>/dev/null || true; done',
+                "sleep 2",
+                'for _pid in $_pids; do kill -9 "$_pid" 2>/dev/null || true; done',
+            ])
+
+        home = str(process.get("home") or "").strip()
+        cleanup_home = home.rstrip("/")
+        if cleanup_home:
+            quoted_home = self._quote(cleanup_home)
+            commands.extend([
+                f"_cleanup_home={quoted_home}",
+                '_home_pids=""',
+                'for _proc in /proc/[0-9]*; do',
+                '  _pid=${_proc##*/}',
+                '  [ "$_pid" = "$$" ] && continue',
+                '  _cwd=$(readlink -f "$_proc/cwd" 2>/dev/null) || continue',
+                '  case "$_cwd" in "$_cleanup_home"|"$_cleanup_home"/*) ;; *) continue ;; esac',
+                '  _cmd=$(tr "\\0" " " < "$_proc/cmdline" 2>/dev/null)',
+                '  _matches_managed_process "$_cmd" || continue',
+                '  _home_pids="${_home_pids} ${_pid}"',
+                'done',
+                'for _pid in $_home_pids; do kill "$_pid" 2>/dev/null || true; done',
+                'sleep 2',
+                'for _pid in $_home_pids; do kill -9 "$_pid" 2>/dev/null || true; done',
+                'if [ -n "$_home_pids" ]; then echo "process_cleanup_home_pids=${_home_pids}"; fi',
+            ])
+
+        commands.extend([
+            'echo "process_cleanup_done stop_code=${stop_code}"',
+            "exit 0",
+        ])
+        return "\n".join(commands)
 
     def execute_workflow(self, execution_id: int) -> None:
         execution = self.get_execution(execution_id)
@@ -532,11 +659,6 @@ class ExecutionEngine(
                 execution.status = "failed"
                 execution.result = "failed" if passed_count == 0 else "partial"
 
-            cleanup = self._cleanup_execution_processes(execution)
-            if cleanup:
-                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
-            self._finalize_webhook_execution(execution)
-            self.db.commit()
         except Exception as exc:
             logger.exception("Error in execution %s", execution_id)
             execution.status = "failed"
@@ -553,8 +675,19 @@ class ExecutionEngine(
                     locals().get("statuses", {})
                 ),
             }
-            cleanup = self._cleanup_execution_processes(execution)
-            if cleanup:
-                execution.summary = {**(execution.summary or {}), "cleanup": cleanup}
+        finally:
+            try:
+                cleanup = self._cleanup_execution_processes(execution, workflow)
+                if cleanup:
+                    execution.summary = {
+                        **(execution.summary or {}),
+                        "process_cleanup": cleanup,
+                    }
+            except Exception as cleanup_exc:
+                logger.exception("Failed to cleanup execution %s processes", execution_id)
+                execution.summary = {
+                    **(execution.summary or {}),
+                    "process_cleanup": {"error": str(cleanup_exc)},
+                }
             self._finalize_webhook_execution(execution)
             self.db.commit()

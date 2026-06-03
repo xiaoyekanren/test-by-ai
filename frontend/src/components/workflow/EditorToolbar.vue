@@ -30,6 +30,7 @@ const props = defineProps<{
   runBlockedReason: string
   scheduleMode: 'fixed' | 'random'
   scheduleRegion: string
+  processResident: boolean
   regionOptions: string[]
 }>()
 
@@ -44,6 +45,7 @@ const emit = defineEmits<{
   (e: 'run'): void
   (e: 'scheduleModeChange', value: 'fixed' | 'random'): void
   (e: 'scheduleRegionChange', value: string): void
+  (e: 'processResidentChange', value: boolean): void
 }>()
 
 const handleSave = () => {
@@ -84,6 +86,10 @@ const handleScheduleModeChange = (value: string | number | boolean) => {
 
 const handleScheduleRegionChange = (value: string | number | boolean) => {
   emit('scheduleRegionChange', String(value || '私有云'))
+}
+
+const handleProcessResidentChange = (value: boolean | number | string) => {
+  emit('processResidentChange', Boolean(value))
 }
 
 const pageTitle = computed(() => {
@@ -172,6 +178,14 @@ const pageTitle = computed(() => {
             :value="region"
           />
         </ElSelect>
+      </div>
+      <div class="process-resident-toggle">
+        <span class="label">进程常驻</span>
+        <ElSwitch
+          :model-value="processResident"
+          size="small"
+          @update:model-value="handleProcessResidentChange"
+        />
       </div>
       <div class="auto-save-toggle">
         <span class="label">Auto Save</span>
@@ -282,6 +296,13 @@ const pageTitle = computed(() => {
   gap: 8px;
 }
 
+.process-resident-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.process-resident-toggle .label,
 .auto-save-toggle .label {
   font-size: 13px;
   color: #606266;

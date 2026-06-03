@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { VueFlow } from '@vue-flow/core'
-import { Background } from '@vue-flow/background'
-import '@vue-flow/core/dist/style.css'
-import '@vue-flow/core/dist/theme-default.css'
 import {
   ElAlert,
   ElButton,
   ElCard,
-  ElDescriptions,
-  ElDescriptionsItem,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -22,16 +16,13 @@ import {
 import {
   Delete as DeleteIcon,
   Refresh,
-  Clock,
-  Monitor,
   Edit
 } from '@element-plus/icons-vue'
 import { useExecutionsStore } from '@/stores/executions'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useServersStore } from '@/stores/servers'
 import { NODE_CONFIGS } from '@/types'
-import WorkflowNode from '@/components/workflow/nodes/WorkflowNode.vue'
-import type { NodeDefinition, NodeExecution, NodeType } from '@/types'
+import type { NodeDefinition, NodeExecution } from '@/types'
 
 interface WorkflowStateSnapshotNode {
   id: string
@@ -70,6 +61,30 @@ interface ExecutionNodeViewModel {
   execution: NodeExecution | null
 }
 
+interface ReadonlyGraphNode {
+  node: ExecutionNodeViewModel
+  x: number
+  y: number
+  width: number
+  height: number
+  layer: number
+  lane: number
+  hostLabel: string
+}
+
+interface ReadonlyGraphEdge {
+  id: string
+  path: string
+  status: string
+}
+
+interface ReadonlyGraphPhase {
+  key: number
+  label: string
+  x: number
+  width: number
+}
+
 const route = useRoute()
 const router = useRouter()
 const executionsStore = useExecutionsStore()
@@ -86,13 +101,79 @@ const deletingExecutionId = ref<number | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+const readonlyGraphNodeWidth = 150
+const readonlyGraphNodeHeight = 76
+const readonlyGraphColumnGap = 68
+const readonlyGraphRowGap = 34
+const readonlyGraphPaddingX = 28
+const readonlyGraphPaddingTop = 58
+const readonlyGraphPaddingBottom = 34
+
 const workflowNameMap = computed(() => {
   return new Map(workflowsStore.workflows.map(workflow => [workflow.id, workflow.name]))
 })
 
-const serverNameMap = computed(() => {
-  return new Map(serversStore.servers.map(server => [server.id, `${server.name} (${server.host})`]))
+const serverHostMap = computed(() => {
+  return new Map(serversStore.servers.map(server => [server.id, server.host || server.name]))
 })
+
+const hasDisplayValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+
+const getDisplayString = (value: unknown) => {
+  if (!hasDisplayValue(value)) return ''
+  return String(value)
+}
+
+const getServerHostLabel = (serverId: unknown) => {
+  if (!hasDisplayValue(serverId)) return ''
+  const numericServerId = Number(serverId)
+  if (!Number.isFinite(numericServerId)) return ''
+  return serverHostMap.value.get(numericServerId) || `Server #${numericServerId}`
+}
+
+const getClusterHostLabels = (config: Record<string, unknown>) => {
+  const hosts: string[] = []
+  for (const field of ['config_nodes', 'data_nodes']) {
+    const nodes = config[field]
+    if (!Array.isArray(nodes)) continue
+    for (const item of nodes) {
+      if (!item || typeof item !== 'object') continue
+      const node = item as Record<string, unknown>
+      const host = getDisplayString(node.host) || getServerHostLabel(node.server_id)
+      if (host && !hosts.includes(host)) {
+        hosts.push(host)
+      }
+    }
+  }
+  return hosts
+}
+
+const getNodeSubtitle = (
+  config: Record<string, unknown>,
+  inputData: Record<string, unknown> | null | undefined
+) => {
+  const runtime = inputData || {}
+  const directHost = (
+    getDisplayString(runtime.server_name) ||
+    getDisplayString(runtime.host) ||
+    getDisplayString(runtime.target_host) ||
+    getDisplayString(runtime.ain_rpc_address) ||
+    getDisplayString(config.server_name) ||
+    getDisplayString(config.host) ||
+    getDisplayString(config.target_host) ||
+    getDisplayString(config.ain_rpc_address) ||
+    getDisplayString(config.ain_cluster_ingress_address)
+  )
+  if (directHost) return directHost
+
+  const serverHost = getServerHostLabel(runtime.server_id) || getServerHostLabel(config.server_id)
+  if (serverHost) return serverHost
+
+  const clusterHosts = getClusterHostLabels(config)
+  if (clusterHosts.length > 0) return clusterHosts.join(', ')
+
+  return '无主机'
+}
 
 const executionList = computed(() => {
   return executionsStore.executions.map(execution => ({
@@ -204,38 +285,111 @@ const executionSummaryDisplay = computed(() => {
   return rest
 })
 
-const workflowStatusFlowNodes = computed(() => {
-  return executionNodeViewModels.value.map((node, index) => ({
-    id: node.nodeId,
-    type: 'workflowNode',
-    position: node.definition?.position || {
-      x: (index % 3) * 260,
-      y: Math.floor(index / 3) * 140
-    },
-    data: {
-      label: node.label,
-      nodeType: node.nodeType as NodeType,
-      config: node.definition?.config || {}
-    },
-    draggable: false,
-    selectable: false
+const readonlyGraphLayout = computed(() => {
+  const parsedNodes = executionNodeViewModels.value.map(node => ({
+    node,
+    sequence: parseSequenceParts(node.sequence)
   }))
-})
+  const layerValues = Array.from(new Set(parsedNodes.map(item => item.sequence.layer))).sort((a, b) => a - b)
+  const maxLane = Math.max(1, ...parsedNodes.map(item => item.sequence.lane))
+  const centeredLane = maxLane > 1 ? (maxLane + 1) / 2 : 1
 
-const workflowStatusFlowEdges = computed(() => {
-  return workflowEdges.value.map(edge => {
-    const from = executionNodeViewModels.value.find(node => node.nodeId === edge.from)
-    const to = executionNodeViewModels.value.find(node => node.nodeId === edge.to)
-    const status = edge.status || (from && to ? getWorkflowEdgeStatus(from, to) : 'pending')
+  const graphNodes: ReadonlyGraphNode[] = parsedNodes.map(item => {
+    const layerIndex = Math.max(0, layerValues.indexOf(item.sequence.layer))
+    const lane = item.sequence.hasExplicitLane ? item.sequence.lane : centeredLane
     return {
-      id: `${edge.from}-${edge.to}`,
-      source: edge.from,
-      target: edge.to,
-      label: edge.label || undefined,
-      animated: status === 'running',
-      class: `status-flow-edge status-flow-edge-${status}`
+      node: item.node,
+      x: readonlyGraphPaddingX + layerIndex * (readonlyGraphNodeWidth + readonlyGraphColumnGap),
+      y: readonlyGraphPaddingTop + (lane - 1) * (readonlyGraphNodeHeight + readonlyGraphRowGap),
+      width: readonlyGraphNodeWidth,
+      height: readonlyGraphNodeHeight,
+      layer: item.sequence.layer,
+      lane,
+      hostLabel: getTimelineHostLabel(item.node)
     }
   })
+
+  const width = Math.max(
+    620,
+    readonlyGraphPaddingX * 2 +
+      layerValues.length * readonlyGraphNodeWidth +
+      Math.max(0, layerValues.length - 1) * readonlyGraphColumnGap
+  )
+  const height = Math.max(
+    320,
+    readonlyGraphPaddingTop +
+      maxLane * readonlyGraphNodeHeight +
+      Math.max(0, maxLane - 1) * readonlyGraphRowGap +
+      readonlyGraphPaddingBottom
+  )
+
+  const nodeMap = new Map(graphNodes.map(item => [item.node.nodeId, item]))
+  const edges: ReadonlyGraphEdge[] = workflowEdges.value
+    .map(edge => {
+      const source = nodeMap.get(edge.from)
+      const target = nodeMap.get(edge.to)
+      const from = executionNodeViewModels.value.find(node => node.nodeId === edge.from)
+      const to = executionNodeViewModels.value.find(node => node.nodeId === edge.to)
+      if (!source || !target || !from || !to) return null
+
+      const startX = source.x + source.width
+      const startY = source.y + source.height / 2
+      const endX = target.x
+      const endY = target.y + target.height / 2
+      const controlGap = Math.max(42, Math.abs(endX - startX) * 0.45)
+      const path = endX >= startX
+        ? `M ${startX} ${startY} C ${startX + controlGap} ${startY}, ${endX - controlGap} ${endY}, ${endX} ${endY}`
+        : `M ${startX} ${startY} C ${startX + 54} ${startY}, ${endX - 54} ${endY}, ${endX} ${endY}`
+      const status = edge.status || getWorkflowEdgeStatus(from, to)
+
+      return {
+        id: `${edge.from}-${edge.to}`,
+        path,
+        status
+      }
+    })
+    .filter((edge): edge is ReadonlyGraphEdge => edge !== null)
+
+  const phases: ReadonlyGraphPhase[] = layerValues.map((layer, index) => ({
+    key: layer,
+    label: `阶段 ${layer}`,
+    x: readonlyGraphPaddingX + index * (readonlyGraphNodeWidth + readonlyGraphColumnGap),
+    width: readonlyGraphNodeWidth
+  }))
+
+  return {
+    nodes: graphNodes,
+    edges,
+    phases,
+    width,
+    height
+  }
+})
+
+const readonlyGraphStyle = computed(() => ({
+  width: `${readonlyGraphLayout.value.width}px`,
+  height: `${readonlyGraphLayout.value.height}px`
+}))
+
+const readonlyGraphViewBox = computed(() => {
+  return `0 0 ${readonlyGraphLayout.value.width} ${readonlyGraphLayout.value.height}`
+})
+
+const timelinePhaseGroups = computed(() => {
+  const groups = new Map<number, ExecutionNodeViewModel[]>()
+  for (const node of executionNodeViewModels.value) {
+    const layer = parseSequenceParts(node.sequence).layer
+    const group = groups.get(layer) || []
+    group.push(node)
+    groups.set(layer, group)
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([phase, nodes]) => ({
+      phase,
+      nodes: nodes.sort((left, right) => compareSequence(left.sequence, right.sequence))
+    }))
 })
 
 const displayExecutionStatus = computed(() => {
@@ -326,31 +480,50 @@ function getWorkflowEdgeStatus(from: ExecutionNodeViewModel, to: ExecutionNodeVi
   return 'pending'
 }
 
-function compareSequence(left: string, right: string) {
-  const parse = (value: string) => {
-    const [layerText, branchText = '0'] = value.split('-', 2)
-    const layer = Number(layerText)
-    const branch = Number(branchText)
-    return [
-      Number.isFinite(layer) ? layer : 0,
-      Number.isFinite(branch) ? branch : 0
-    ]
+function parseSequenceParts(value: string) {
+  const [layerText, branchText] = value.split('-', 2)
+  const layer = Number(layerText)
+  const lane = Number(branchText)
+
+  return {
+    layer: Number.isFinite(layer) ? layer : 0,
+    lane: Number.isFinite(lane) && lane > 0 ? lane : 1,
+    hasExplicitLane: branchText !== undefined
   }
-  const [leftLayer, leftBranch] = parse(left)
-  const [rightLayer, rightBranch] = parse(right)
-  return leftLayer - rightLayer || leftBranch - rightBranch
 }
 
-function getNodeViewById(nodeId: string) {
-  return executionNodeViewModels.value.find(node => node.nodeId === nodeId) || null
+function compareSequence(left: string, right: string) {
+  const leftParts = parseSequenceParts(left)
+  const rightParts = parseSequenceParts(right)
+  return leftParts.layer - rightParts.layer || leftParts.lane - rightParts.lane
 }
 
-function getFlowExecutionStatus(nodeId: string): 'running' | 'passed' | 'failed' | null {
-  const status = getNodeViewById(nodeId)?.status
-  if (status === 'running') return 'running'
-  if (status === 'failed') return 'failed'
-  if (status === 'success') return 'passed'
-  return null
+function getGraphNodeStyle(node: ReadonlyGraphNode) {
+  return {
+    left: `${node.x}px`,
+    top: `${node.y}px`,
+    width: `${node.width}px`,
+    height: `${node.height}px`
+  }
+}
+
+function getGraphPhaseStyle(phase: ReadonlyGraphPhase) {
+  return {
+    left: `${phase.x}px`,
+    width: `${phase.width}px`
+  }
+}
+
+function getNodeStatusClass(status: string) {
+  if (['success', 'failed', 'running', 'skipped', 'not-run', 'pending'].includes(status)) {
+    return status
+  }
+  return 'pending'
+}
+
+function getEdgeStatusClass(status: string) {
+  if (['passed', 'failed', 'running', 'pending'].includes(status)) return status
+  return 'pending'
 }
 
 function getStatusTone(status: string) {
@@ -371,10 +544,27 @@ function getStatusTone(status: string) {
   }
 }
 
-function getServerLabel(serverId: unknown) {
-  const numericServerId = Number(serverId)
-  if (!Number.isFinite(numericServerId)) return '未知服务器'
-  return serverNameMap.value.get(numericServerId) || `服务器 #${numericServerId}`
+function getNodeStatusLabel(status: string) {
+  switch (status) {
+    case 'success':
+      return '成功'
+    case 'failed':
+      return '失败'
+    case 'running':
+      return '运行中'
+    case 'pending':
+      return '等待中'
+    case 'skipped':
+      return '已跳过'
+    case 'not-run':
+      return '未执行'
+    default:
+      return status
+  }
+}
+
+function getTimelineHostLabel(node: ExecutionNodeViewModel) {
+  return getNodeSubtitle(node.definition?.config || {}, node.execution?.input_data)
 }
 
 function goToWorkflowEditor() {
@@ -625,39 +815,61 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <div class="overview-grid">
-            <div class="metric-card">
-              <div class="metric-label">工作流</div>
-              <div class="metric-value">{{ workflowNameMap.get(currentExecution.workflow_id) || `工作流 #${currentExecution.workflow_id}` }}</div>
+          <div class="overview-layout">
+            <div class="overview-main">
+              <div class="overview-grid">
+                <div class="metric-card">
+                  <div class="metric-label">工作流</div>
+                  <div class="metric-value">{{ workflowNameMap.get(currentExecution.workflow_id) || `工作流 #${currentExecution.workflow_id}` }}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">触发方式</div>
+                  <div class="metric-value">{{ currentExecution.trigger_type }}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">总耗时</div>
+                  <div class="metric-value">{{ formatDuration(currentExecution.duration) }}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">节点进度</div>
+                  <div class="metric-value">{{ progressPercent }}%</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">未执行节点</div>
+                  <div class="metric-value">{{ notRunNodeCount }}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">失败节点</div>
+                  <div class="metric-value">{{ failedNodeCount }}</div>
+                </div>
+              </div>
+
+              <div class="overview-time-grid">
+                <div class="overview-info-card">
+                  <div class="overview-info-label">创建时间</div>
+                  <div class="overview-info-value">{{ formatDate(currentExecution.created_at) }}</div>
+                </div>
+                <div class="overview-info-card">
+                  <div class="overview-info-label">开始时间</div>
+                  <div class="overview-info-value">{{ formatDate(currentExecution.started_at) }}</div>
+                </div>
+                <div class="overview-info-card">
+                  <div class="overview-info-label">结束时间</div>
+                  <div class="overview-info-value">{{ formatDate(currentExecution.finished_at) }}</div>
+                </div>
+              </div>
             </div>
-            <div class="metric-card">
-              <div class="metric-label">触发方式</div>
-              <div class="metric-value">{{ currentExecution.trigger_type }}</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">总耗时</div>
-              <div class="metric-value">{{ formatDuration(currentExecution.duration) }}</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">节点进度</div>
-              <div class="metric-value">{{ progressPercent }}%</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">未执行节点</div>
-              <div class="metric-value">{{ notRunNodeCount }}</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">失败节点</div>
-              <div class="metric-value">{{ failedNodeCount }}</div>
+
+            <div class="overview-summary-card">
+              <div class="overview-summary-header">
+                <div>
+                  <div class="overview-summary-title">执行摘要 JSON</div>
+                  <div class="overview-summary-subtitle">summary</div>
+                </div>
+              </div>
+              <pre class="overview-summary-pre">{{ stringifyData(executionSummaryDisplay) }}</pre>
             </div>
           </div>
-
-          <ElDescriptions :column="2" border class="execution-descriptions">
-            <ElDescriptionsItem label="创建时间">{{ formatDate(currentExecution.created_at) }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="开始时间">{{ formatDate(currentExecution.started_at) }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="结束时间">{{ formatDate(currentExecution.finished_at) }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="摘要">{{ stringifyData(executionSummaryDisplay) }}</ElDescriptionsItem>
-          </ElDescriptions>
         </ElCard>
 
         <div v-if="currentExecution" class="detail-grid">
@@ -677,72 +889,95 @@ onUnmounted(() => {
               v-else
               class="workflow-status-canvas"
             >
-              <VueFlow
-                :nodes="workflowStatusFlowNodes"
-                :edges="workflowStatusFlowEdges"
-                :nodes-draggable="false"
-                :nodes-connectable="false"
-                :elements-selectable="false"
-                :min-zoom="0.2"
-                :max-zoom="1.5"
-                :fit-view-on-init="true"
-                :fit-view-options="{ padding: 0.25, maxZoom: 1 }"
-                class="workflow-status-flow"
-              >
-                <Background pattern-color="#cbd5e1" :gap="16" />
+              <div class="readonly-graph-inner" :style="readonlyGraphStyle">
+                <div
+                  v-for="phase in readonlyGraphLayout.phases"
+                  :key="phase.key"
+                  class="readonly-graph-phase"
+                  :style="getGraphPhaseStyle(phase)"
+                >
+                  {{ phase.label }}
+                </div>
 
-                <template #node-workflowNode="nodeProps">
-                  <div class="status-flow-node-shell">
-                    <span class="status-flow-node-sequence">
-                      {{ getNodeViewById(nodeProps.id)?.sequence || '' }}
-                    </span>
-                    <WorkflowNode
-                      v-bind="nodeProps"
-                      :selected="rawNodeId === nodeProps.id"
-                      :execution-status="getFlowExecutionStatus(nodeProps.id)"
-                      @click="rawNodeId = nodeProps.id"
-                    />
+                <svg
+                  class="readonly-graph-svg"
+                  :viewBox="readonlyGraphViewBox"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    v-for="edge in readonlyGraphLayout.edges"
+                    :key="edge.id"
+                    class="readonly-graph-edge"
+                    :class="`readonly-graph-edge-${getEdgeStatusClass(edge.status)}`"
+                    :d="edge.path"
+                  />
+                </svg>
+
+                <button
+                  v-for="graphNode in readonlyGraphLayout.nodes"
+                  :key="graphNode.node.nodeId"
+                  type="button"
+                  class="readonly-graph-node"
+                  :class="[
+                    `readonly-graph-node-${getNodeStatusClass(graphNode.node.status)}`,
+                    { active: rawNodeId === graphNode.node.nodeId }
+                  ]"
+                  :style="getGraphNodeStyle(graphNode)"
+                  @click="rawNodeId = graphNode.node.nodeId"
+                >
+                  <div class="readonly-node-top">
+                    <span class="readonly-node-sequence">{{ graphNode.node.sequence }}</span>
+                    <span class="readonly-node-status-dot" />
+                    <span class="readonly-node-status">{{ getNodeStatusLabel(graphNode.node.status) }}</span>
                   </div>
-                </template>
-              </VueFlow>
+                  <div class="readonly-node-title">{{ graphNode.node.label }}</div>
+                  <div class="readonly-node-meta">{{ graphNode.hostLabel }}</div>
+                </button>
+              </div>
             </div>
 
-            <div v-if="executionNodeViewModels.length > 0" class="timeline-list">
-              <button
-                v-for="node in executionNodeViewModels"
-                :key="node.nodeId"
-                type="button"
-                class="timeline-item"
-                :class="{ active: rawNodeId === node.nodeId, 'not-run': node.status === 'not-run' }"
-                @click="rawNodeId = node.nodeId"
-              >
-                <div class="timeline-sequence">{{ node.sequence }}</div>
-                <div class="timeline-dot" :class="node.status" />
-                <div class="timeline-main">
-                  <div class="timeline-title-row">
-                    <div>
-                      <div class="timeline-title">{{ node.label }}</div>
-                      <div class="timeline-id">{{ node.nodeType }} · {{ node.nodeId }}</div>
-                    </div>
-                    <ElTag :type="getStatusTone(node.status)" effect="plain">
-                      {{ node.status }}
-                    </ElTag>
-                  </div>
+            <div v-if="executionNodeViewModels.length > 0" class="timeline-board">
+              <div class="timeline-header">
+                <div class="timeline-heading-group">
+                  <span class="timeline-heading">事件流</span>
+                  <span class="timeline-subtitle">{{ completedNodeCount }} / {{ executionNodeViewModels.length }} 已结束</span>
+                </div>
+                <div class="timeline-progress" aria-label="节点进度">
+                  <span class="timeline-progress-track">
+                    <span class="timeline-progress-fill" :style="{ width: `${progressPercent}%` }" />
+                  </span>
+                  <span class="timeline-progress-text">{{ progressPercent }}%</span>
+                </div>
+              </div>
 
-                  <div class="timeline-meta">
-                    <span><Clock class="inline-icon" /> {{ formatDuration(node.execution?.duration ?? null) }}</span>
-                    <span><Monitor class="inline-icon" /> {{ getServerLabel(node.execution?.input_data?.server_id) }}</span>
-                    <span>{{ node.incomingCount }} 入 / {{ node.outgoingCount }} 出</span>
-                  </div>
-
-                  <div v-if="node.status === 'not-run'" class="timeline-note">
-                    该节点属于当前工作流，但本次执行尚未运行到这里。
-                  </div>
-                  <div v-if="node.execution?.error_message" class="timeline-error">
-                    {{ node.execution.error_message }}
+              <div class="timeline-list">
+                <div
+                  v-for="group in timelinePhaseGroups"
+                  :key="group.phase"
+                  class="timeline-phase-row"
+                >
+                  <div class="timeline-phase-label">阶段 {{ group.phase }}</div>
+                  <div class="timeline-phase-nodes">
+                    <button
+                      v-for="node in group.nodes"
+                      :key="node.nodeId"
+                      type="button"
+                      class="timeline-item"
+                      :class="[
+                        `status-${node.status}`,
+                        { active: rawNodeId === node.nodeId, 'not-run': node.status === 'not-run' }
+                      ]"
+                      :title="`${node.sequence} ${node.label} · ${getTimelineHostLabel(node)}`"
+                      @click="rawNodeId = node.nodeId"
+                    >
+                      <span class="timeline-dot" :class="node.status" />
+                      <span class="timeline-sequence">{{ node.sequence }}</span>
+                      <span class="timeline-title">{{ node.label }}</span>
+                    </button>
                   </div>
                 </div>
-              </button>
+              </div>
             </div>
           </ElCard>
 
@@ -806,20 +1041,20 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div v-if="selectedNodeView.definition" class="raw-block">
-                <div class="raw-label">工作流配置</div>
+              <details v-if="selectedNodeView.definition" class="raw-block raw-detail" open>
+                <summary class="raw-detail-summary">工作流配置</summary>
                 <pre class="raw-pre">{{ stringifyData(selectedNodeView.definition.config) }}</pre>
-              </div>
+              </details>
 
-              <div class="raw-block">
-                <div class="raw-label">输入</div>
+              <details class="raw-block raw-detail" open>
+                <summary class="raw-detail-summary">输入</summary>
                 <pre class="raw-pre">{{ stringifyData(selectedNodeExecution?.input_data) }}</pre>
-              </div>
+              </details>
 
-              <div class="raw-block">
-                <div class="raw-label">输出</div>
+              <details class="raw-block raw-detail" open>
+                <summary class="raw-detail-summary">输出</summary>
                 <pre class="raw-pre">{{ formatRawOutput(selectedNodeExecution?.output_data) }}</pre>
-              </div>
+              </details>
             </template>
           </ElCard>
         </div>
@@ -973,8 +1208,6 @@ onUnmounted(() => {
 
 .execution-subtitle,
 .execution-row-meta,
-.timeline-id,
-.timeline-meta,
 .metric-label {
   color: #94a3b8;
   font-size: 10px;
@@ -984,22 +1217,116 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
+.overview-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.72fr) minmax(460px, 1.28fr);
+  gap: 10px;
+}
+
+.overview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 10px;
+}
+
+.overview-time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .metric-card {
   padding: 10px;
   border-radius: 6px;
-  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .metric-value {
   margin-top: 2px;
   font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-info-card {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.overview-info-label {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-info-value {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-summary-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.overview-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf2f7;
+  background: #f8fafc;
+}
+
+.overview-summary-title {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.overview-summary-subtitle {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.overview-summary-pre {
+  height: 154px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  background: #fff;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .raw-label {
@@ -1026,106 +1353,365 @@ onUnmounted(() => {
 }
 
 .workflow-status-canvas {
-  height: 380px;
-  margin-bottom: 12px;
-  overflow: hidden;
+  margin-bottom: 14px;
+  overflow: auto;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid #dbe4ee;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.18) 1px, transparent 0) 0 0 / 14px 14px,
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-.workflow-status-flow {
-  width: 100%;
-  height: 100%;
-}
-
-.status-flow-node-shell {
+.readonly-graph-inner {
   position: relative;
+  margin: 0 auto;
 }
 
-.status-flow-node-sequence {
+.readonly-graph-phase {
   position: absolute;
-  top: -10px;
-  left: -10px;
-  z-index: 5;
-  display: inline-flex;
+  top: 18px;
+  z-index: 2;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: #1e293b;
-  color: #fff;
-  font-size: 11px;
+  height: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #64748b;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.workflow-status-flow :deep(.status-flow-edge-passed .vue-flow__edge-path) {
+.readonly-graph-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.readonly-graph-edge {
+  fill: none;
+  stroke: #cbd5e1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.readonly-graph-edge-passed {
   stroke: #10b981;
 }
 
-.workflow-status-flow :deep(.status-flow-edge-failed .vue-flow__edge-path) {
+.readonly-graph-edge-failed {
   stroke: #ef4444;
 }
 
-.workflow-status-flow :deep(.status-flow-edge-running .vue-flow__edge-path) {
+.readonly-graph-edge-running {
   stroke: #f59e0b;
-  stroke-dasharray: 8 5;
+  stroke-dasharray: 7 5;
+}
+
+.readonly-graph-edge-pending {
+  stroke: #cbd5e1;
+  stroke-dasharray: 5 5;
+}
+
+.readonly-graph-node {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 9px 10px 8px;
+  overflow: hidden;
+  border: 1px solid #dbe4ee;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.readonly-graph-node:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.readonly-graph-node:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(59, 130, 246, 0.2),
+    0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.readonly-graph-node.active {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  box-shadow:
+    0 0 0 2px rgba(59, 130, 246, 0.16),
+    0 12px 24px rgba(59, 130, 246, 0.14);
+}
+
+.readonly-graph-node-success {
+  border-left-color: #10b981;
+}
+
+.readonly-graph-node-failed {
+  border-color: #fecaca;
+  border-left-color: #ef4444;
+  background: #fffafa;
+}
+
+.readonly-graph-node-running {
+  border-left-color: #f59e0b;
+}
+
+.readonly-graph-node-skipped,
+.readonly-graph-node-not-run,
+.readonly-graph-node-pending {
+  border-left-color: #cbd5e1;
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.readonly-node-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.readonly-node-sequence {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.readonly-node-status-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.readonly-graph-node-success .readonly-node-status-dot {
+  background: #10b981;
+}
+
+.readonly-graph-node-failed .readonly-node-status-dot {
+  background: #ef4444;
+}
+
+.readonly-graph-node-running .readonly-node-status-dot {
+  background: #f59e0b;
+}
+
+.readonly-node-status {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readonly-node-title {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readonly-node-meta {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readonly-node-error {
+  overflow: hidden;
+  padding-top: 1px;
+  color: #dc2626;
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-board {
+  padding: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.timeline-heading-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timeline-heading {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-subtitle {
+  color: #64748b;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.timeline-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.timeline-progress-track {
+  display: block;
+  width: 84px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.timeline-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+  transition: width 0.2s ease;
+}
+
+.timeline-progress-text {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .timeline-list {
   display: flex;
   flex-direction: column;
+  gap: 7px;
+}
+
+.timeline-phase-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-phase-label {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.timeline-phase-nodes {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .timeline-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  min-height: 30px;
+  padding: 0 9px;
   border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .timeline-item:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.timeline-item:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(59, 130, 246, 0.18),
+    0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .timeline-item.active {
-  background: #eff6ff;
-  border-color: #3b82f6;
-}
-
-.timeline-item.not-run {
-  background: #f8fafc;
+  background: #f8fbff;
+  border-color: #bfdbfe;
+  box-shadow:
+    0 0 0 2px rgba(59, 130, 246, 0.14),
+    0 4px 12px rgba(59, 130, 246, 0.08);
 }
 
 .timeline-sequence {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
+  flex: 0 0 auto;
+  min-width: 26px;
+  height: 20px;
+  padding: 0 5px;
   border-radius: 6px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 700;
+  background: #eef2f7;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .timeline-dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 4px;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #94a3b8;
 }
@@ -1147,40 +1733,21 @@ onUnmounted(() => {
   background: #cbd5e1;
 }
 
-.timeline-main {
-  flex: 1;
-}
-
-.timeline-title-row,
-.timeline-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.timeline-error {
-  margin-top: 6px;
-  color: #ef4444;
+.timeline-title {
+  overflow: hidden;
+  color: #334155;
   font-size: 10px;
-}
-
-.timeline-note {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 10px;
-}
-
-.inline-icon {
-  width: 14px;
-  margin-right: 4px;
-  vertical-align: -2px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .raw-panel :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 520px;
+  min-height: 420px;
 }
 
 .raw-block {
@@ -1188,12 +1755,37 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.raw-detail {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.raw-detail-summary {
+  padding: 9px 10px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.raw-detail-summary:hover {
+  background: #f8fafc;
+}
+
+.raw-detail[open] .raw-detail-summary {
+  border-bottom: 1px solid #edf2f7;
+  background: #f8fafc;
+}
+
 .raw-pre {
   max-height: 200px;
   overflow: auto;
+  margin: 0;
   padding: 10px;
-  border-radius: 6px;
-  background: #f8fafc;
+  background: #fff;
   color: #475569;
   font-size: 10px;
   line-height: 1.5;
@@ -1204,9 +1796,15 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .page-grid,
   .detail-grid,
+  .overview-layout,
   .overview-grid,
+  .overview-time-grid,
   .node-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .overview-summary-pre {
+    height: 150px;
   }
 }
 
@@ -1220,6 +1818,42 @@ onUnmounted(() => {
   .toolbar-search {
     width: 100%;
     max-width: none;
+  }
+
+  .overview-summary-header {
+    flex-direction: column;
+  }
+
+  .timeline-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timeline-heading-group {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .timeline-progress {
+    width: 100%;
+  }
+
+  .timeline-progress-track {
+    flex: 1;
+    width: auto;
+  }
+
+  .timeline-phase-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .timeline-sequence {
+    min-width: 28px;
+    height: 24px;
+    font-size: 10px;
   }
 }
 </style>

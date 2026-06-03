@@ -535,6 +535,7 @@ export interface FlowNode {
     label: string
     nodeType: NodeType
     config: Record<string, unknown>
+    subtitle?: string
   }
 }
 
@@ -664,6 +665,7 @@ export interface Workflow {
   variables: Record<string, string>
   schedule_mode: 'fixed' | 'random'
   schedule_region: string
+  process_resident: boolean
   created_at: string
   updated_at: string
 }
@@ -676,6 +678,7 @@ export interface WorkflowCreate {
   variables?: Record<string, string>
   schedule_mode?: 'fixed' | 'random'
   schedule_region?: string
+  process_resident?: boolean
 }
 
 export interface WorkflowUpdate {
@@ -686,6 +689,7 @@ export interface WorkflowUpdate {
   variables?: Record<string, string>
   schedule_mode?: 'fixed' | 'random'
   schedule_region?: string
+  process_resident?: boolean
 }
 
 // Execution related types

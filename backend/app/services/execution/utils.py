@@ -357,3 +357,116 @@ class UtilsMixin:
 
     def _quote(self, value: str) -> str:
         return self.ssh_service.quote(value)
+
+    def _managed_process_spec(
+        self,
+        kind: str,
+        server: Server,
+        node_id: Any,
+        node_type: Any,
+        stop_command: str,
+        home: Optional[str] = None,
+        role: Optional[str] = None,
+        pid: Optional[str] = None,
+        fallback_pattern: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {
+            "kind": kind,
+            "server_id": server.id,
+            "server_name": server.name,
+            "host": server.host,
+            "node_id": str(node_id or ""),
+            "node_type": str(node_type or ""),
+            "stop_command": stop_command,
+            "registered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        if home:
+            spec["home"] = str(home)
+        if role:
+            spec["role"] = str(role)
+        if pid:
+            spec["pid"] = str(pid)
+        if fallback_pattern:
+            spec["fallback_pattern"] = str(fallback_pattern)
+        if metadata:
+            spec["metadata"] = metadata
+        return spec
+
+    def _managed_iotdb_process_spec(
+        self,
+        server: Server,
+        iotdb_home: str,
+        role: str,
+        node_id: Any,
+        node_type: Any
+    ) -> Dict[str, Any]:
+        stop_script = self._stop_script_for_role(role)
+        stop_command = f"cd {self._quote(iotdb_home)} && bash sbin/{stop_script} -f"
+        return self._managed_process_spec(
+            kind="iotdb",
+            server=server,
+            node_id=node_id,
+            node_type=node_type,
+            stop_command=stop_command,
+            home=iotdb_home,
+            role=role,
+            fallback_pattern=iotdb_home,
+            metadata={"stop_script": stop_script},
+        )
+
+    def _managed_ainode_process_spec(
+        self,
+        server: Server,
+        ainode_home: str,
+        node_id: Any,
+        node_type: Any
+    ) -> Dict[str, Any]:
+        stop_command = f"cd {self._quote(ainode_home)} && bash sbin/stop-ainode.sh"
+        return self._managed_process_spec(
+            kind="iotdb_ainode",
+            server=server,
+            node_id=node_id,
+            node_type=node_type,
+            stop_command=stop_command,
+            home=ainode_home,
+            fallback_pattern=ainode_home,
+            metadata={"stop_script": "stop-ainode.sh"},
+        )
+
+    def _managed_benchmark_process_spec(
+        self,
+        server: Server,
+        benchmark_home: str,
+        benchmark_run: Dict[str, Any],
+        node_id: Any,
+        node_type: Any
+    ) -> Dict[str, Any]:
+        pid = str(benchmark_run.get("pid") or "").strip()
+        run_dir = str(benchmark_run.get("run_dir") or "").strip()
+        conf_dir = str(benchmark_run.get("conf_dir") or "").strip()
+        fallback_pattern = run_dir or conf_dir or benchmark_home
+        stop_command = ""
+        if pid:
+            quoted_pid = self._quote(pid)
+            stop_command = (
+                f"pkill -TERM -P {quoted_pid} 2>/dev/null || true; "
+                f"kill {quoted_pid} 2>/dev/null || true"
+            )
+
+        return self._managed_process_spec(
+            kind="iot_benchmark",
+            server=server,
+            node_id=node_id,
+            node_type=node_type,
+            stop_command=stop_command,
+            home=benchmark_home,
+            pid=pid,
+            fallback_pattern=fallback_pattern,
+            metadata={
+                "run_dir": run_dir,
+                "conf_dir": conf_dir,
+                "stdout_path": benchmark_run.get("stdout_path"),
+                "pid_path": benchmark_run.get("pid_path"),
+            },
+        )
