@@ -35,6 +35,7 @@ class WorkflowBase(BaseModel):
     variables: Dict[str, str] = {}
     schedule_mode: SCHEDULE_MODE = "fixed"
     schedule_region: str = "私有云"
+    process_resident: bool = False
 
 class WorkflowCreate(WorkflowBase):
     pass
@@ -47,6 +48,7 @@ class WorkflowUpdate(BaseModel):
     variables: Optional[Dict[str, str]] = None
     schedule_mode: Optional[SCHEDULE_MODE] = None
     schedule_region: Optional[str] = None
+    process_resident: Optional[bool] = None
 
 class WorkflowResponse(WorkflowBase):
     id: int

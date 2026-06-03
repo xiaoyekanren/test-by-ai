@@ -156,6 +156,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const inheritedConfigByNodeId = ref<Record<string, Record<string, unknown>>>({})
   const scheduleMode = ref<'fixed' | 'random'>('fixed')
   const scheduleRegion = ref('私有云')
+  const processResident = ref(false)
   const isDirty = ref(false)
   const autoSave = ref(true)
   const isSaving = ref(false)
@@ -473,6 +474,11 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     saveHistory()
   }
 
+  function setProcessResident(value: boolean) {
+    processResident.value = Boolean(value)
+    saveHistory()
+  }
+
   // Editor operations
 
   // Initialize editor with workflow data
@@ -480,6 +486,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     if (workflow) {
       scheduleMode.value = workflow.schedule_mode
       scheduleRegion.value = workflow.schedule_region || '私有云'
+      processResident.value = Boolean(workflow.process_resident)
       // Convert workflow nodes to flow nodes
       editorNodes.value = workflow.nodes.map(n => ({
         id: n.id,
@@ -503,6 +510,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       // New workflow - start with empty canvas
       scheduleMode.value = 'fixed'
       scheduleRegion.value = '私有云'
+      processResident.value = false
       editorNodes.value = []
       editorEdges.value = []
     }
@@ -726,7 +734,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
           nodes,
           edges,
           schedule_mode: scheduleMode.value,
-          schedule_region: scheduleRegion.value
+          schedule_region: scheduleRegion.value,
+          process_resident: processResident.value
         })
       } else {
         workflow = await createWorkflow({
@@ -735,7 +744,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
           nodes,
           edges,
           schedule_mode: scheduleMode.value,
-          schedule_region: scheduleRegion.value
+          schedule_region: scheduleRegion.value,
+          process_resident: processResident.value
         })
       }
 
@@ -762,6 +772,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     inheritedConfigByNodeId.value = {}
     scheduleMode.value = 'fixed'
     scheduleRegion.value = '私有云'
+    processResident.value = false
     history.value = []
     historyIndex.value = -1
     isDirty.value = false
@@ -783,6 +794,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectedEdge,
     scheduleMode,
     scheduleRegion,
+    processResident,
     isDirty,
     autoSave,
     isSaving,
@@ -814,6 +826,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectEdge,
     setScheduleMode,
     setScheduleRegion,
+    setProcessResident,
     saveWorkflowToBackend,
     setAutoSave,
     clearEditor

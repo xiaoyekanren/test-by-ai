@@ -32,6 +32,7 @@ def test_workflow_model():
     assert len(workflow.nodes) == 1
     assert workflow.schedule_mode == "fixed"
     assert workflow.schedule_region == "私有云"
+    assert workflow.process_resident is False
 
 def test_execution_model():
     """Test Execution model"""

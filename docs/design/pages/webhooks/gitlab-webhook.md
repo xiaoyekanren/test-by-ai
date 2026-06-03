@@ -92,10 +92,12 @@ Webhook 触发的工作流执行完成后：
 
 所有工作流执行结束后（无论成功/失败/异常），引擎自动：
 
-1. 收集本次执行涉及的所有 server_id → install_dir 映射
-2. SSH 执行各安装目录下的 `sbin/stop-*.sh -f` 脚本
-3. `pkill -9` 兜底清理 IoTDB / AINode / Benchmark 进程
-4. 清理结果记入 `execution.summary.cleanup`
+1. 收集启动节点输出中的 `managed_processes`
+2. SSH 执行每个登记进程的 `stop_command`
+3. 按 pid 或 `fallback_pattern` 兜底清理残留进程
+4. 清理结果记入 `execution.summary.process_cleanup`
+
+工作流开启 `process_resident` 时跳过自动清理，并在 `execution.summary.process_cleanup` 中记录原因。
 
 ## 前端管理
 
@@ -108,4 +110,4 @@ Webhook 触发的工作流执行完成后：
 
 ---
 
-文档更新日期：2026-05-14
+文档更新日期：2026-06-02

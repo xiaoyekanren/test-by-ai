@@ -50,6 +50,13 @@ class IoTDBHandlersMixin:
         wait_port = int(config.get("wait_port", self._default_wait_port(role, config)))
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
         wait_strategy = str(config.get("wait_strategy", "port"))
+        managed_process = self._managed_iotdb_process_spec(
+            server=server,
+            iotdb_home=iotdb_home,
+            role=role,
+            node_id=config.get("_node_id"),
+            node_type=config.get("_node_type", "iotdb_start"),
+        )
 
         script_name = self._start_script_for_role(role)
         start_script = f"cd {self._quote(iotdb_home)} && bash sbin/{script_name}"
@@ -101,7 +108,8 @@ class IoTDBHandlersMixin:
                     "wait_port": wait_port,
                     "host": host,
                     "node_role": role,
-                    "start_script": script_name
+                    "start_script": script_name,
+                    "managed_processes": [managed_process],
                 }
             time.sleep(2)
 
@@ -115,7 +123,8 @@ class IoTDBHandlersMixin:
             "wait_port": wait_port,
             "host": host,
             "node_role": role,
-            "start_script": script_name
+            "start_script": script_name,
+            "managed_processes": [managed_process],
         }
 
     def _execute_iotdb_cli_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -248,6 +257,12 @@ class IoTDBHandlersMixin:
         host = str(config.get("ain_rpc_address") or config.get("host") or server.host or "127.0.0.1")
         wait_port = int(config.get("wait_port", config.get("ain_rpc_port", 10810)))
         timeout_seconds = int(config.get("timeout_seconds", config.get("timeout", 60)))
+        managed_process = self._managed_ainode_process_spec(
+            server=server,
+            ainode_home=ainode_home,
+            node_id=config.get("_node_id"),
+            node_type=config.get("_node_type", "iotdb_ainode_start"),
+        )
 
         start_script = f"cd {self._quote(ainode_home)} && bash sbin/start-ainode.sh -d"
         start_result = self.ssh_service.run_command(
@@ -283,7 +298,8 @@ class IoTDBHandlersMixin:
                     "ain_rpc_port": wait_port,
                     "wait_port": wait_port,
                     "host": host,
-                    "start_script": "start-ainode.sh"
+                    "start_script": "start-ainode.sh",
+                    "managed_processes": [managed_process],
                 }
             time.sleep(2)
 
@@ -296,7 +312,8 @@ class IoTDBHandlersMixin:
             "ain_rpc_address": host,
             "ain_rpc_port": wait_port,
             "wait_port": wait_port,
-            "start_script": "start-ainode.sh"
+            "start_script": "start-ainode.sh",
+            "managed_processes": [managed_process],
         }
 
     def _execute_iotdb_ainode_stop_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

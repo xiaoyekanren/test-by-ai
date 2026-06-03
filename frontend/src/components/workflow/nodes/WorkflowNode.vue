@@ -29,6 +29,7 @@ const props = defineProps<{
     label: string
     nodeType: NodeType
     config: Record<string, unknown>
+    subtitle?: string
   }
   selected?: boolean
   executionStatus?: 'running' | 'passed' | 'failed' | null
@@ -162,7 +163,7 @@ const handleExecutionStatusDoubleClick = () => {
     </div>
     <div class="node-body">
       <div class="node-title">{{ data.label }}</div>
-      <div class="node-id">{{ id }}</div>
+      <div class="node-subtitle">{{ data.subtitle || '无主机' }}</div>
     </div>
 
     <!-- Output Handles -->
@@ -204,8 +205,20 @@ const handleExecutionStatusDoubleClick = () => {
 }
 
 .workflow-node.selected {
-  border-width: 2px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  background: #f8fafc;
+  box-shadow:
+    0 0 0 5px rgba(64, 158, 255, 0.28),
+    0 10px 24px rgba(15, 23, 42, 0.26);
+  transform: translateY(-1px);
+}
+
+.workflow-node.selected .node-body {
+  background: #f8fbff;
+}
+
+.workflow-node.selected .node-title {
+  color: #111827;
+  font-weight: 700;
 }
 
 .workflow-node.execution-running {
@@ -305,9 +318,13 @@ const handleExecutionStatusDoubleClick = () => {
   margin-bottom: 4px;
 }
 
-.node-id {
+.node-subtitle {
   font-size: 11px;
   color: #909399;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Handles */

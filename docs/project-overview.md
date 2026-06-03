@@ -119,6 +119,14 @@ manage.bat status
 | `/iotdb` | IoTDB 可视化 |
 | `/settings` | 系统设置 |
 
+## 工作流执行选项
+
+工作流编辑器顶部提供执行级选项：
+
+- **固定主机 / 随机调度**：控制节点服务器选择方式。
+- **进程常驻**：默认关闭。关闭时，执行引擎会在工作流完成、失败或停止后清理本次由启动节点登记的远端进程；打开时，登记的进程会保留运行，并在执行摘要中记录跳过清理的原因。
+- **运行按钮状态**：当工作流存在 `pending` 或 `running` 执行时，编辑器顶部 Run 按钮和工作流列表执行按钮会置灰禁用。
+
 ## 核心 API
 
 ### 服务器管理
@@ -141,6 +149,14 @@ manage.bat status
 | GET | `/api/workflows/{id}` | 工作流详情 |
 | PUT | `/api/workflows/{id}` | 更新工作流 |
 | DELETE | `/api/workflows/{id}` | 删除工作流 |
+
+工作流对象包含 `process_resident` 字段，默认 `false`。当该字段为 `true` 时，工作流执行结束不会自动停止本次启动的远端进程。
+
+不兼容点：
+
+- 既有 SQLite 数据库的 `workflows` 表如果缺少 `process_resident` 列，需要重建数据库或手动补列后再使用新版后端。
+- 执行摘要中的进程清理结果写入 `summary.process_cleanup`，不再使用旧的 `summary.cleanup`。
+- 自动清理只处理启动节点返回的 `managed_processes`，不再按历史节点输入中的安装目录做兼容扫描。
 
 ### 执行管理
 
@@ -195,6 +211,8 @@ manage.bat status
 | iot_benchmark_deploy | 部署 IoT Benchmark | install_dir, package_source, package_url/artifact_local_path, server_id |
 | iot_benchmark_start | 启动 IoT Benchmark | benchmark_home, target_host, rpc_port, device_number, sensor_number 等 |
 | iot_benchmark_wait | 等待 IoT Benchmark | timeout_seconds, poll_interval_seconds, tail_lines |
+
+`iotdb_start`、`iotdb_ainode_start`、`iotdb_cluster_start` 和 `iot_benchmark_start` 会在执行输出中登记 `managed_processes`，供执行结束时统一清理。
 
 ### 集群节点
 
@@ -307,4 +325,4 @@ manage.bat release
 
 ---
 
-最后更新: 2026-05-07
+最后更新: 2026-06-02

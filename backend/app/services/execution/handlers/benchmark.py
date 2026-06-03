@@ -149,6 +149,13 @@ class BenchmarkHandlersMixin:
             "benchmark_home": benchmark_home,
             "started_at": utc_now().isoformat()
         }
+        managed_process = self._managed_benchmark_process_spec(
+            server=server,
+            benchmark_home=benchmark_home,
+            benchmark_run=benchmark_run,
+            node_id=config.get("_node_id"),
+            node_type=config.get("_node_type", "iot_benchmark_start"),
+        )
         return {
             "exit_status": 0,
             "stdout": f"Started IoT Benchmark pid={pid} on server {server.id}",
@@ -159,7 +166,8 @@ class BenchmarkHandlersMixin:
             "benchmark_home": benchmark_home,
             "target_host": target_host,
             "rpc_port": rpc_port,
-            "updated_keys": sorted(replacements.keys())
+            "updated_keys": sorted(replacements.keys()),
+            "managed_processes": [managed_process],
         }
 
     def _execute_iot_benchmark_wait_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

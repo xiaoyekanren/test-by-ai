@@ -87,6 +87,7 @@ def create_workflow(workflow: WorkflowCreate, db: Session = Depends(get_db)):
         variables=workflow.variables,
         schedule_mode=workflow.schedule_mode,
         schedule_region=workflow.schedule_region,
+        process_resident=workflow.process_resident,
     )
     _validate_workflow_schedule(db_workflow.schedule_mode, db_workflow.schedule_region, db_workflow.nodes)
     db.add(db_workflow)

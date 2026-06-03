@@ -16,7 +16,7 @@ cd backend
 python3.13 -m pytest --collect-only -q
 ```
 
-最后收集结果：149 tests。
+最后收集结果：153 tests。
 
 ## 测试文件列表
 
@@ -25,7 +25,7 @@ python3.13 -m pytest --collect-only -q
 | `conftest.py` | - | 测试配置 fixture，注入内存数据库和 FastAPI TestClient |
 | `test_db_setup.py` | 9 | 数据库初始化、表结构和 legacy servers 表迁移 |
 | `test_execution_engine_cluster.py` | 3 | IoTDB 集群部署节点、角色配置和必填角色校验 |
-| `test_execution_engine_dag.py` | 4 | DAG 并发、join 等待、失败跳过、无边工作流兼容和 stop 请求阻止下游调度 |
+| `test_execution_engine_dag.py` | 7 | DAG 并发、join 等待、失败跳过、无边工作流兼容、stop 请求阻止下游调度、启动进程清理、按登记目录兜底清理和进程常驻跳过清理 |
 | `test_control_nodes.py` | 15 | 控制节点：condition 分支/级联、loop 迭代/失败中断、parallel 透传、assert 命令构建、边标签 |
 | `test_execution_engine_region.py` | 35 | 固定/随机调度、繁忙服务器计算、节点 server 需求、调度角色和上下文合并 |
 | `test_executions_api.py` | 6 | 执行 API 创建、查询、列表、停止和删除 |
@@ -39,7 +39,7 @@ python3.13 -m pytest --collect-only -q
 | `test_server_region.py` | 6 | Server region 字段、合法值和 is_busy 返回 |
 | `test_servers_api.py` | 17 | 服务器 API CRUD、重复校验、连接测试、命令执行参数和删除保护 |
 | `test_ssh_service.py` | 4 | SSHService 方法和 SSHResult 结构 |
-| `test_workflows_api.py` | 9 | 工作流 API CRUD、调度配置校验、节点更新和级联删除 |
+| `test_workflows_api.py` | 10 | 工作流 API CRUD、调度配置校验、进程常驻选项、节点更新和级联删除 |
 
 ## 覆盖范围
 
@@ -53,6 +53,7 @@ python3.13 -m pytest --collect-only -q
 | 执行 API | `test_executions_api.py` |
 | 执行引擎 DAG | `test_execution_engine_dag.py` |
 | 执行引擎停止 | `test_execution_engine_dag.py` |
+| 启动进程清理 | `test_execution_engine_dag.py` |
 | 控制节点 | `test_control_nodes.py` |
 | 执行引擎区域调度 | `test_execution_engine_region.py` |
 | IoTDB 集群节点 | `test_execution_engine_cluster.py` |
@@ -84,6 +85,10 @@ python3.13 -m pytest --collect-only -q
 ### DAG 执行
 
 DAG 测试覆盖 roots 并发执行、join 节点等待全部上游、上游失败时跳过 join，以及无 edges 工作流继续按旧顺序执行。
+
+### 启动进程清理
+
+执行引擎测试覆盖默认清理 `managed_processes` 里的启动进程、按登记 `home` 的 `/proc/<pid>/cwd` 兜底清理残留进程，以及工作流开启 `process_resident` 后跳过清理并写入执行摘要。
 
 ### 控制节点
 
@@ -123,4 +128,4 @@ GitLab Webhook 测试覆盖 Secret Token 缺失/错误时的 401 拒绝、非 Pu
 
 ---
 
-文档更新日期：2026-05-14
+文档更新日期：2026-06-02

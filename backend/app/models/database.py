@@ -44,6 +44,7 @@ class Workflow(Base):
     variables = Column(JSON, default=dict)
     schedule_mode = Column(String(20), default="fixed", server_default="fixed")
     schedule_region = Column(String(20), default="私有云", server_default="私有云")
+    process_resident = Column(Boolean, default=False, server_default="0")
     created_at = Column(UTCDateTime(), default=utc_now)
     updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
@@ -54,6 +55,8 @@ class Workflow(Base):
             kwargs["schedule_mode"] = "fixed"
         if "schedule_region" not in kwargs:
             kwargs["schedule_region"] = "私有云"
+        if "process_resident" not in kwargs:
+            kwargs["process_resident"] = False
         super().__init__(**kwargs)
 
 class Execution(Base):

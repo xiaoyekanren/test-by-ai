@@ -82,6 +82,7 @@ class ClusterHandlersMixin:
         wait_strategy = str(config.get("wait_strategy") or "port")
         timeout_seconds = int(config.get("timeout_seconds", 180))
         results: List[Dict[str, Any]] = []
+        managed_processes: List[Dict[str, Any]] = []
 
         for entry in config_nodes + data_nodes:
             start_result = self._execute_iotdb_start_node({
@@ -92,9 +93,12 @@ class ClusterHandlersMixin:
                 "rpc_port": entry.get("dn_rpc_port", entry.get("rpc_port", 6667)),
                 "wait_port": self._cluster_wait_port(entry),
                 "wait_strategy": wait_strategy,
-                "timeout_seconds": timeout_seconds
+                "timeout_seconds": timeout_seconds,
+                "_node_id": config.get("_node_id"),
+                "_node_type": config.get("_node_type", "iotdb_cluster_start"),
             }, context)
             results.append({"node": entry, "result": start_result})
+            managed_processes.extend(start_result.get("managed_processes") or [])
             if start_result.get("exit_status") != 0:
                 return self._cluster_failure("Cluster start failed", results, cluster_name, config_nodes, data_nodes)
 
@@ -105,7 +109,8 @@ class ClusterHandlersMixin:
             "cluster_name": cluster_name,
             "config_nodes": config_nodes,
             "data_nodes": data_nodes,
-            "started_nodes": results
+            "started_nodes": results,
+            "managed_processes": managed_processes,
         }
 
     def _execute_iotdb_cluster_check_node(self, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -329,6 +334,10 @@ class ClusterHandlersMixin:
         data_nodes: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         last_result = results[-1]["result"] if results else {}
+        managed_processes: List[Dict[str, Any]] = []
+        for item in results:
+            result = item.get("result") or {}
+            managed_processes.extend(result.get("managed_processes") or [])
         return {
             "exit_status": -1,
             "stdout": "\n".join(item["result"].get("stdout", "") for item in results if item["result"].get("stdout")).strip(),
@@ -339,5 +348,6 @@ class ClusterHandlersMixin:
             "data_nodes": data_nodes,
             "results": results,
             "failed_node": results[-1]["node"] if results else None,
-            "failed_step_error": last_result.get("error") or last_result.get("stderr")
+            "failed_step_error": last_result.get("error") or last_result.get("stderr"),
+            "managed_processes": managed_processes,
         }

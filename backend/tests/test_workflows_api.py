@@ -16,6 +16,18 @@ def test_create_workflow(client):
     })
     assert response.status_code == 201
     assert response.json()["name"] == "test-workflow"
+    assert response.json()["process_resident"] is False
+
+
+def test_create_workflow_with_process_resident(client):
+    response = client.post("/api/workflows", json={
+        "name": "resident-workflow",
+        "process_resident": True,
+        "nodes": [],
+        "edges": []
+    })
+    assert response.status_code == 201
+    assert response.json()["process_resident"] is True
 
 def test_get_workflow(client):
     client.post("/api/workflows", json={"name": "test", "nodes": [], "edges": []})
