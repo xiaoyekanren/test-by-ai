@@ -71,6 +71,9 @@ def migrate_workflows_table_columns(engine: Engine) -> None:
         if "schedule_region" not in columns:
             cursor.execute("ALTER TABLE workflows ADD COLUMN schedule_region VARCHAR(20) DEFAULT '私有云'")
 
+        if "process_resident" not in columns:
+            cursor.execute("ALTER TABLE workflows ADD COLUMN process_resident BOOLEAN DEFAULT 0")
+
         conn.commit()
         conn.close()
     except sqlite3.OperationalError:

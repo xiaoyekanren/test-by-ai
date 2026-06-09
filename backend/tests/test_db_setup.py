@@ -194,3 +194,41 @@ class TestDatabaseSetup:
         row = conn.execute("SELECT name, host, tags, region FROM servers").fetchone()
         conn.close()
         assert row == ("legacy-server", "127.0.0.1", None, "私有云")
+
+    def test_init_db_migrates_legacy_workflows_table(self, tmp_path):
+        """Verify init_db adds missing columns to an existing workflows table."""
+        test_db_path = tmp_path / "legacy_app.db"
+        conn = sqlite3.connect(test_db_path)
+        conn.execute(
+            """
+            CREATE TABLE workflows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                description TEXT,
+                nodes JSON,
+                edges JSON,
+                variables JSON,
+                created_at VARCHAR(32),
+                updated_at VARCHAR(32)
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO workflows (name, description) VALUES ('legacy-flow', 'old')"
+        )
+        conn.commit()
+        conn.close()
+
+        test_engine = create_engine(f"sqlite:///{test_db_path}", connect_args={"check_same_thread": False})
+        init_db(test_engine)
+
+        inspector = inspect(test_engine)
+        columns = {col["name"] for col in inspector.get_columns("workflows")}
+        assert {"schedule_mode", "schedule_region", "process_resident"}.issubset(columns)
+
+        conn = sqlite3.connect(test_db_path)
+        row = conn.execute(
+            "SELECT name, schedule_mode, schedule_region, process_resident FROM workflows"
+        ).fetchone()
+        conn.close()
+        assert row == ("legacy-flow", "fixed", "私有云", 0)
